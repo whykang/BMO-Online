@@ -56,8 +56,8 @@
     "silence_duration": 1.0,
     "max_record_seconds": 12.0,
     "min_record_seconds": 1.0,
-    "silence_margin": 0.05,
-    "silence_floor_min": 0.02
+    "silence_margin": 0.02,
+    "silence_floor_min": 0.01
   },
 
   "conversation": {

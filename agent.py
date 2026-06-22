@@ -753,7 +753,7 @@ class BotGUI:
             return None
 
         if timeout or not speaking:
-            log(f"[REC] {onset_timeout:.0f}s 内没听到开口，结束对话")
+            log(f"[REC] {onset_timeout:.0f}s 没开口 噪音地板={noise:.4f} 阈值={thr:.4f} 峰值={peak:.4f}（峰值没过阈值=没听到你说话）")
             return None
 
         dur = (n - speech_start) * chunk_dur
