@@ -776,8 +776,10 @@ class BotGUI:
         log(f"[ACTION] {raw} -> {action}")
 
         if action == "get_time":
-            now = datetime.datetime.now().strftime("%H:%M")
-            return f"现在是 {now}。"
+            now = datetime.datetime.now()
+            weekdays = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
+            wd = weekdays[now.weekday()]
+            return f"现在是 {now.year}年{now.month}月{now.day}日 {wd} {now.strftime('%H:%M')}。"
 
         if action == "search_web":
             if not value:
@@ -973,14 +975,22 @@ class BotGUI:
 
         # search_web 返回了正文 / get_time 返回了字符串：让 LLM 再总结一遍
         if isinstance(result, str) and result:
-            summary_messages = self.permanent_memory + self.session_memory + [
-                {"role": "user", "content": original_text},
-                {"role": "user", "content": f"工具返回结果：{result}\n请用一两句话告诉用户。"}
+            # 用干净的 system prompt，避免又触发工具调用
+            summary_messages = [
+                {"role": "system", "content":
+                    "你是 BMO，可爱的小机器人。根据下面的工具结果，用一两句话自然、"
+                    "简短地回答用户。绝对不要输出 JSON，不要再调用任何工具。"},
+                {"role": "user", "content": f"我问的是：{original_text}"},
+                {"role": "user", "content": f"工具结果：{result}"},
             ]
             try:
                 final_text = self.llm.chat_once(summary_messages)
             except Exception as e:
                 log(f"[LLM ERROR] {e}")
+                final_text = result
+            # 安全网：万一还是冒出 JSON，剥掉
+            final_text = re.sub(r'\{.*?\}', '', final_text, flags=re.DOTALL).strip()
+            if not final_text:
                 final_text = result
             self.set_state(BotStates.SPEAKING, "说话中...", overlay_path=img_path)
             self.append_to_text(f"BMO: {final_text}")
