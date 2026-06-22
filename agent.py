@@ -219,6 +219,7 @@ class BotGUI:
 
         # 唤醒词
         self.oww_model = None
+        self.wake_reload_pending = False
         self._load_wake_word()
 
         # GUI 组件
@@ -527,6 +528,15 @@ class BotGUI:
     def detect_wake_word_or_ptt(self):
         self.set_state(BotStates.IDLE, "等待唤醒...")
         self.ptt_event.clear()
+
+        # 配置变更后在本线程安全重载唤醒词（避免和监听循环跨线程竞争）
+        if self.wake_reload_pending:
+            self.wake_reload_pending = False
+            log("[CMD] 重载唤醒词后端...")
+            try:
+                self._load_wake_word()
+            except Exception as e:
+                log(f"[CMD] 唤醒词重载失败: {e}")
 
         # 没装任何唤醒词后端 → 纯 PTT 模式
         if self.wake_backend is None:
@@ -1184,9 +1194,9 @@ class BotGUI:
                     self.config["image_gen"], endpoints,
                     output_dir=self.config.get("generated_dir", "generated"),
                 )
-                # 唤醒词
-                self.oww_model = None
-                self._load_wake_word()
+                # 唤醒词不能在这个线程里重建（监听循环在另一个线程跑，会撞车）。
+                # 设个标志，让监听线程在下一轮自己重载。
+                self.wake_reload_pending = True
                 # 更新 system prompt
                 if self.permanent_memory:
                     self.permanent_memory[0] = {
