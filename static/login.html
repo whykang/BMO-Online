@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>BMO 登录</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", sans-serif; background: #1e1e2e;
+         color: #ddd; display: flex; align-items: center; justify-content: center;
+         min-height: 100vh; margin: 0; }
+  .box { background: #2b2b3d; padding: 40px; border-radius: 12px; min-width: 320px;
+         box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+  h1 { margin-top: 0; font-size: 24px; }
+  input { width: 100%; padding: 10px; font-size: 16px; border-radius: 6px; border: none;
+          background: #3a3a52; color: #fff; box-sizing: border-box; margin-bottom: 12px; }
+  button { width: 100%; padding: 10px; font-size: 16px; border-radius: 6px; border: none;
+           background: #6a8cff; color: #fff; cursor: pointer; }
+  button:hover { background: #819bff; }
+  .err { color: #ff7777; margin-top: 10px; min-height: 20px; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <h1>🤖 BMO 控制台</h1>
+    <input type="password" id="pw" placeholder="密码" autofocus>
+    <button onclick="login()">登录</button>
+    <div class="err" id="err"></div>
+  </div>
+<script>
+async function login() {
+  const pw = document.getElementById('pw').value;
+  const err = document.getElementById('err');
+  err.textContent = '';
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({password: pw}),
+    });
+    if (r.ok) { location.href = '/'; }
+    else { err.textContent = '密码错误'; }
+  } catch (e) { err.textContent = e.message; }
+}
+document.getElementById('pw').addEventListener('keydown', e => {
+  if (e.key === 'Enter') login();
+});
+</script>
+</body>
+</html>

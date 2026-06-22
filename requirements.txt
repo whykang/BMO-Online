@@ -1,0 +1,22 @@
+# Core
+sounddevice
+numpy
+scipy
+Pillow
+python-dotenv
+
+# Wake word (optional)
+openwakeword
+onnxruntime
+
+# AI APIs
+openai
+requests
+
+# TTS
+edge-tts
+
+# Web control panel
+fastapi
+uvicorn[standard]
+python-multipart

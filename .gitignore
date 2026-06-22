@@ -1,0 +1,34 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv/
+*.egg-info/
+
+# Runtime
+logs/
+generated/
+chat_memory.json
+state.json
+commands.json
+input.wav
+bmo_capture.jpg
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Uploaded wakewords (keep only the default seeded ones)
+wakewords/uploaded/
+
+# Auth
+auth.json

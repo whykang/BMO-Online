@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BMO 控制台</title>
+<style>
+  :root {
+    --bg: #1e1e2e;
+    --panel: #2b2b3d;
+    --panel-light: #3a3a52;
+    --accent: #6a8cff;
+    --text: #e8e8ec;
+    --muted: #9090a8;
+    --ok: #4ade80;
+    --err: #ff7777;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", "Noto Sans CJK SC", sans-serif;
+         background: var(--bg); color: var(--text); margin: 0; }
+  header {
+    background: var(--panel); padding: 12px 20px;
+    display: flex; align-items: center; gap: 16px;
+    border-bottom: 1px solid #444;
+  }
+  header h1 { margin: 0; font-size: 20px; }
+  header .status {
+    flex: 1; color: var(--muted); font-size: 13px;
+  }
+  header .status .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    background: var(--panel-light); margin-right: 8px;
+  }
+  nav {
+    background: var(--panel); display: flex; flex-wrap: wrap;
+    padding: 0 20px; border-bottom: 1px solid #444; gap: 4px;
+  }
+  nav button {
+    background: transparent; color: var(--muted); border: none;
+    padding: 10px 16px; cursor: pointer; font-size: 14px;
+    border-bottom: 2px solid transparent;
+  }
+  nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+  nav button:hover { color: var(--text); }
+  main { padding: 20px; max-width: 900px; margin: 0 auto; }
+  .panel { background: var(--panel); border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+  .panel h2 { margin-top: 0; font-size: 18px; }
+  .row { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .row label { min-width: 100px; color: var(--muted); }
+  input, select, textarea {
+    background: var(--panel-light); color: var(--text); border: 1px solid #444;
+    border-radius: 6px; padding: 8px 10px; font-size: 14px; font-family: inherit;
+  }
+  input[type=text], input[type=password], select { min-width: 200px; }
+  textarea { width: 100%; min-height: 100px; resize: vertical; }
+  button.btn {
+    background: var(--accent); color: #fff; border: none; padding: 8px 16px;
+    border-radius: 6px; cursor: pointer; font-size: 14px;
+  }
+  button.btn:hover { background: #819bff; }
+  button.btn.danger { background: #c0392b; }
+  button.btn.secondary { background: var(--panel-light); }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  .img-card { background: var(--panel-light); border-radius: 8px; overflow: hidden; }
+  .img-card img { width: 100%; display: block; }
+  .img-card .meta { padding: 8px; font-size: 12px; color: var(--muted); display: flex;
+                    justify-content: space-between; align-items: center; }
+  .msg { margin: 8px 0; padding: 8px 12px; border-radius: 6px; }
+  .msg.user { background: #3b4a73; }
+  .msg.assistant { background: #3a3a52; }
+  .msg.system { background: #4a3a52; color: var(--muted); font-size: 12px; }
+  .log-box { background: #000; color: #6f6; font-family: monospace; font-size: 12px;
+             padding: 12px; border-radius: 6px; height: 400px; overflow: auto;
+             white-space: pre-wrap; word-break: break-all; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 10px;
+          background: var(--panel-light); font-size: 12px; color: var(--muted); }
+  .pill.ok { background: #163d2a; color: var(--ok); }
+  .pill.err { background: #4a1f1f; color: var(--err); }
+  .hide { display: none; }
+  .help { color: var(--muted); font-size: 12px; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🤖 BMO 控制台</h1>
+  <div class="status">
+    <span class="badge" id="agent-state">unknown</span>
+    <span id="agent-status">连接中...</span>
+    <span class="badge" id="agent-mem">0 轮</span>
+  </div>
+  <button class="btn secondary" onclick="logout()">退出登录</button>
+</header>
+
+<nav>
+  <button class="active" data-tab="dashboard" onclick="showTab('dashboard')">仪表板</button>
+  <button data-tab="voice" onclick="showTab('voice')">音色</button>
+  <button data-tab="models" onclick="showTab('models')">模型</button>
+  <button data-tab="prompt" onclick="showTab('prompt')">性格</button>
+  <button data-tab="wake" onclick="showTab('wake')">唤醒词</button>
+  <button data-tab="history" onclick="showTab('history')">对话历史</button>
+  <button data-tab="images" onclick="showTab('images')">图片画廊</button>
+  <button data-tab="remote" onclick="showTab('remote')">遥控器</button>
+  <button data-tab="logs" onclick="showTab('logs')">日志</button>
+  <button data-tab="keys" onclick="showTab('keys')">API Key</button>
+  <button data-tab="security" onclick="showTab('security')">安全</button>
+</nav>
+
+<main>
+
+<!-- 仪表板 -->
+<section id="tab-dashboard" class="tab">
+  <div class="panel">
+    <h2>当前状态</h2>
+    <div class="row"><label>状态：</label><span id="db-state" class="pill">-</span></div>
+    <div class="row"><label>提示：</label><span id="db-status">-</span></div>
+    <div class="row"><label>TTS 队列：</label><span id="db-queue">0</span></div>
+    <div class="row"><label>记忆轮数：</label><span id="db-mem">0</span></div>
+  </div>
+  <div class="panel">
+    <h2>快捷操作</h2>
+    <div class="row">
+      <button class="btn" onclick="trigger('record')">▶ 开始录音</button>
+      <button class="btn secondary" onclick="trigger('stop')">■ 停止录音</button>
+      <button class="btn danger" onclick="trigger('interrupt')">⏸ 打断说话</button>
+      <button class="btn" onclick="trigger('capture')">📷 拍照</button>
+    </div>
+  </div>
+</section>
+
+<!-- 音色 -->
+<section id="tab-voice" class="tab hide">
+  <div class="panel">
+    <h2>Edge-TTS 音色（免费）</h2>
+    <div class="row">
+      <label>语言：</label>
+      <select id="voice-lang" onchange="loadVoices()">
+        <option value="zh">中文</option>
+        <option value="en">英文</option>
+        <option value="ja">日文</option>
+      </select>
+    </div>
+    <div class="row">
+      <label>音色：</label>
+      <select id="voice-name" style="min-width: 360px;"></select>
+    </div>
+    <div class="row">
+      <label>语速：</label>
+      <input type="text" id="voice-rate" placeholder="+0% / +10% / -20%" value="+0%">
+    </div>
+    <div class="row">
+      <label>音量：</label>
+      <input type="text" id="voice-volume" placeholder="+0% / -10%" value="+0%">
+    </div>
+    <div class="row">
+      <label>试听文字：</label>
+      <input type="text" id="voice-test-text" value="你好，我是 BMO，很高兴见到你。" style="flex: 1; min-width: 300px;">
+    </div>
+    <div class="row">
+      <button class="btn" onclick="testVoice()">🔊 试听</button>
+      <button class="btn" onclick="saveVoice()">💾 保存为默认</button>
+      <audio id="voice-audio" controls></audio>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>TTS 兜底（Edge 失效时用）</h2>
+    <div class="row">
+      <label>兜底模型：</label>
+      <select id="tts-fallback"></select>
+    </div>
+    <div class="row">
+      <button class="btn" onclick="saveTTSFallback()">💾 保存</button>
+    </div>
+  </div>
+</section>
+
+<!-- 模型 -->
+<section id="tab-models" class="tab hide">
+  <div class="panel">
+    <h2>LLM 大脑</h2>
+    <div class="row">
+      <label>模型：</label>
+      <select id="model-llm" style="min-width: 360px;"></select>
+    </div>
+    <div class="row">
+      <label>温度：</label>
+      <input type="text" id="model-llm-temp" value="0.7" style="width: 80px;">
+      <label style="min-width: 80px;">最大 tokens：</label>
+      <input type="text" id="model-llm-maxtok" value="512" style="width: 100px;">
+    </div>
+    <div class="row">
+      <button class="btn" onclick="saveLLM()">💾 保存</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>视觉模型</h2>
+    <div class="row">
+      <label>模型：</label>
+      <select id="model-vision" style="min-width: 360px;"></select>
+    </div>
+    <div class="row">
+      <button class="btn" onclick="saveVision()">💾 保存</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>STT 语音转文字</h2>
+    <div class="row">
+      <label>模型：</label>
+      <select id="model-stt" style="min-width: 360px;"></select>
+    </div>
+    <div class="row">
+      <button class="btn" onclick="saveSTT()">💾 保存</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>文生图</h2>
+    <div class="row">
+      <label>模型：</label>
+      <select id="model-imggen" style="min-width: 360px;"></select>
+    </div>
+    <div class="row">
+      <label>尺寸：</label>
+      <select id="model-imggen-size">
+        <option>1024x1024</option>
+        <option>768x1024</option>
+        <option>1024x768</option>
+        <option>512x512</option>
+      </select>
+    </div>
+    <div class="row">
+      <button class="btn" onclick="saveImgGen()">💾 保存</button>
+    </div>
+  </div>
+</section>
+
+<!-- 性格 -->
+<section id="tab-prompt" class="tab hide">
+  <div class="panel">
+    <h2>System Prompt（BMO 性格设定）</h2>
+    <textarea id="prompt-system" placeholder="System prompt..."></textarea>
+    <div class="help">改完点保存，agent 自动重载，新对话立刻生效。</div>
+    <div class="row" style="margin-top: 12px;">
+      <button class="btn" onclick="savePrompt()">💾 保存</button>
+      <button class="btn secondary" onclick="loadConfig().then(fillPrompt)">↺ 重置</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>附加说明（可选）</h2>
+    <textarea id="prompt-extras" placeholder="额外的设定，比如「你的主人叫小明」"></textarea>
+    <div class="row" style="margin-top: 12px;">
+      <button class="btn" onclick="saveExtras()">💾 保存</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>对话设置</h2>
+    <div class="row">
+      <label>记忆上限：</label>
+      <input type="number" id="prompt-mem-max" value="30" style="width: 100px;">
+      <span class="help">轮数（一来一回算一轮）</span>
+    </div>
+    <div class="row">
+      <button class="btn" onclick="saveMemory()">💾 保存</button>
+    </div>
+  </div>
+</section>
+
+<!-- 唤醒词 -->
+<section id="tab-wake" class="tab hide">
+  <div class="panel">
+    <h2>唤醒词</h2>
+    <div class="row">
+      <label>启用：</label>
+      <input type="checkbox" id="wake-enabled">
+    </div>
+    <div class="row">
+      <label>当前模型：</label>
+      <select id="wake-model" style="min-width: 320px;"></select>
+    </div>
+    <div class="row">
+      <label>灵敏度：</label>
+      <input type="range" id="wake-threshold" min="0.1" max="0.9" step="0.05" value="0.5">
+      <span id="wake-threshold-val">0.50</span>
+      <span class="help">值越低越敏感（容易误触），越高越严格</span>
+    </div>
+    <div class="row">
+      <button class="btn" onclick="saveWake()">💾 保存</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>上传新唤醒词模型</h2>
+    <div class="help">在 Colab 训好的 .onnx 文件，拖进来即可。</div>
+    <div class="row" style="margin-top: 12px;">
+      <input type="file" id="wake-upload" accept=".onnx">
+      <button class="btn" onclick="uploadWake()">⬆ 上传</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>本地唤醒词模型库</h2>
+    <div id="wake-list"></div>
+  </div>
+
+  <div class="panel">
+    <h2>训练自己的中文唤醒词</h2>
+    <p>想要"嘿 BMO"或者其它中文唤醒词？训练步骤：</p>
+    <ol>
+      <li>打开 OpenWakeWord 训练 Colab：
+        <a href="https://colab.research.google.com/drive/1q1oe2zOyZp7UsB3jJiQ1IFn8z5YfjwEb"
+           target="_blank" style="color: var(--accent);">点这里</a></li>
+      <li>填入你的唤醒词文字（中英文都行）</li>
+      <li>等 30~60 分钟训练完成</li>
+      <li>下载生成的 .onnx 文件</li>
+      <li>上传到这里，切换使用</li>
+    </ol>
+  </div>
+</section>
+
+<!-- 对话历史 -->
+<section id="tab-history" class="tab hide">
+  <div class="panel">
+    <h2>对话历史</h2>
+    <div class="row">
+      <button class="btn" onclick="loadHistory()">↻ 刷新</button>
+      <button class="btn danger" onclick="clearHistory()">🗑 清空记忆</button>
+    </div>
+    <div id="history-list" style="margin-top: 12px;"></div>
+  </div>
+</section>
+
+<!-- 图片画廊 -->
+<section id="tab-images" class="tab hide">
+  <div class="panel">
+    <h2>BMO 画过的图</h2>
+    <div class="row">
+      <button class="btn" onclick="loadImages()">↻ 刷新</button>
+    </div>
+    <div id="image-grid" class="grid" style="margin-top: 16px;"></div>
+  </div>
+</section>
+
+<!-- 遥控器 -->
+<section id="tab-remote" class="tab hide">
+  <div class="panel">
+    <h2>遥控器</h2>
+    <div class="row">
+      <button class="btn" onclick="trigger('record')">▶ 开始录音</button>
+      <button class="btn secondary" onclick="trigger('stop')">■ 停止录音</button>
+      <button class="btn danger" onclick="trigger('interrupt')">⏸ 打断说话</button>
+      <button class="btn" onclick="trigger('capture')">📷 拍照对话</button>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>让 BMO 说一句</h2>
+    <div class="row">
+      <input type="text" id="remote-speak" placeholder="想让它说什么..." style="flex: 1; min-width: 300px;">
+      <button class="btn" onclick="sendSpeak()">📢 说</button>
+    </div>
+  </div>
+</section>
+
+<!-- 日志 -->
+<section id="tab-logs" class="tab hide">
+  <div class="panel">
+    <h2>实时日志</h2>
+    <div class="row">
+      <button class="btn" onclick="reloadLogs()">↻ 刷新</button>
+      <label style="min-width: auto;"><input type="checkbox" id="log-autoscroll" checked> 自动滚动</label>
+    </div>
+    <div class="log-box" id="log-box"></div>
+  </div>
+</section>
+
+<!-- API Key -->
+<section id="tab-keys" class="tab hide">
+  <div class="panel">
+    <h2>API Key 状态</h2>
+    <div id="key-status"></div>
+  </div>
+  <div class="panel">
+    <h2>更新 API Key</h2>
+    <div class="row">
+      <label>Provider：</label>
+      <select id="key-provider">
+        <option value="siliconflow">硅基流动</option>
+        <option value="openrouter">OpenRouter</option>
+        <option value="openai">OpenAI</option>
+      </select>
+    </div>
+    <div class="row">
+      <label>新 Key：</label>
+      <input type="password" id="key-value" placeholder="sk-..." style="flex: 1; min-width: 300px;">
+    </div>
+    <div class="row">
+      <button class="btn" onclick="saveKey()">💾 保存到 .env</button>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>API 花费</h2>
+    <p>硅基流动暂未开放公开余额查询 API，请到官方控制台查看：
+      <a href="https://cloud.siliconflow.cn/account/billing" target="_blank" style="color: var(--accent);">
+        硅基流动控制台 →</a>
+    </p>
+  </div>
+</section>
+
+<!-- 安全 -->
+<section id="tab-security" class="tab hide">
+  <div class="panel">
+    <h2>访问密码</h2>
+    <p>当前：<span id="pw-state" class="pill">未设置</span></p>
+    <div class="row" id="pw-old-row" style="display:none;">
+      <label>原密码：</label>
+      <input type="password" id="pw-old">
+    </div>
+    <div class="row">
+      <label>新密码：</label>
+      <input type="password" id="pw-new">
+    </div>
+    <div class="row">
+      <button class="btn" onclick="setPassword()">💾 设置 / 修改</button>
+      <button class="btn danger" onclick="removePassword()">🗑 取消密码</button>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<script>
+let CONFIG = {};
+let PRESETS = {};
+
+// ============ 通用 ============
+async function fetchJSON(url, opts) {
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+async function putJSON(url, body) {
+  return fetchJSON(url, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+}
+async function postJSON(url, body) {
+  return fetchJSON(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body || {}),
+  });
+}
+async function deleteJSON(url) {
+  return fetchJSON(url, {method: 'DELETE'});
+}
+
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(el => el.classList.add('hide'));
+  document.getElementById('tab-' + name).classList.remove('hide');
+  document.querySelectorAll('nav button').forEach(b =>
+    b.classList.toggle('active', b.dataset.tab === name));
+}
+
+// ============ 状态轮询 ============
+async function pollState() {
+  try {
+    const s = await fetchJSON('/api/state');
+    document.getElementById('agent-state').textContent = s.state;
+    document.getElementById('agent-status').textContent = s.status;
+    document.getElementById('agent-mem').textContent = `${s.memory_turns} 轮`;
+    document.getElementById('db-state').textContent = s.state;
+    document.getElementById('db-status').textContent = s.status;
+    document.getElementById('db-queue').textContent = s.tts_queue_len;
+    document.getElementById('db-mem').textContent = s.memory_turns;
+  } catch (e) {
+    document.getElementById('agent-status').textContent = '⚠️ 连接不上 agent';
+  }
+}
+setInterval(pollState, 1500);
+pollState();
+
+// ============ 初始加载 ============
+async function loadConfig() {
+  CONFIG = await fetchJSON('/api/config');
+  return CONFIG;
+}
+async function loadPresets() {
+  PRESETS = await fetchJSON('/api/presets');
+}
+
+async function initAll() {
+  await loadConfig();
+  await loadPresets();
+  fillVoiceTab();
+  fillModels();
+  fillPrompt();
+  fillWake();
+  loadVoices();
+  loadKeys();
+  loadPwState();
+}
+initAll();
+
+// ============ 音色 ============
+async function loadVoices() {
+  const lang = document.getElementById('voice-lang').value;
+  const voices = await fetchJSON(`/api/voices?lang=${lang}`);
+  const sel = document.getElementById('voice-name');
+  sel.innerHTML = '';
+  for (const v of voices) {
+    const opt = document.createElement('option');
+    opt.value = v.name;
+    opt.textContent = `${v.name} (${v.gender})`;
+    if (v.name === CONFIG?.tts?.voice) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+function fillVoiceTab() {
+  document.getElementById('voice-rate').value = CONFIG.tts?.rate || '+0%';
+  document.getElementById('voice-volume').value = CONFIG.tts?.volume || '+0%';
+  // 兜底下拉
+  const sel = document.getElementById('tts-fallback');
+  sel.innerHTML = '';
+  for (const p of (PRESETS.tts_fallback || [])) {
+    const opt = document.createElement('option');
+    opt.value = JSON.stringify(p);
+    opt.textContent = p.desc;
+    if (p.model === CONFIG.tts?.fallback_model && p.voice === CONFIG.tts?.fallback_voice) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+async function testVoice() {
+  const body = {
+    text: document.getElementById('voice-test-text').value,
+    voice: document.getElementById('voice-name').value,
+    rate: document.getElementById('voice-rate').value,
+    volume: document.getElementById('voice-volume').value,
+  };
+  const r = await fetch('/api/voices/test', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  const blob = await r.blob();
+  const audio = document.getElementById('voice-audio');
+  audio.src = URL.createObjectURL(blob);
+  audio.play();
+}
+async function saveVoice() {
+  CONFIG.tts.voice = document.getElementById('voice-name').value;
+  CONFIG.tts.rate = document.getElementById('voice-rate').value;
+  CONFIG.tts.volume = document.getElementById('voice-volume').value;
+  CONFIG.tts.provider = 'edge';
+  await putJSON('/api/config', CONFIG);
+  alert('已保存');
+}
+async function saveTTSFallback() {
+  const p = JSON.parse(document.getElementById('tts-fallback').value);
+  CONFIG.tts.fallback_provider = p.provider;
+  CONFIG.tts.fallback_model = p.model;
+  CONFIG.tts.fallback_voice = p.voice;
+  await putJSON('/api/config', CONFIG);
+  alert('已保存');
+}
+
+// ============ 模型 ============
+function fillModels() {
+  const fill = (selId, presets, current) => {
+    const sel = document.getElementById(selId);
+    sel.innerHTML = '';
+    for (const p of presets) {
+      const opt = document.createElement('option');
+      opt.value = JSON.stringify(p);
+      opt.textContent = `${p.desc} (${p.provider})`;
+      if (p.model === current?.model && p.provider === current?.provider) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  };
+  fill('model-llm', PRESETS.llm || [], CONFIG.llm);
+  fill('model-vision', PRESETS.vision || [], CONFIG.vision);
+  fill('model-stt', PRESETS.stt || [], CONFIG.stt);
+  fill('model-imggen', PRESETS.image_gen || [], CONFIG.image_gen);
+  document.getElementById('model-llm-temp').value = CONFIG.llm?.temperature || 0.7;
+  document.getElementById('model-llm-maxtok').value = CONFIG.llm?.max_tokens || 512;
+  document.getElementById('model-imggen-size').value = CONFIG.image_gen?.size || '1024x1024';
+}
+async function saveLLM() {
+  const p = JSON.parse(document.getElementById('model-llm').value);
+  CONFIG.llm = {
+    ...CONFIG.llm,
+    provider: p.provider, model: p.model,
+    temperature: parseFloat(document.getElementById('model-llm-temp').value),
+    max_tokens: parseInt(document.getElementById('model-llm-maxtok').value),
+  };
+  await putJSON('/api/config', CONFIG);
+  alert('已保存');
+}
+async function saveVision() {
+  const p = JSON.parse(document.getElementById('model-vision').value);
+  CONFIG.vision = { ...CONFIG.vision, provider: p.provider, model: p.model };
+  await putJSON('/api/config', CONFIG);
+  alert('已保存');
+}
+async function saveSTT() {
+  const p = JSON.parse(document.getElementById('model-stt').value);
+  CONFIG.stt = { ...CONFIG.stt, provider: p.provider, model: p.model };
+  await putJSON('/api/config', CONFIG);
+  alert('已保存');
+}
+async function saveImgGen() {
+  const p = JSON.parse(document.getElementById('model-imggen').value);
+  CONFIG.image_gen = {
+    ...CONFIG.image_gen, provider: p.provider, model: p.model,
+    size: document.getElementById('model-imggen-size').value,
+  };
+  await putJSON('/api/config', CONFIG);
+  alert('已保存');
+}
+
+// ============ 性格 / Prompt ============
+function fillPrompt() {
+  document.getElementById('prompt-system').value = CONFIG.system_prompt || '';
+  document.getElementById('prompt-extras').value = CONFIG.system_prompt_extras || '';
+  document.getElementById('prompt-mem-max').value = CONFIG.memory_max_turns || 30;
+}
+async function savePrompt() {
+  CONFIG.system_prompt = document.getElementById('prompt-system').value;
+  await putJSON('/api/config', CONFIG);
+  alert('已保存，下一轮对话生效');
+}
+async function saveExtras() {
+  CONFIG.system_prompt_extras = document.getElementById('prompt-extras').value;
+  await putJSON('/api/config', CONFIG);
+  alert('已保存');
+}
+async function saveMemory() {
+  CONFIG.memory_max_turns = parseInt(document.getElementById('prompt-mem-max').value);
+  await putJSON('/api/config', CONFIG);
+  alert('已保存');
+}
+
+// ============ 唤醒词 ============
+async function fillWake() {
+  document.getElementById('wake-enabled').checked = CONFIG.wake_word?.enabled || false;
+  document.getElementById('wake-threshold').value = CONFIG.wake_word?.threshold || 0.5;
+  document.getElementById('wake-threshold-val').textContent = (CONFIG.wake_word?.threshold || 0.5).toFixed(2);
+  await loadWakeList();
+}
+document.getElementById('wake-threshold').addEventListener('input', e => {
+  document.getElementById('wake-threshold-val').textContent = parseFloat(e.target.value).toFixed(2);
+});
+async function loadWakeList() {
+  const list = await fetchJSON('/api/wakewords');
+  const sel = document.getElementById('wake-model');
+  sel.innerHTML = '';
+  for (const w of list) {
+    const opt = document.createElement('option');
+    opt.value = w.path;
+    opt.textContent = `${w.filename} (${w.size_kb} KB)`;
+    if (w.path === CONFIG.wake_word?.model) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  const box = document.getElementById('wake-list');
+  box.innerHTML = '';
+  for (const w of list) {
+    const div = document.createElement('div');
+    div.className = 'row';
+    div.innerHTML = `<span>${w.filename}</span><span class="pill">${w.size_kb} KB</span>
+      <button class="btn danger" onclick="deleteWake('${w.filename}')">删除</button>`;
+    box.appendChild(div);
+  }
+}
+async function uploadWake() {
+  const f = document.getElementById('wake-upload').files[0];
+  if (!f) return alert('请先选择文件');
+  const fd = new FormData();
+  fd.append('file', f);
+  await fetch('/api/wakewords/upload', {method: 'POST', body: fd});
+  alert('已上传');
+  await loadWakeList();
+}
+async function deleteWake(name) {
+  if (!confirm(`确定删除 ${name}？`)) return;
+  await deleteJSON(`/api/wakewords/${encodeURIComponent(name)}`);
+  await loadWakeList();
+}
+async function saveWake() {
+  CONFIG.wake_word = {
+    enabled: document.getElementById('wake-enabled').checked,
+    model: document.getElementById('wake-model').value,
+    threshold: parseFloat(document.getElementById('wake-threshold').value),
+  };
+  await putJSON('/api/config', CONFIG);
+  alert('已保存');
+}
+
+// ============ 历史 ============
+async function loadHistory() {
+  const data = await fetchJSON('/api/history');
+  const box = document.getElementById('history-list');
+  box.innerHTML = '';
+  for (const m of data) {
+    const div = document.createElement('div');
+    div.className = `msg ${m.role}`;
+    let content = m.content;
+    if (Array.isArray(content)) content = content.map(c => c.text || c).join(' ');
+    div.innerHTML = `<b>${m.role}:</b> ${escapeHtml(String(content)).substring(0, 1000)}`;
+    box.appendChild(div);
+  }
+  if (data.length === 0) box.textContent = '（暂无对话）';
+}
+async function clearHistory() {
+  if (!confirm('确定清空所有对话记忆？')) return;
+  await deleteJSON('/api/history');
+  alert('已清空');
+  await loadHistory();
+}
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ============ 图片画廊 ============
+async function loadImages() {
+  const data = await fetchJSON('/api/images');
+  const box = document.getElementById('image-grid');
+  box.innerHTML = '';
+  for (const img of data) {
+    const card = document.createElement('div');
+    card.className = 'img-card';
+    card.innerHTML = `<img src="${img.url}" loading="lazy">
+      <div class="meta"><span>${img.filename}</span>
+      <button class="btn danger" onclick="deleteImage('${img.filename}')">删除</button></div>`;
+    box.appendChild(card);
+  }
+  if (data.length === 0) box.textContent = '（还没画过图）';
+}
+async function deleteImage(name) {
+  if (!confirm(`删除 ${name}？`)) return;
+  await deleteJSON(`/api/images/${encodeURIComponent(name)}`);
+  await loadImages();
+}
+
+// ============ 遥控 ============
+async function trigger(action) {
+  await postJSON(`/api/trigger/${action}`);
+}
+async function sendSpeak() {
+  const text = document.getElementById('remote-speak').value.trim();
+  if (!text) return;
+  await postJSON('/api/trigger/speak', {text});
+  document.getElementById('remote-speak').value = '';
+}
+
+// ============ 日志 ============
+async function reloadLogs() {
+  const data = await fetchJSON('/api/logs/tail?lines=300');
+  const box = document.getElementById('log-box');
+  box.textContent = data.lines.join('');
+  if (document.getElementById('log-autoscroll').checked) box.scrollTop = box.scrollHeight;
+}
+function startLogStream() {
+  const evt = new EventSource('/api/logs/stream');
+  evt.onmessage = e => {
+    const box = document.getElementById('log-box');
+    box.textContent += e.data + '\n';
+    if (document.getElementById('log-autoscroll').checked) box.scrollTop = box.scrollHeight;
+  };
+}
+reloadLogs();
+startLogStream();
+
+// ============ API key ============
+async function loadKeys() {
+  const data = await fetchJSON('/api/keys');
+  const box = document.getElementById('key-status');
+  box.innerHTML = '';
+  for (const [name, ok] of Object.entries(data)) {
+    const div = document.createElement('div');
+    div.className = 'row';
+    div.innerHTML = `<label>${name}</label><span class="pill ${ok ? 'ok' : 'err'}">${ok ? '✓ 已配置' : '✗ 未配置'}</span>`;
+    box.appendChild(div);
+  }
+}
+async function saveKey() {
+  const provider = document.getElementById('key-provider').value;
+  const key = document.getElementById('key-value').value.trim();
+  if (!key) return alert('请输入 key');
+  await putJSON('/api/keys', {provider, key});
+  document.getElementById('key-value').value = '';
+  alert('已保存');
+  await loadKeys();
+}
+
+// ============ 安全 / 密码 ============
+async function loadPwState() {
+  // 通过 /api/login 探测：如果无密码状态会返回 no_password
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({password: '__probe__'}),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (d.no_password) {
+      document.getElementById('pw-state').textContent = '未设置';
+      document.getElementById('pw-state').className = 'pill';
+      document.getElementById('pw-old-row').style.display = 'none';
+    }
+  } catch (e) {
+    // 401 = 有密码
+    document.getElementById('pw-state').textContent = '已设置';
+    document.getElementById('pw-state').className = 'pill ok';
+    document.getElementById('pw-old-row').style.display = 'flex';
+  }
+}
+async function setPassword() {
+  const newPw = document.getElementById('pw-new').value;
+  const oldPw = document.getElementById('pw-old').value;
+  if (!newPw) return alert('请输入新密码');
+  try {
+    await postJSON('/api/password', {new_password: newPw, old_password: oldPw || null});
+    alert('密码已设置，请重新登录');
+    location.href = '/';
+  } catch (e) {
+    alert('设置失败：' + e.message);
+  }
+}
+async function removePassword() {
+  if (!confirm('确定取消密码？任何人都能访问控制台')) return;
+  await deleteJSON('/api/password');
+  alert('密码已取消');
+  await loadPwState();
+}
+
+async function logout() {
+  await postJSON('/api/logout');
+  location.href = '/';
+}
+</script>
+</body>
+</html>
