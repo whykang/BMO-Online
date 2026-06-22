@@ -947,6 +947,8 @@ class BotGUI:
         sentence_buf = ""
         sentence_re = re.compile(r'[。！？.!?\n]')
         is_action = False
+        # 看图(拍照)那一轮禁止再调工具，否则会无限循环拍照
+        allow_tools = (img_path is None)
 
         try:
             for chunk in self.llm.chat_stream(messages):
@@ -954,8 +956,7 @@ class BotGUI:
                     break
                 full_buf += chunk
                 # 工具调用检测：回复里只要出现 { 就当作工具调用，立刻停止朗读
-                # （模型有时会在 JSON 前加一句话，所以不能只看开头）
-                if not is_action and "{" in full_buf:
+                if allow_tools and not is_action and "{" in full_buf:
                     is_action = True
                     self.thinking_sound_active.clear()
                     continue

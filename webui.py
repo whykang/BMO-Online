@@ -464,8 +464,8 @@ PRESETS = {
         {"provider": "openrouter", "model": "openai/gpt-4o-mini", "desc": "GPT-4o mini（OpenRouter）"},
     ],
     "vision": [
-        {"provider": "siliconflow", "model": "Qwen/Qwen2-VL-7B-Instruct", "desc": "Qwen2-VL 7B"},
-        {"provider": "siliconflow", "model": "OpenGVLab/InternVL2-8B", "desc": "InternVL2 8B"},
+        {"provider": "siliconflow", "model": "Qwen/Qwen2.5-VL-7B-Instruct", "desc": "Qwen2.5-VL 7B"},
+        {"provider": "siliconflow", "model": "Qwen/Qwen2.5-VL-32B-Instruct", "desc": "Qwen2.5-VL 32B"},
         {"provider": "openrouter", "model": "openai/gpt-4o-mini", "desc": "GPT-4o mini"},
     ],
     "stt": [
