@@ -67,18 +67,9 @@ SILICONFLOW_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 注册：<https://cloud.siliconflow.cn>
 
-### 5. 复制脸部动画和音效
+### 5. 启动
 
-原版的 `faces/` 和 `sounds/` 资源没包含在这里（版权原因）。从原版仓库复制：
-
-```bash
-git clone https://github.com/brenpoly/be-more-agent /tmp/bmo
-cp -r /tmp/bmo/faces /tmp/bmo/sounds ./
-```
-
-或者自己做：每个状态（idle/listening/thinking/speaking/error/capturing/warmup）放一组 PNG。
-
-### 6. 启动
+仓库已经包含了原版的 `faces/`（脸部动画）和 `sounds/`（音效），不用自己准备。
 
 **第一个终端 — 启动 BMO 主程序**：
 ```bash

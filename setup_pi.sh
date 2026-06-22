@@ -54,14 +54,6 @@ if [ ! -f .env ]; then
     echo -e "${YELLOW}    nano .env${NC}"
 fi
 
-# 6. faces 和 sounds 检查
-if [ ! -d faces ] || [ ! -d sounds ]; then
-    echo -e "${YELLOW}⚠️  缺 faces/ 或 sounds/ 文件夹${NC}"
-    echo -e "${YELLOW}    可以从原版 be-more-agent 复制过来：${NC}"
-    echo -e "${YELLOW}    git clone https://github.com/brenpoly/be-more-agent /tmp/bmo${NC}"
-    echo -e "${YELLOW}    cp -r /tmp/bmo/faces /tmp/bmo/sounds ./${NC}"
-fi
-
 echo -e "${GREEN}✨ 安装完成！下一步：${NC}"
 echo -e "${GREEN}    1. nano .env 填入 API key${NC}"
 echo -e "${GREEN}    2. ./start_agent.sh${NC}"
