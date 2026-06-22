@@ -473,10 +473,6 @@ class BotGUI:
             threading.Thread(target=self._tts_worker, daemon=True).start()
             self.set_state(BotStates.IDLE, "准备好啦")
 
-            conv_cfg = self.config.get("conversation", {})
-            follow_up = conv_cfg.get("follow_up", True)
-            follow_up_rounds = int(conv_cfg.get("follow_up_max_rounds", 6))
-
             while not self.exiting:
                 trigger = self.detect_wake_word_or_ptt()
                 if self.exiting:
@@ -486,18 +482,25 @@ class BotGUI:
                     self.set_state(BotStates.IDLE, "重置")
                     continue
 
-                # 一轮唤醒后，可连续对话若干回合（无需重新唤醒）
-                rounds = 0
+                # 每轮都重新读 config，网页改了立即生效
+                conv_cfg = self.config.get("conversation", {})
+                follow_up = conv_cfg.get("follow_up", True)
+                awake_secs = float(conv_cfg.get("awake_seconds", 15))
+                followup_secs = float(conv_cfg.get("follow_up_seconds", 15))
+
+                # 一轮唤醒后，可连续对话（无需重新唤醒），直到超时没人说话
+                first = True
                 while not self.exiting:
-                    self.set_state(BotStates.LISTENING, "在听..." if rounds == 0 else "请说...")
+                    self.set_state(BotStates.LISTENING, "在听..." if first else "请说...")
 
                     if trigger == "PTT":
                         audio_file = self.record_voice_ptt()
                     else:
-                        audio_file = self.record_voice_adaptive()
+                        # 第一句用"维持唤醒时间"，后续追问用"连续对话时间"
+                        onset = awake_secs if first else followup_secs
+                        audio_file = self.record_voice_adaptive(onset_timeout=onset)
 
                     if not audio_file:
-                        # 追问窗口里没听到 → 结束本次对话，回到等待唤醒
                         self.set_state(BotStates.IDLE, "没听到")
                         break
 
@@ -511,12 +514,11 @@ class BotGUI:
                     self.interrupted.clear()
                     self.chat_and_respond(user_text, img_path=None)
 
-                    rounds += 1
-                    # PTT 模式不做自动追问（按键本身就是触发）；唤醒模式才连续
-                    if not follow_up or trigger == "PTT" or rounds >= follow_up_rounds:
+                    first = False
+                    # PTT 模式不做自动追问；唤醒模式才连续对话
+                    if not follow_up or trigger == "PTT":
                         break
-                    # 给扬声器留一点尾音时间，避免录到 BMO 自己的话
-                    time.sleep(0.4)
+                    time.sleep(0.4)  # 留尾音，避免录到 BMO 自己的声音
 
         except Exception as e:
             traceback.print_exc()
@@ -619,37 +621,38 @@ class BotGUI:
     # -------------------------------------------------------------------
     # 录音
     # -------------------------------------------------------------------
-    def record_voice_adaptive(self, filename="input.wav"):
-        log("录音（自适应）...")
+    def record_voice_adaptive(self, filename="input.wav", onset_timeout=15.0):
+        """录音：先等用户开口（最多 onset_timeout 秒），开口后录到静音为止。
+        若在 onset_timeout 内一直没开口，返回 None（结束本次对话）。"""
+        log(f"录音（自适应，等待开口≤{onset_timeout:.0f}s）...")
         time.sleep(0.3)
         sr = choose_input_samplerate(self.input_device, self.config.get("input_sample_rate"))
 
         rec_cfg = self.config.get("recording", {})
         silence_duration = float(rec_cfg.get("silence_duration", 1.0))
-        max_record = float(rec_cfg.get("max_record_seconds", 12.0))
-        min_record = float(rec_cfg.get("min_record_seconds", 1.0))
-        # 噪音地板倍数：动态阈值 = 噪音地板 * 这个倍数（再设个下限）
+        max_speech = float(rec_cfg.get("max_record_seconds", 12.0))
         noise_mult = float(rec_cfg.get("silence_multiplier", 3.0))
         floor_min = float(rec_cfg.get("silence_floor_min", 0.012))
 
         chunk_dur = 0.05
         chunk_size = int(sr * chunk_dur)
         num_silent = int(silence_duration / chunk_dur)
-        max_chunks = int(max_record / chunk_dur)
-        min_chunks = int(min_record / chunk_dur)
-        calib_chunks = 8   # 前 0.4 秒用来测噪音地板
+        calib_chunks = 8                                   # 前 0.4s 测噪音地板
+        onset_chunks = int(onset_timeout / chunk_dur)      # 等待开口的窗口
+        max_speech_chunks = int(max_speech / chunk_dur)    # 开口后最长录音
 
         buf = []
-        state = {"recorded": 0, "silent": 0, "done": False,
-                 "noise": 0.0, "thr": floor_min, "peak": 0.0}
+        state = {"n": 0, "silent": 0, "done": False, "noise": 0.0,
+                 "thr": floor_min, "peak": 0.0, "speaking": False,
+                 "speech_start": 0, "timeout": False}
 
         def cb(indata, frames, time_info, status):
             vn = float(np.linalg.norm(indata) / np.sqrt(len(indata)))
             buf.append(indata.copy())
-            state["recorded"] += 1
-            n = state["recorded"]
+            state["n"] += 1
+            n = state["n"]
 
-            # 校准阶段：测噪音地板
+            # 校准噪音地板
             if n <= calib_chunks:
                 state["noise"] = max(state["noise"], vn)
                 if n == calib_chunks:
@@ -657,34 +660,48 @@ class BotGUI:
                 return
 
             state["peak"] = max(state["peak"], vn)
-            # 至少录够 min_record 才允许判静音
-            if n < min_chunks:
+
+            if not state["speaking"]:
+                # 等待开口阶段
+                if vn >= state["thr"]:
+                    state["speaking"] = True
+                    state["speech_start"] = n
+                    state["silent"] = 0
+                elif n - calib_chunks >= onset_chunks:
+                    state["timeout"] = True
+                    state["done"] = True
                 return
+
+            # 已开口：检测静音结束 + 限最长
             if vn < state["thr"]:
                 state["silent"] += 1
                 if state["silent"] >= num_silent:
                     state["done"] = True
             else:
                 state["silent"] = 0
+            if n - state["speech_start"] >= max_speech_chunks:
+                state["done"] = True
 
         try:
             sd.stop()
             time.sleep(0.2)
             with sd.InputStream(samplerate=sr, channels=1, callback=cb,
                                 device=self.input_device, blocksize=chunk_size):
-                while not state["done"] and state["recorded"] < max_chunks and not self.exiting:
+                while not state["done"] and not self.exiting:
                     sd.sleep(int(chunk_dur * 1000))
         except Exception as e:
             log(f"[AUDIO ERROR] 自适应录音失败: {e}")
             return None
 
-        dur = state["recorded"] * chunk_dur
-        log(f"[REC] 时长 {dur:.1f}s 噪音地板={state['noise']:.4f} 阈值={state['thr']:.4f} 峰值={state['peak']:.4f}")
-        # 峰值没明显超过阈值 = 大概率没说话
-        if state["peak"] < state["thr"] * 1.5:
-            log("[REC] 似乎没听到有效语音")
+        if state["timeout"] or not state["speaking"]:
+            log(f"[REC] {onset_timeout:.0f}s 内没听到开口，结束对话")
             return None
-        return self.save_audio_buffer(buf, filename, sr)
+
+        dur = (state["n"] - state["speech_start"]) * chunk_dur
+        log(f"[REC] 语音 {dur:.1f}s 噪音地板={state['noise']:.4f} 阈值={state['thr']:.4f} 峰值={state['peak']:.4f}")
+        # 只截取开口之后的音频（去掉前面的等待静音，STT 更准更快）
+        speech_buf = buf[max(0, state["speech_start"] - 4):]
+        return self.save_audio_buffer(speech_buf, filename, sr)
 
     def record_voice_ptt(self, filename="input.wav"):
         log("录音（PTT）...")

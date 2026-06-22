@@ -285,7 +285,22 @@
       <span class="help">轮数（一来一回算一轮）</span>
     </div>
     <div class="row">
-      <button class="btn" onclick="saveMemory()">💾 保存</button>
+      <label>连续对话：</label>
+      <input type="checkbox" id="conv-followup">
+      <span class="help">勾上后，答完直接接着说，不用重新唤醒</span>
+    </div>
+    <div class="row">
+      <label>维持唤醒时间：</label>
+      <input type="number" id="conv-awake" value="15" min="3" max="60" style="width: 100px;">
+      <span class="help">秒。唤醒后等你开口多久没说话就休眠</span>
+    </div>
+    <div class="row">
+      <label>连续对话时间：</label>
+      <input type="number" id="conv-followup-secs" value="15" min="3" max="60" style="width: 100px;">
+      <span class="help">秒。答完后等你接话多久没说话就结束</span>
+    </div>
+    <div class="row">
+      <button class="btn" onclick="saveConversation()">💾 保存</button>
     </div>
   </div>
 </section>
@@ -728,6 +743,19 @@ function fillPrompt() {
   document.getElementById('prompt-system').value = CONFIG.system_prompt || '';
   document.getElementById('prompt-extras').value = CONFIG.system_prompt_extras || '';
   document.getElementById('prompt-mem-max').value = CONFIG.memory_max_turns || 30;
+  const c = CONFIG.conversation || {};
+  document.getElementById('conv-followup').checked = c.follow_up !== false;
+  document.getElementById('conv-awake').value = c.awake_seconds ?? 15;
+  document.getElementById('conv-followup-secs').value = c.follow_up_seconds ?? 15;
+}
+async function saveConversation() {
+  CONFIG.conversation = {
+    follow_up: document.getElementById('conv-followup').checked,
+    awake_seconds: parseFloat(document.getElementById('conv-awake').value) || 15,
+    follow_up_seconds: parseFloat(document.getElementById('conv-followup-secs').value) || 15,
+  };
+  await putJSON('/api/config', CONFIG);
+  alert('已保存');
 }
 async function savePrompt() {
   CONFIG.system_prompt = document.getElementById('prompt-system').value;

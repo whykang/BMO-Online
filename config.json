@@ -61,7 +61,8 @@
 
   "conversation": {
     "follow_up": true,
-    "follow_up_max_rounds": 6
+    "awake_seconds": 15,
+    "follow_up_seconds": 15
   },
 
   "show_hud": false,
