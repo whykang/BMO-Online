@@ -251,6 +251,7 @@ class BotGUI:
         self.status_label = ttk.Label(master, textvariable=self.status_var,
                                       background="#2e2e2e", foreground="white")
         self.exit_button = ttk.Button(master, text="退出", command=self.safe_exit)
+        self._set_cursor_visible(False)
 
         self.load_animations()
         self.update_animation()
@@ -358,6 +359,19 @@ class BotGUI:
             pass
         self.safe_exit()
 
+    def _set_cursor_visible(self, visible: bool):
+        cursor = "" if visible else "none"
+
+        def apply(widget):
+            try:
+                widget.config(cursor=cursor)
+            except tk.TclError:
+                pass
+            for child in widget.winfo_children():
+                apply(child)
+
+        apply(self.master)
+
     def toggle_exit_button(self, event=None):
         """双击屏幕 → 显示退出按钮（恢复鼠标），6 秒后自动隐藏。"""
         try:
@@ -365,7 +379,7 @@ class BotGUI:
                 self._hide_exit_button()
             else:
                 self.exit_button.place(x=10, y=10)
-                self.master.config(cursor="")   # 恢复鼠标好点按钮
+                self._set_cursor_visible(True)   # 恢复鼠标好点按钮
                 if self._exit_btn_timer:
                     self.master.after_cancel(self._exit_btn_timer)
                 self._exit_btn_timer = self.master.after(6000, self._hide_exit_button)
@@ -375,7 +389,7 @@ class BotGUI:
     def _hide_exit_button(self):
         try:
             self.exit_button.place_forget()
-            self.master.config(cursor="none")
+            self._set_cursor_visible(False)
             self._exit_btn_timer = None
         except tk.TclError:
             pass
