@@ -631,139 +631,137 @@ class BotGUI:
     # -------------------------------------------------------------------
     def record_voice_adaptive(self, filename="input.wav", onset_timeout=15.0):
         """录音：先等用户开口（最多 onset_timeout 秒），开口后录到静音为止。
-        若在 onset_timeout 内一直没开口，返回 None（结束本次对话）。"""
+        用阻塞式 stream.read（和唤醒词监听一样可靠，避免 Pi 上回调不触发）。
+        在 onset_timeout 内没开口 → 返回 None（结束本次对话）。"""
         log(f"录音（自适应，等待开口≤{onset_timeout:.0f}s）...")
-        time.sleep(0.3)
+        time.sleep(0.2)
         sr = choose_input_samplerate(self.input_device, self.config.get("input_sample_rate"))
 
         rec_cfg = self.config.get("recording", {})
         silence_duration = float(rec_cfg.get("silence_duration", 1.0))
         max_speech = float(rec_cfg.get("max_record_seconds", 12.0))
-        # 阈值 = 噪音地板 + margin（加法，比乘法更抗高底噪/AGC）
         margin = float(rec_cfg.get("silence_margin", 0.05))
         floor_min = float(rec_cfg.get("silence_floor_min", 0.02))
 
         chunk_dur = 0.05
         chunk_size = int(sr * chunk_dur)
         num_silent = int(silence_duration / chunk_dur)
-        calib_chunks = 12                                  # 前 0.6s 测噪音地板
-        onset_chunks = int(onset_timeout / chunk_dur)      # 等待开口的窗口
-        max_speech_chunks = int(max_speech / chunk_dur)    # 开口后最长录音
+        calib_chunks = 12
+        onset_chunks = int(onset_timeout / chunk_dur)
+        max_speech_chunks = int(max_speech / chunk_dur)
 
-        buf = []
-        state = {"n": 0, "silent": 0, "done": False, "noise": 0.0,
-                 "thr": floor_min, "peak": 0.0, "speaking": False,
-                 "speech_start": 0, "timeout": False, "calib": []}
+        buf, calib = [], []
+        noise = 0.0
+        thr = floor_min
+        peak = 0.0
+        speaking = False
+        speech_start = 0
+        silent = 0
+        n = 0
+        timeout = False
 
-        def cb(indata, frames, time_info, status):
-            vn = float(np.linalg.norm(indata) / np.sqrt(len(indata)))
-            buf.append(indata.copy())
-            state["n"] += 1
-            n = state["n"]
-
-            # 校准噪音地板：用中位数，抗回声/瞬时尖峰
-            if n <= calib_chunks:
-                state["calib"].append(vn)
-                if n == calib_chunks:
-                    state["noise"] = float(np.median(state["calib"]))
-                    state["thr"] = max(floor_min, state["noise"] + margin)
-                return
-
-            state["peak"] = max(state["peak"], vn)
-
-            if not state["speaking"]:
-                # 等待开口阶段
-                if vn >= state["thr"]:
-                    state["speaking"] = True
-                    state["speech_start"] = n
-                    state["silent"] = 0
-                elif n - calib_chunks >= onset_chunks:
-                    state["timeout"] = True
-                    state["done"] = True
-                return
-
-            # 已开口：检测静音结束 + 限最长
-            if vn < state["thr"]:
-                state["silent"] += 1
-                if state["silent"] >= num_silent:
-                    state["done"] = True
-            else:
-                state["silent"] = 0
-            if n - state["speech_start"] >= max_speech_chunks:
-                state["done"] = True
-
-        # 墙钟硬超时：即使音频回调卡死（Pi ALSA 偶发），也保证函数能返回
-        hard_limit = onset_timeout + max_speech + 3.0
-        wall_start = time.time()
-        last_n = -1
-        stall_since = wall_start
         try:
-            sd.stop()
-            time.sleep(0.2)
-            with sd.InputStream(samplerate=sr, channels=1, callback=cb,
-                                device=self.input_device, blocksize=chunk_size):
-                while not state["done"] and not self.exiting:
-                    sd.sleep(int(chunk_dur * 1000))
-                    now = time.time()
-                    # 总时长硬上限
-                    if now - wall_start > hard_limit:
-                        log("[REC] 硬超时，结束")
-                        break
-                    # 回调卡住检测：2 秒内 n 没涨 = 音频流停了
-                    if state["n"] != last_n:
-                        last_n = state["n"]
-                        stall_since = now
-                    elif now - stall_since > 2.0:
-                        log("[AUDIO] 音频流疑似卡住，放弃本次录音")
-                        state["stalled"] = True
+            with sd.InputStream(samplerate=sr, channels=1, dtype='int16',
+                                blocksize=chunk_size, device=self.input_device) as stream:
+                while not self.exiting:
+                    try:
+                        data, _ = stream.read(chunk_size)
+                    except Exception as e:
+                        log(f"[AUDIO] 读取失败，放弃录音: {e}")
+                        return None
+                    audio = np.frombuffer(data, dtype=np.int16).astype(np.float32)
+                    buf.append(audio.copy())
+                    n += 1
+                    vn = float(np.sqrt(np.mean(audio ** 2)) / 32768.0)
+
+                    # 校准噪音地板（中位数）
+                    if n <= calib_chunks:
+                        calib.append(vn)
+                        if n == calib_chunks:
+                            noise = float(np.median(calib))
+                            thr = max(floor_min, noise + margin)
+                        continue
+
+                    peak = max(peak, vn)
+
+                    if not speaking:
+                        if vn >= thr:
+                            speaking = True
+                            speech_start = n
+                            silent = 0
+                        elif n - calib_chunks >= onset_chunks:
+                            timeout = True
+                            break
+                        continue
+
+                    # 已开口
+                    if vn < thr:
+                        silent += 1
+                        if silent >= num_silent:
+                            break
+                    else:
+                        silent = 0
+                    if n - speech_start >= max_speech_chunks:
                         break
         except Exception as e:
             log(f"[AUDIO ERROR] 自适应录音失败: {e}")
             return None
 
-        if state.get("stalled"):
-            return None
-        if state["timeout"] or not state["speaking"]:
+        if timeout or not speaking:
             log(f"[REC] {onset_timeout:.0f}s 内没听到开口，结束对话")
             return None
 
-        dur = (state["n"] - state["speech_start"]) * chunk_dur
-        log(f"[REC] 语音 {dur:.1f}s 噪音地板={state['noise']:.4f} 阈值={state['thr']:.4f} 峰值={state['peak']:.4f}")
-        # 只截取开口之后的音频（去掉前面的等待静音，STT 更准更快）
-        speech_buf = buf[max(0, state["speech_start"] - 4):]
-        return self.save_audio_buffer(speech_buf, filename, sr)
+        dur = (n - speech_start) * chunk_dur
+        log(f"[REC] 语音 {dur:.1f}s 噪音地板={noise:.4f} 阈值={thr:.4f} 峰值={peak:.4f}")
+        speech_buf = buf[max(0, speech_start - 4):]
+        # 阻塞式读出来已经是 float32（-32768~32767 范围）；保存时归一化
+        return self._save_int_buffer(speech_buf, filename, sr)
 
     def record_voice_ptt(self, filename="input.wav"):
         log("录音（PTT）...")
-        time.sleep(0.3)
+        time.sleep(0.2)
         sr = choose_input_samplerate(self.input_device, self.config.get("input_sample_rate"))
+        chunk_size = int(sr * 0.05)
         buf = []
-
-        def cb(indata, frames, time_info, status):
-            buf.append(indata.copy())
-
         try:
-            sd.stop()
-            time.sleep(0.2)
-            with sd.InputStream(samplerate=sr, channels=1, callback=cb, device=self.input_device):
+            with sd.InputStream(samplerate=sr, channels=1, dtype='int16',
+                                blocksize=chunk_size, device=self.input_device) as stream:
                 while self.recording_active.is_set() and not self.exiting:
-                    sd.sleep(50)
+                    try:
+                        data, _ = stream.read(chunk_size)
+                    except Exception as e:
+                        log(f"[AUDIO] PTT 读取失败: {e}")
+                        break
+                    buf.append(np.frombuffer(data, dtype=np.int16).astype(np.float32))
         except Exception as e:
             log(f"[AUDIO ERROR] PTT 录音失败: {e}")
             return None
-        return self.save_audio_buffer(buf, filename, sr)
+        return self._save_int_buffer(buf, filename, sr)
 
     def save_audio_buffer(self, buf, filename, sr=16000):
+        """callback 录音用：indata 是 -1.0~1.0 浮点，乘 32767 转 int16。"""
         if not buf:
             return None
         audio = np.concatenate(buf, axis=0).flatten()
         audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
         audio = (audio * 32767).astype(np.int16)
+        return self._write_wav(audio, filename, sr)
+
+    def _save_int_buffer(self, buf, filename, sr=16000):
+        """阻塞 read 录音用：已经是 int16 数值范围的 float32，直接取整。"""
+        if not buf:
+            return None
+        audio = np.concatenate(buf, axis=0).flatten()
+        audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
+        audio = np.clip(audio, -32768, 32767).astype(np.int16)
+        return self._write_wav(audio, filename, sr)
+
+    def _write_wav(self, audio_int16, filename, sr):
         with wave.open(filename, "wb") as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(sr)
-            wf.writeframes(audio.tobytes())
+            wf.writeframes(audio_int16.tobytes())
         return filename
 
     # -------------------------------------------------------------------
