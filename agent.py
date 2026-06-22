@@ -421,6 +421,15 @@ class BotGUI:
         speed = 50 if self.current_state == BotStates.SPEAKING else 500
         self.master.after(speed, self.update_animation)
 
+    def _safe_after(self, delay, fn):
+        """退出后 tkinter 主循环已停，after 会抛 RuntimeError，这里吞掉。"""
+        if self.exiting:
+            return
+        try:
+            self.master.after(delay, fn)
+        except (RuntimeError, tk.TclError):
+            pass
+
     def set_state(self, state, msg="", overlay_path=None):
         def _update():
             if msg:
@@ -441,7 +450,7 @@ class BotGUI:
                     pass
             else:
                 self.overlay_label.place_forget()
-        self.master.after(0, _update)
+        self._safe_after(0, _update)
 
     def append_to_text(self, text, newline=True):
         def _update():
@@ -452,7 +461,7 @@ class BotGUI:
                 self.response_text.insert(tk.END, text)
             self.response_text.see(tk.END)
             self.response_text.config(state=tk.DISABLED)
-        self.master.after(0, _update)
+        self._safe_after(0, _update)
 
     def _stream_to_text(self, chunk):
         def _update():
@@ -460,7 +469,7 @@ class BotGUI:
             self.response_text.insert(tk.END, chunk)
             self.response_text.see(tk.END)
             self.response_text.config(state=tk.DISABLED)
-        self.master.after(0, _update)
+        self._safe_after(0, _update)
 
     # -------------------------------------------------------------------
     # 主循环
