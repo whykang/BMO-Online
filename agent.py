@@ -633,8 +633,9 @@ class BotGUI:
         rec_cfg = self.config.get("recording", {})
         silence_duration = float(rec_cfg.get("silence_duration", 1.0))
         max_speech = float(rec_cfg.get("max_record_seconds", 12.0))
-        noise_mult = float(rec_cfg.get("silence_multiplier", 3.0))
-        floor_min = float(rec_cfg.get("silence_floor_min", 0.012))
+        # 阈值 = 噪音地板 + margin（加法，比乘法更抗高底噪/AGC）
+        margin = float(rec_cfg.get("silence_margin", 0.05))
+        floor_min = float(rec_cfg.get("silence_floor_min", 0.02))
 
         chunk_dur = 0.05
         chunk_size = int(sr * chunk_dur)
@@ -659,7 +660,7 @@ class BotGUI:
                 state["calib"].append(vn)
                 if n == calib_chunks:
                     state["noise"] = float(np.median(state["calib"]))
-                    state["thr"] = max(floor_min, state["noise"] * noise_mult)
+                    state["thr"] = max(floor_min, state["noise"] + margin)
                 return
 
             state["peak"] = max(state["peak"], vn)
