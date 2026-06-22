@@ -984,6 +984,117 @@ class BotGUI:
             pass
         return None
 
+    def _read_cpu_times(self):
+        try:
+            with open("/proc/stat", "r", encoding="utf-8") as f:
+                parts = f.readline().split()[1:]
+            values = [int(x) for x in parts[:8]]
+            idle = values[3] + values[4]
+            total = sum(values)
+            return idle, total
+        except Exception:
+            return None
+
+    def _get_cpu_usage_percent(self):
+        first = self._read_cpu_times()
+        if not first:
+            return None
+        time.sleep(0.15)
+        second = self._read_cpu_times()
+        if not second:
+            return None
+        idle_delta = second[0] - first[0]
+        total_delta = second[1] - first[1]
+        if total_delta <= 0:
+            return None
+        return max(0.0, min(100.0, (1.0 - idle_delta / total_delta) * 100.0))
+
+    def _get_cpu_temp_c(self):
+        paths = [
+            "/sys/class/thermal/thermal_zone0/temp",
+            "/sys/class/hwmon/hwmon0/temp1_input",
+        ]
+        for path in paths:
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    raw = f.read().strip()
+                if raw:
+                    val = float(raw)
+                    return val / 1000.0 if val > 200 else val
+            except Exception:
+                pass
+        try:
+            out = subprocess.check_output(["vcgencmd", "measure_temp"], timeout=2).decode()
+            m = re.search(r"temp=([\d.]+)", out)
+            if m:
+                return float(m.group(1))
+        except Exception:
+            pass
+        return None
+
+    def _get_memory_info(self):
+        try:
+            data = {}
+            with open("/proc/meminfo", "r", encoding="utf-8") as f:
+                for line in f:
+                    key, val = line.split(":", 1)
+                    data[key] = int(val.strip().split()[0]) * 1024
+            total = data.get("MemTotal", 0)
+            available = data.get("MemAvailable", 0)
+            used = max(0, total - available)
+            percent = (used / total * 100.0) if total else None
+            return total, used, percent
+        except Exception:
+            return None
+
+    def _get_uptime_text(self):
+        try:
+            with open("/proc/uptime", "r", encoding="utf-8") as f:
+                seconds = int(float(f.read().split()[0]))
+            days, rem = divmod(seconds, 86400)
+            hours, rem = divmod(rem, 3600)
+            minutes = rem // 60
+            parts = []
+            if days:
+                parts.append(f"{days}天")
+            if hours:
+                parts.append(f"{hours}小时")
+            parts.append(f"{minutes}分钟")
+            return "".join(parts)
+        except Exception:
+            return "未知"
+
+    def _fmt_gib(self, value):
+        return f"{value / (1024 ** 3):.1f}GB"
+
+    def get_system_status(self):
+        cpu = self._get_cpu_usage_percent()
+        temp = self._get_cpu_temp_c()
+        mem = self._get_memory_info()
+        disk = shutil.disk_usage("/")
+        load = None
+        try:
+            load = os.getloadavg()
+        except Exception:
+            pass
+
+        items = []
+        if temp is not None:
+            items.append(f"温度 {temp:.1f}℃")
+        if cpu is not None:
+            items.append(f"CPU 使用率 {cpu:.0f}%")
+        if mem:
+            total, used, percent = mem
+            items.append(f"内存 {self._fmt_gib(used)}/{self._fmt_gib(total)}（{percent:.0f}%）")
+        items.append(
+            f"磁盘 {self._fmt_gib(disk.used)}/{self._fmt_gib(disk.total)}"
+            f"（{disk.used / disk.total * 100:.0f}%）"
+        )
+        if load:
+            items.append(f"负载 {load[0]:.2f}, {load[1]:.2f}, {load[2]:.2f}")
+        items.append(f"已运行 {self._get_uptime_text()}")
+        return "系统状态：" + "；".join(items) + "。"
+
     def execute_action(self, action_data):
         raw = (action_data.get("action") or "").lower().strip()
         value = action_data.get("value") or action_data.get("query") or action_data.get("prompt")
@@ -992,6 +1103,8 @@ class BotGUI:
             "google": "search_web", "browser": "search_web", "news": "search_web",
             "look": "capture_image", "see": "capture_image",
             "check_time": "get_time", "draw": "generate_image", "paint": "generate_image",
+            "status": "get_system_status", "system_status": "get_system_status",
+            "system": "get_system_status", "health": "get_system_status",
         }
         action = ALIASES.get(raw, raw)
         log(f"[ACTION] {raw} -> {action}")
@@ -1001,6 +1114,9 @@ class BotGUI:
             weekdays = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
             wd = weekdays[now.weekday()]
             return f"现在是 {now.year}年{now.month}月{now.day}日 {wd} {now.strftime('%H:%M')}。"
+
+        if action == "get_system_status":
+            return self.get_system_status()
 
         if action == "search_web":
             if not value:
@@ -1051,6 +1167,12 @@ class BotGUI:
             with self.tts_queue_lock:
                 self.tts_queue.append("好的，记忆清空啦。")
             self.set_state(BotStates.IDLE, "记忆已清空")
+            return
+
+        if any(kw in text.lower() for kw in [
+            "系统状态", "树莓派状态", "cpu", "内存", "磁盘", "负载", "system status",
+        ]):
+            self._say(self.get_system_status(), remember=text)
             return
 
         # 看图(拍照)走独立干净流程：不进工具检测，绝不念 JSON
@@ -1353,6 +1475,11 @@ class BotGUI:
     # -------------------------------------------------------------------
     def build_system_prompt(self) -> str:
         base = self.config.get("system_prompt", "")
+        if "get_system_status" not in base:
+            base += (
+                "\n\n补充工具：查看系统状态/温度/CPU/内存/磁盘时，回复纯 JSON："
+                "{\"action\": \"get_system_status\"}"
+            )
         extras = self.config.get("system_prompt_extras", "")
         if extras:
             return f"{base}\n\n{extras}"
@@ -1360,12 +1487,6 @@ class BotGUI:
 
     def load_chat_history(self):
         sysp = {"role": "system", "content": self.build_system_prompt() if hasattr(self, "config") else ""}
-        try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
-            sysp["content"] = cfg.get("system_prompt", "") + "\n\n" + cfg.get("system_prompt_extras", "")
-        except Exception:
-            pass
         if os.path.exists(MEMORY_FILE):
             try:
                 with open(MEMORY_FILE, "r", encoding="utf-8") as f:
