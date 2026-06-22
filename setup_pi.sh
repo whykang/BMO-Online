@@ -16,6 +16,7 @@ sudo apt install -y \
     python3-venv python3-tk python3-dev \
     portaudio19-dev libasound2-dev \
     mpg123 ffmpeg \
+    unclutter xdotool \
     git
 
 # 2. Python venv

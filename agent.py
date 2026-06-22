@@ -21,6 +21,7 @@ import datetime
 import warnings
 import atexit
 import subprocess
+import shutil
 import tkinter as tk
 from tkinter import ttk
 
@@ -171,15 +172,14 @@ class BotGUI:
     def __init__(self, master):
         self.master = master
         master.title("Be More Agent (Online)")
+        self._cursor_hider_proc = None
+        self._blank_cursor = self._create_blank_cursor()
         try:
             master.attributes('-fullscreen', True)
         except Exception:
             pass
         # 隐藏鼠标箭头（双击显示退出按钮时临时恢复）
-        try:
-            master.config(cursor="none")
-        except Exception:
-            pass
+        self._set_cursor_visible(False)
         self._exit_btn_timer = None
         master.bind('<Escape>', self.exit_fullscreen)
         master.bind('<Return>', self.handle_ptt_toggle)
@@ -339,6 +339,11 @@ class BotGUI:
                 self.current_tts_proc.terminate()
         except Exception:
             pass
+        try:
+            if self._cursor_hider_proc and self._cursor_hider_proc.poll() is None:
+                self._cursor_hider_proc.terminate()
+        except Exception:
+            pass
         self.recording_active.clear()
         self.thinking_sound_active.clear()
         self.tts_active.clear()
@@ -359,18 +364,94 @@ class BotGUI:
             pass
         self.safe_exit()
 
+    def _create_blank_cursor(self):
+        """Tk 的 cursor=none 在部分 Pi 桌面环境不生效，XBM 空光标更稳。"""
+        try:
+            cursor_dir = os.path.join("/tmp", "bmo_cursor")
+            os.makedirs(cursor_dir, exist_ok=True)
+            cursor_path = os.path.join(cursor_dir, "blank.xbm")
+            mask_path = os.path.join(cursor_dir, "blank_mask.xbm")
+            xbm = (
+                "#define blank_width 16\n"
+                "#define blank_height 16\n"
+                "static unsigned char blank_bits[] = {\n"
+                "  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,\n"
+                "  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,\n"
+                "  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,\n"
+                "  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};\n"
+            )
+            for path in (cursor_path, mask_path):
+                with open(path, "w", encoding="ascii") as f:
+                    f.write(xbm)
+            return f"@{cursor_path} {mask_path} black white"
+        except Exception as e:
+            log(f"[CURSOR] 创建透明光标失败: {e}")
+            return "none"
+
+    def _start_system_cursor_hider(self):
+        """系统级隐藏鼠标；没有安装也不影响 Tk 透明光标兜底。"""
+        if self._cursor_hider_proc and self._cursor_hider_proc.poll() is None:
+            return
+        cmd = None
+        if shutil.which("unclutter"):
+            cmd = ["unclutter", "-idle", "0.1", "-root"]
+        elif shutil.which("unclutter-xfixes"):
+            cmd = ["unclutter-xfixes", "--timeout", "0", "--hide-on-touch"]
+        if not cmd:
+            log("[CURSOR] 未找到 unclutter，使用 Tk 透明光标")
+            return
+        try:
+            self._cursor_hider_proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            log(f"[CURSOR] 已启动系统级隐藏鼠标: {cmd[0]}")
+        except Exception as e:
+            log(f"[CURSOR] 启动 {cmd[0]} 失败: {e}")
+
+    def _stop_system_cursor_hider(self):
+        try:
+            if self._cursor_hider_proc and self._cursor_hider_proc.poll() is None:
+                self._cursor_hider_proc.terminate()
+        except Exception:
+            pass
+        self._cursor_hider_proc = None
+
+    def _move_pointer_away(self):
+        xdotool = shutil.which("xdotool")
+        if not xdotool:
+            return
+        try:
+            subprocess.Popen(
+                [xdotool, "mousemove", "799", "479"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception:
+            pass
+
     def _set_cursor_visible(self, visible: bool):
-        cursor = "" if visible else "none"
+        cursor = "" if visible else self._blank_cursor
 
         def apply(widget):
             try:
                 widget.config(cursor=cursor)
             except tk.TclError:
-                pass
+                if not visible:
+                    try:
+                        widget.config(cursor="none")
+                    except tk.TclError:
+                        pass
             for child in widget.winfo_children():
                 apply(child)
 
         apply(self.master)
+        if not visible:
+            self._move_pointer_away()
+            self._start_system_cursor_hider()
+        else:
+            self._stop_system_cursor_hider()
 
     def toggle_exit_button(self, event=None):
         """双击屏幕 → 显示退出按钮（恢复鼠标），6 秒后自动隐藏。"""

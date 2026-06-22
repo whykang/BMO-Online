@@ -257,6 +257,7 @@ REMOTE=pi@192.168.1.50 ./sync.sh
 | 麦克风没反应 | `python -c "import sounddevice as sd; print(sd.query_devices())"` 看设备列表，把名字填进 `config.json` 的 `input_device` |
 | TTS 没声音 | 检查 mpg123 是否装好：`which mpg123`；测试：`echo "hi" \| espeak` |
 | 唤醒词不响应 | 网页里调低 threshold；检查录音音量 |
+| 鼠标箭头还在屏幕上 | `sudo apt install unclutter xdotool` 后重启 BMO |
 | Web 控制台连不上 | 检查端口（`sudo ss -tlnp \| grep 8087`）、防火墙 |
 | ALSA 错误一堆 | 正常的，无影响（树莓派音频驱动的小毛病） |
 
