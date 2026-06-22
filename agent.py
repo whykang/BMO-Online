@@ -695,6 +695,11 @@ class BotGUI:
             if n - state["speech_start"] >= max_speech_chunks:
                 state["done"] = True
 
+        # 墙钟硬超时：即使音频回调卡死（Pi ALSA 偶发），也保证函数能返回
+        hard_limit = onset_timeout + max_speech + 3.0
+        wall_start = time.time()
+        last_n = -1
+        stall_since = wall_start
         try:
             sd.stop()
             time.sleep(0.2)
@@ -702,10 +707,25 @@ class BotGUI:
                                 device=self.input_device, blocksize=chunk_size):
                 while not state["done"] and not self.exiting:
                     sd.sleep(int(chunk_dur * 1000))
+                    now = time.time()
+                    # 总时长硬上限
+                    if now - wall_start > hard_limit:
+                        log("[REC] 硬超时，结束")
+                        break
+                    # 回调卡住检测：2 秒内 n 没涨 = 音频流停了
+                    if state["n"] != last_n:
+                        last_n = state["n"]
+                        stall_since = now
+                    elif now - stall_since > 2.0:
+                        log("[AUDIO] 音频流疑似卡住，放弃本次录音")
+                        state["stalled"] = True
+                        break
         except Exception as e:
             log(f"[AUDIO ERROR] 自适应录音失败: {e}")
             return None
 
+        if state.get("stalled"):
+            return None
         if state["timeout"] or not state["speaking"]:
             log(f"[REC] {onset_timeout:.0f}s 内没听到开口，结束对话")
             return None
