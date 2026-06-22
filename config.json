@@ -39,6 +39,7 @@
     "keywords": ["你好小明", "嗨小明"],
     "threshold": 0.25,
     "score": 1.5,
+    "stream_refresh_seconds": 180,
     "_legacy_note": "下面是 OpenWakeWord 后端（英文）的配置，只有当 backend=openwakeword 时才生效",
     "model": "wakewords/hey_jarvis.onnx",
     "legacy_threshold": 0.5

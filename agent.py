@@ -574,19 +574,43 @@ class BotGUI:
 
         stream_args = dict(samplerate=input_rate, channels=1, dtype='int16',
                            blocksize=in_chunk, device=self.input_device)
-        try:
-            return self._listen_loop(stream_args, in_chunk, target_chunk, use_resample)
-        except StopIteration as si:
-            return str(si)
-        except Exception as e:
-            log(f"[AUDIO] 唤醒词监听失败，回落 PTT: {e}")
-            while not self.ptt_event.is_set() and not self.exiting:
-                time.sleep(0.1)
-            self.ptt_event.clear()
-            return "PTT"
+        refresh_secs = float(self.config.get("wake_word", {}).get("stream_refresh_seconds", 180))
 
-    def _listen_loop(self, args, in_chunk, target_chunk, use_resample):
+        # 自动重开：定期刷新音频流 + 读取出错时重开，避免长时间空闲后唤不醒
+        fail_count = 0
+        while not self.exiting:
+            try:
+                result = self._listen_loop(stream_args, in_chunk, target_chunk,
+                                           use_resample, refresh_secs)
+            except StopIteration as si:
+                return str(si)
+            except Exception as e:
+                fail_count += 1
+                log(f"[AUDIO] 唤醒词音频流出错({fail_count})，重开: {e}")
+                if self.ptt_event.is_set():
+                    self.ptt_event.clear()
+                    return "PTT"
+                if fail_count >= 10:
+                    log("[AUDIO] 连续重开失败，回落 PTT")
+                    while not self.ptt_event.is_set() and not self.exiting:
+                        time.sleep(0.1)
+                    self.ptt_event.clear()
+                    return "PTT"
+                time.sleep(0.5)
+                continue
+            fail_count = 0
+            if result == "REFRESH":
+                continue          # 定期刷新，重开音频流继续听
+            return result          # "WAKE"
+        return "PTT"
+
+    def _listen_loop(self, args, in_chunk, target_chunk, use_resample, refresh_secs=180):
         oww_threshold = self.config.get("wake_word", {}).get("legacy_threshold", 0.5)
+        loop_start = time.time()
+        if self.sherpa_kws:
+            self.sherpa_kws.reset()
+        if self.oww_model:
+            self.oww_model.reset()
         with sd.InputStream(**args) as stream:
             log(f"[AUDIO] 听唤醒词 backend={self.wake_backend} sr={args['samplerate']}")
             while True:
@@ -595,6 +619,9 @@ class BotGUI:
                 if self.ptt_event.is_set():
                     self.ptt_event.clear()
                     raise StopIteration("PTT")
+                # 定期刷新音频流（防止长时间运行后 ALSA/USB 进入坏状态）
+                if time.time() - loop_start > refresh_secs:
+                    return "REFRESH"
                 try:
                     data, _ = stream.read(in_chunk)
                 except Exception as e:
