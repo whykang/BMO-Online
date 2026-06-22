@@ -591,39 +591,66 @@ class BotGUI:
         log("录音（自适应）...")
         time.sleep(0.3)
         sr = choose_input_samplerate(self.input_device, self.config.get("input_sample_rate"))
-        silence_threshold = 0.006
-        silence_duration = 1.5
-        max_record = 30.0
+
+        rec_cfg = self.config.get("recording", {})
+        silence_duration = float(rec_cfg.get("silence_duration", 1.0))
+        max_record = float(rec_cfg.get("max_record_seconds", 12.0))
+        min_record = float(rec_cfg.get("min_record_seconds", 1.0))
+        # 噪音地板倍数：动态阈值 = 噪音地板 * 这个倍数（再设个下限）
+        noise_mult = float(rec_cfg.get("silence_multiplier", 3.0))
+        floor_min = float(rec_cfg.get("silence_floor_min", 0.012))
+
         chunk_dur = 0.05
         chunk_size = int(sr * chunk_dur)
         num_silent = int(silence_duration / chunk_dur)
         max_chunks = int(max_record / chunk_dur)
+        min_chunks = int(min_record / chunk_dur)
+        calib_chunks = 8   # 前 0.4 秒用来测噪音地板
 
-        buf, recorded, silent = [], [0], [0]
-        done = [False]
+        buf = []
+        state = {"recorded": 0, "silent": 0, "done": False,
+                 "noise": 0.0, "thr": floor_min, "peak": 0.0}
 
         def cb(indata, frames, time_info, status):
-            vn = np.linalg.norm(indata) / np.sqrt(len(indata))
+            vn = float(np.linalg.norm(indata) / np.sqrt(len(indata)))
             buf.append(indata.copy())
-            recorded[0] += 1
-            if recorded[0] < 5:
+            state["recorded"] += 1
+            n = state["recorded"]
+
+            # 校准阶段：测噪音地板
+            if n <= calib_chunks:
+                state["noise"] = max(state["noise"], vn)
+                if n == calib_chunks:
+                    state["thr"] = max(floor_min, state["noise"] * noise_mult)
                 return
-            if vn < silence_threshold:
-                silent[0] += 1
-                if silent[0] >= num_silent:
-                    done[0] = True
+
+            state["peak"] = max(state["peak"], vn)
+            # 至少录够 min_record 才允许判静音
+            if n < min_chunks:
+                return
+            if vn < state["thr"]:
+                state["silent"] += 1
+                if state["silent"] >= num_silent:
+                    state["done"] = True
             else:
-                silent[0] = 0
+                state["silent"] = 0
 
         try:
             sd.stop()
             time.sleep(0.2)
             with sd.InputStream(samplerate=sr, channels=1, callback=cb,
                                 device=self.input_device, blocksize=chunk_size):
-                while not done[0] and recorded[0] < max_chunks and not self.exiting:
+                while not state["done"] and state["recorded"] < max_chunks and not self.exiting:
                     sd.sleep(int(chunk_dur * 1000))
         except Exception as e:
             log(f"[AUDIO ERROR] 自适应录音失败: {e}")
+            return None
+
+        dur = state["recorded"] * chunk_dur
+        log(f"[REC] 时长 {dur:.1f}s 噪音地板={state['noise']:.4f} 阈值={state['thr']:.4f} 峰值={state['peak']:.4f}")
+        # 峰值没明显超过阈值 = 大概率没说话
+        if state["peak"] < state["thr"] * 1.5:
+            log("[REC] 似乎没听到有效语音")
             return None
         return self.save_audio_buffer(buf, filename, sr)
 
