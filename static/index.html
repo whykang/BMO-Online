@@ -126,6 +126,19 @@
       <button class="btn" onclick="trigger('capture')">📷 拍照</button>
     </div>
   </div>
+  <div class="panel">
+    <h2>启动设置</h2>
+    <div class="row">
+      <label>开机自启 BMO：</label>
+      <input type="checkbox" id="boot-autostart" onchange="toggleAutostart()">
+      <span class="help" id="boot-autostart-hint">关</span>
+    </div>
+    <div class="row">
+      <label>启动时自动开 Web 控制台：</label>
+      <input type="checkbox" id="webui-autostart" onchange="toggleWebuiAutostart()">
+      <span class="help">勾上后，跑 <code>./start_agent.sh</code> 时 webui 也会自动启动</span>
+    </div>
+  </div>
 </section>
 
 <!-- 音色 -->
@@ -504,6 +517,37 @@ async function initAll() {
   loadVoices();
   loadKeys();
   loadPwState();
+  loadAutostart();
+  fillWebuiAutostart();
+}
+
+// ============ 自启 ============
+async function loadAutostart() {
+  try {
+    const s = await fetchJSON('/api/autostart');
+    document.getElementById('boot-autostart').checked = s.enabled;
+    document.getElementById('boot-autostart-hint').textContent = s.enabled ? '开' : '关';
+  } catch (e) {
+    document.getElementById('boot-autostart-hint').textContent = '⚠️ ' + e.message;
+  }
+}
+async function toggleAutostart() {
+  const enabled = document.getElementById('boot-autostart').checked;
+  try {
+    await putJSON('/api/autostart', {enabled});
+    document.getElementById('boot-autostart-hint').textContent = enabled ? '✓ 已启用' : '✓ 已禁用';
+    setTimeout(loadAutostart, 800);
+  } catch (e) {
+    alert('设置失败：' + e.message);
+    await loadAutostart();
+  }
+}
+function fillWebuiAutostart() {
+  document.getElementById('webui-autostart').checked = !!CONFIG.webui_auto_start;
+}
+async function toggleWebuiAutostart() {
+  CONFIG.webui_auto_start = document.getElementById('webui-autostart').checked;
+  await putJSON('/api/config', CONFIG);
 }
 initAll();
 

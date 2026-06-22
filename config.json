@@ -51,6 +51,9 @@
   "image_display_seconds": 10,
   "generated_dir": "generated",
 
+  "webui_auto_start": true,
+  "webui_port": 8080,
+
   "providers_endpoints": {
     "siliconflow": "https://api.siliconflow.cn/v1",
     "openrouter": "https://openrouter.ai/api/v1",

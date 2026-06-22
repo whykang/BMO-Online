@@ -497,6 +497,55 @@ async def update_key(req: UpdateKeyReq):
 
 
 # =========================================================================
+# 路由：开机自启（Pi 桌面 autostart）
+# =========================================================================
+
+AUTOSTART_DIR = os.path.expanduser("~/.config/autostart")
+AUTOSTART_FILE = os.path.join(AUTOSTART_DIR, "bmo.desktop")
+PROJECT_DIR = os.path.abspath(os.path.dirname(__file__))
+
+
+def _make_desktop_content() -> str:
+    return f"""[Desktop Entry]
+Type=Application
+Name=BMO Agent
+Comment=Be More Agent (Online) auto-starter
+Exec={PROJECT_DIR}/start_agent.sh
+Path={PROJECT_DIR}
+Terminal=false
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+"""
+
+
+@app.get("/api/autostart")
+async def get_autostart():
+    enabled = os.path.exists(AUTOSTART_FILE)
+    return {"enabled": enabled, "path": AUTOSTART_FILE, "project_dir": PROJECT_DIR}
+
+
+class AutostartReq(BaseModel):
+    enabled: bool
+
+
+@app.put("/api/autostart")
+async def set_autostart(req: AutostartReq):
+    try:
+        if req.enabled:
+            os.makedirs(AUTOSTART_DIR, exist_ok=True)
+            with open(AUTOSTART_FILE, "w", encoding="utf-8") as f:
+                f.write(_make_desktop_content())
+            return {"ok": True, "enabled": True, "path": AUTOSTART_FILE}
+        else:
+            if os.path.exists(AUTOSTART_FILE):
+                os.remove(AUTOSTART_FILE)
+            return {"ok": True, "enabled": False}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# =========================================================================
 # 路由：花费查询（占位，硅基流动暂未提供官方 endpoint）
 # =========================================================================
 

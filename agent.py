@@ -1091,11 +1091,53 @@ class BotGUI:
         self.master.after(1000, self.update_state_file)
 
 
+def maybe_spawn_webui():
+    """如果 config 里开了，就 spawn webui 子进程。返回 Popen 句柄。"""
+    try:
+        cfg = load_config()
+    except Exception:
+        return None
+    if not cfg.get("webui_auto_start", True):
+        return None
+    try:
+        env = os.environ.copy()
+        port = str(cfg.get("webui_port", 8080))
+        env["WEBUI_PORT"] = port
+        # 把 webui 的 stdout/stderr 也写进日志，方便排错
+        webui_log = open(os.path.join(LOG_DIR, "webui.log"), "ab")
+        proc = subprocess.Popen(
+            [sys.executable, "webui.py"],
+            stdout=webui_log,
+            stderr=webui_log,
+            env=env,
+        )
+        print(f"[INIT] Web 控制台已启动 (PID={proc.pid}, port={port})", flush=True)
+        return proc
+    except Exception as e:
+        print(f"[INIT] Web 控制台启动失败: {e}", flush=True)
+        return None
+
+
 if __name__ == "__main__":
     print("--- BMO 在线版启动 ---", flush=True)
     if not os.getenv("SILICONFLOW_API_KEY"):
         print("❌ 缺少 SILICONFLOW_API_KEY，请检查 .env 文件", flush=True)
         sys.exit(1)
+
+    webui_proc = maybe_spawn_webui()
+
+    def _kill_webui():
+        if webui_proc and webui_proc.poll() is None:
+            try:
+                webui_proc.terminate()
+                webui_proc.wait(timeout=3)
+            except Exception:
+                try:
+                    webui_proc.kill()
+                except Exception:
+                    pass
+    atexit.register(_kill_webui)
+
     root = tk.Tk()
     app = BotGUI(root)
     root.mainloop()
