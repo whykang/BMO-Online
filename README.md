@@ -34,9 +34,15 @@
 
 ### 2. 拉代码
 
+SSH 登录到你的树莓派（用户名、hostname / IP 按你自己的实际情况）。例如：
+
 ```bash
-ssh pi@bmo.local
-cd ~
+ssh <用户名>@<hostname-or-ip>
+```
+
+进去之后拉代码：
+
+```bash
 git clone https://github.com/whykang/BMO-Online.git
 cd BMO-Online
 ```
@@ -71,21 +77,25 @@ SILICONFLOW_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 仓库已经包含了原版的 `faces/`（脸部动画）和 `sounds/`（音效），不用自己准备。
 
-**第一个终端 — 启动 BMO 主程序**：
 ```bash
 ./start_agent.sh
 ```
 
-**第二个终端 — 启动 Web 控制台**：
-```bash
-./start_webui.sh
+启动主程序时**会自动同时拉起 Web 控制台**（这个行为可在网页里关掉）。
+
+**浏览器打开** Web 控制台：
+
+```
+http://<树莓派 IP>:8087
 ```
 
-**浏览器打开**：
+不知道树莓派 IP？在树莓派里跑：
+
+```bash
+hostname -I
 ```
-http://bmo.local:8087
-```
-或 `http://树莓派IP:8087`
+
+> 如果你给树莓派设了 hostname（比如烧系统时填了 `bmo`），也可以用 `http://bmo.local:8087`。
 
 ## 🎮 使用
 
@@ -163,18 +173,20 @@ Arduino Pro Micro / Feather 32u4 + 一个按钮开关，就能加物理 PTT。
 
 ## 🌐 远程同步开发
 
-在你 Mac 上改完代码：
+在你电脑上改完代码、想推到树莓派调试时：
 
 ```bash
-./sync.sh                 # rsync 增量同步到 pi@bmo.local
+# 用环境变量指定你的树莓派 SSH 目标和远程路径
+REMOTE=<用户名>@<hostname-or-ip> REMOTE_DIR=~/BMO-Online/ ./sync.sh
 ```
 
-需要先配好 `pi@bmo.local` SSH 免密登录。
-变量 `REMOTE` / `REMOTE_DIR` 可以覆盖默认值：
+例如：
 
 ```bash
 REMOTE=pi@192.168.1.50 ./sync.sh
 ```
+
+需要先配好对应 SSH 免密登录（`ssh-copy-id`）。`sync.sh` 内部用 rsync 做增量同步，自动排除 `.env`、`venv`、`logs/` 等本地文件。
 
 ## 💰 费用估算
 
