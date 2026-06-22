@@ -487,6 +487,7 @@ class BotGUI:
                 follow_up = conv_cfg.get("follow_up", True)
                 awake_secs = float(conv_cfg.get("awake_seconds", 15))
                 followup_secs = float(conv_cfg.get("follow_up_seconds", 15))
+                post_delay = float(conv_cfg.get("post_response_delay", 1.0))
 
                 # 一轮唤醒后，可连续对话（无需重新唤醒），直到超时没人说话
                 first = True
@@ -518,7 +519,8 @@ class BotGUI:
                     # PTT 模式不做自动追问；唤醒模式才连续对话
                     if not follow_up or trigger == "PTT":
                         break
-                    time.sleep(0.4)  # 留尾音，避免录到 BMO 自己的声音
+                    # 等回声散掉再录，避免把喇叭余音当成噪音地板（导致听不清）
+                    time.sleep(post_delay)
 
         except Exception as e:
             traceback.print_exc()
@@ -637,14 +639,14 @@ class BotGUI:
         chunk_dur = 0.05
         chunk_size = int(sr * chunk_dur)
         num_silent = int(silence_duration / chunk_dur)
-        calib_chunks = 8                                   # 前 0.4s 测噪音地板
+        calib_chunks = 12                                  # 前 0.6s 测噪音地板
         onset_chunks = int(onset_timeout / chunk_dur)      # 等待开口的窗口
         max_speech_chunks = int(max_speech / chunk_dur)    # 开口后最长录音
 
         buf = []
         state = {"n": 0, "silent": 0, "done": False, "noise": 0.0,
                  "thr": floor_min, "peak": 0.0, "speaking": False,
-                 "speech_start": 0, "timeout": False}
+                 "speech_start": 0, "timeout": False, "calib": []}
 
         def cb(indata, frames, time_info, status):
             vn = float(np.linalg.norm(indata) / np.sqrt(len(indata)))
@@ -652,10 +654,11 @@ class BotGUI:
             state["n"] += 1
             n = state["n"]
 
-            # 校准噪音地板
+            # 校准噪音地板：用中位数，抗回声/瞬时尖峰
             if n <= calib_chunks:
-                state["noise"] = max(state["noise"], vn)
+                state["calib"].append(vn)
                 if n == calib_chunks:
+                    state["noise"] = float(np.median(state["calib"]))
                     state["thr"] = max(floor_min, state["noise"] * noise_mult)
                 return
 

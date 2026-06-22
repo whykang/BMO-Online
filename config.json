@@ -62,7 +62,8 @@
   "conversation": {
     "follow_up": true,
     "awake_seconds": 15,
-    "follow_up_seconds": 15
+    "follow_up_seconds": 15,
+    "post_response_delay": 1.0
   },
 
   "show_hud": false,
