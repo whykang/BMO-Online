@@ -71,7 +71,13 @@ if [ ! -d "$SHERPA_DIR" ]; then
     fi
 fi
 
-# 5. .env 提醒
+# 5. 创建 config.json（不在 git 里，从模板复制；保留用户已有的）
+if [ ! -f config.json ]; then
+    cp config.default.json config.json
+    echo -e "${GREEN}  ✓ 已从 config.default.json 创建 config.json${NC}"
+fi
+
+# 6. .env 提醒
 if [ ! -f .env ]; then
     cp .env.example .env
     echo -e "${YELLOW}⚠️  已创建 .env，请编辑填入 SILICONFLOW_API_KEY：${NC}"

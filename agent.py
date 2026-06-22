@@ -85,6 +85,11 @@ def log(msg: str):
 
 
 def load_config() -> dict:
+    # config.json 不在 git 里；首次运行从 config.default.json 复制
+    if not os.path.exists(CONFIG_FILE) and os.path.exists("config.default.json"):
+        import shutil
+        shutil.copy("config.default.json", CONFIG_FILE)
+        print("[INIT] 已从 config.default.json 创建 config.json", flush=True)
     with open(CONFIG_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 

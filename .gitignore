@@ -10,7 +10,8 @@ venv/
 .venv/
 *.egg-info/
 
-# Runtime
+# Runtime — config.json 由用户/webui 修改，不跟踪（用 config.default.json 作模板）
+config.json
 logs/
 generated/
 chat_memory.json
@@ -18,6 +19,7 @@ state.json
 commands.json
 input.wav
 bmo_capture.jpg
+current_image.jpg
 
 # OS
 .DS_Store

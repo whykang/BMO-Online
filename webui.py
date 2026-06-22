@@ -44,6 +44,8 @@ app.mount("/wakewords", StaticFiles(directory=WAKEWORDS_DIR), name="wakewords")
 # =========================================================================
 
 def load_config() -> dict:
+    if not os.path.exists(CONFIG_FILE) and os.path.exists("config.default.json"):
+        shutil.copy("config.default.json", CONFIG_FILE)
     with open(CONFIG_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
