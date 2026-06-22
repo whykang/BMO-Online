@@ -12,7 +12,7 @@ class VisionProvider:
         api_key = self._get_key()
         if not api_key:
             raise RuntimeError(f"{self.provider} 缺少 API key")
-        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=45.0, max_retries=1)
 
     def _get_key(self) -> str:
         env_map = {

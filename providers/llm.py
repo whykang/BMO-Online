@@ -18,7 +18,8 @@ class LLMProvider:
         if not api_key:
             raise RuntimeError(f"缺少 {self.provider} API key，请在 .env 里填写")
 
-        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        # timeout：连接 + 读取都设上限，避免网络卡住时无限等待
+        self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=30.0, max_retries=1)
 
     def _get_key(self) -> str:
         env_map = {
