@@ -163,7 +163,9 @@ hostname -I
     "enabled": true,
     "backend": "sherpa_onnx",
     "keywords": ["你好小明", "嗨小明"],
-    "threshold": 0.25
+    "threshold": 0.25,
+    "stream_refresh_seconds": 180,
+    "audio_callback_timeout_seconds": 10
   },
   "memory_max_turns": 30
 }

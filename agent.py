@@ -15,6 +15,7 @@ import random
 import re
 import select
 import threading
+import queue
 import traceback
 import datetime
 import warnings
@@ -628,13 +629,31 @@ class BotGUI:
         return "PTT"
 
     def _listen_loop(self, args, in_chunk, target_chunk, use_resample, refresh_secs=180):
-        oww_threshold = self.config.get("wake_word", {}).get("legacy_threshold", 0.5)
+        ww_cfg = self.config.get("wake_word", {})
+        oww_threshold = ww_cfg.get("legacy_threshold", 0.5)
         loop_start = time.time()
+        last_audio_time = time.time()
+        audio_timeout = float(ww_cfg.get("audio_callback_timeout_seconds", 10.0))
+        audio_q = queue.Queue(maxsize=8)
         if self.sherpa_kws:
             self.sherpa_kws.reset()
         if self.oww_model:
             self.oww_model.reset()
-        with sd.InputStream(**args) as stream:
+
+        def _audio_callback(indata, frames, time_info, status):
+            try:
+                audio_q.put_nowait(indata.copy())
+            except queue.Full:
+                try:
+                    audio_q.get_nowait()
+                except queue.Empty:
+                    pass
+                try:
+                    audio_q.put_nowait(indata.copy())
+                except queue.Full:
+                    pass
+
+        with sd.InputStream(**args, callback=_audio_callback):
             log(f"[AUDIO] 听唤醒词 backend={self.wake_backend} sr={args['samplerate']}")
             while True:
                 if self.exiting:
@@ -644,18 +663,30 @@ class BotGUI:
                     raise StopIteration("PTT")
                 # 定期刷新音频流（防止长时间运行后 ALSA/USB 进入坏状态）
                 if time.time() - loop_start > refresh_secs:
+                    log(f"[AUDIO] 定时刷新唤醒词音频流 ({refresh_secs:.0f}s)")
                     return "REFRESH"
                 try:
-                    data, _ = stream.read(in_chunk)
-                except Exception as e:
-                    raise RuntimeError(f"audio read: {e}")
-                audio = np.frombuffer(data, dtype=np.int16)
+                    data = audio_q.get(timeout=0.5)
+                    last_audio_time = time.time()
+                except queue.Empty:
+                    if time.time() - last_audio_time > audio_timeout:
+                        raise RuntimeError(f"audio callback timeout > {audio_timeout:.1f}s")
+                    continue
+
+                audio = np.asarray(data, dtype=np.int16)
                 if audio.ndim > 1:
                     audio = audio.flatten()
                 if use_resample:
-                    step = len(audio) / target_chunk
-                    idx = np.arange(0, len(audio), step)[:target_chunk].astype(int)
-                    audio = audio[idx]
+                    audio = scipy.signal.resample_poly(
+                        audio.astype(np.float32),
+                        target_chunk,
+                        len(audio),
+                    )
+                    if len(audio) > target_chunk:
+                        audio = audio[:target_chunk]
+                    elif len(audio) < target_chunk:
+                        audio = np.pad(audio, (0, target_chunk - len(audio)))
+                    audio = np.clip(audio, -32768, 32767).astype(np.int16)
 
                 # ---- Sherpa-ONNX KWS 后端 ----
                 if self.wake_backend == "sherpa_onnx":
