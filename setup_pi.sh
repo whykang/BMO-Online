@@ -80,6 +80,5 @@ fi
 
 echo -e "${GREEN}✨ 安装完成！下一步：${NC}"
 echo -e "${GREEN}    1. nano .env 填入 API key${NC}"
-echo -e "${GREEN}    2. ./start_agent.sh${NC}"
-echo -e "${GREEN}    3. 另开终端：./start_webui.sh${NC}"
-echo -e "${GREEN}    4. 浏览器打开 http://树莓派IP:8080${NC}"
+echo -e "${GREEN}    2. ./start_agent.sh   （会自动同时启动 Web 控制台）${NC}"
+echo -e "${GREEN}    3. 浏览器打开 http://<树莓派IP>:8087${NC}"
