@@ -59,6 +59,13 @@
     "silence_floor_min": 0.012
   },
 
+  "conversation": {
+    "follow_up": true,
+    "follow_up_max_rounds": 6
+  },
+
+  "show_hud": true,
+
   "tts_sample_rate": 24000,
   "tts_pcm_chunk_size": 4096,
 

@@ -240,6 +240,11 @@ class BotGUI:
 
         self.load_animations()
         self.update_animation()
+        # 默认显示 HUD（状态 + 识别文字），可点屏幕切换
+        if self.config.get("show_hud", True):
+            self.response_text.place(relx=0.5, rely=0.82, anchor=tk.S)
+            self.status_label.place(relx=0.5, rely=1.0, anchor=tk.S, relwidth=1)
+            self.exit_button.place(x=10, y=10)
         self.poll_commands_file()  # 启动后台 webui 命令轮询
         self.update_state_file()   # 启动状态写入
 
@@ -467,6 +472,10 @@ class BotGUI:
             threading.Thread(target=self._tts_worker, daemon=True).start()
             self.set_state(BotStates.IDLE, "准备好啦")
 
+            conv_cfg = self.config.get("conversation", {})
+            follow_up = conv_cfg.get("follow_up", True)
+            follow_up_rounds = int(conv_cfg.get("follow_up_max_rounds", 6))
+
             while not self.exiting:
                 trigger = self.detect_wake_word_or_ptt()
                 if self.exiting:
@@ -475,25 +484,38 @@ class BotGUI:
                     self.interrupted.clear()
                     self.set_state(BotStates.IDLE, "重置")
                     continue
-                self.set_state(BotStates.LISTENING, "在听...")
 
-                if trigger == "PTT":
-                    audio_file = self.record_voice_ptt()
-                else:
-                    audio_file = self.record_voice_adaptive()
+                # 一轮唤醒后，可连续对话若干回合（无需重新唤醒）
+                rounds = 0
+                while not self.exiting:
+                    self.set_state(BotStates.LISTENING, "在听..." if rounds == 0 else "请说...")
 
-                if not audio_file:
-                    self.set_state(BotStates.IDLE, "没听到")
-                    continue
+                    if trigger == "PTT":
+                        audio_file = self.record_voice_ptt()
+                    else:
+                        audio_file = self.record_voice_adaptive()
 
-                user_text = self.transcribe_audio(audio_file)
-                if not user_text:
-                    self.set_state(BotStates.IDLE, "没听清")
-                    continue
+                    if not audio_file:
+                        # 追问窗口里没听到 → 结束本次对话，回到等待唤醒
+                        self.set_state(BotStates.IDLE, "没听到")
+                        break
 
-                self.append_to_text(f"你: {user_text}")
-                self.interrupted.clear()
-                self.chat_and_respond(user_text, img_path=None)
+                    user_text = self.transcribe_audio(audio_file)
+                    if not user_text:
+                        self.set_state(BotStates.IDLE, "没听清")
+                        break
+
+                    log(f"[USER] {user_text}")
+                    self.append_to_text(f"你: {user_text}")
+                    self.interrupted.clear()
+                    self.chat_and_respond(user_text, img_path=None)
+
+                    rounds += 1
+                    # PTT 模式不做自动追问（按键本身就是触发）；唤醒模式才连续
+                    if not follow_up or trigger == "PTT" or rounds >= follow_up_rounds:
+                        break
+                    # 给扬声器留一点尾音时间，避免录到 BMO 自己的话
+                    time.sleep(0.4)
 
         except Exception as e:
             traceback.print_exc()
