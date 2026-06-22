@@ -927,33 +927,21 @@ class BotGUI:
             self.set_state(BotStates.IDLE, "记忆已清空")
             return
 
-        self.set_state(BotStates.THINKING, "思考中...", overlay_path=img_path)
-
-        # 构造 messages
+        # 看图(拍照)走独立干净流程：不进工具检测，绝不念 JSON
         if img_path:
-            # 视觉单独走一次：先让 Vision 模型描述图，再让 LLM 基于描述对话
-            try:
-                desc = self.vision.describe(img_path, text or "请描述你看到的图片。")
-                log(f"[VISION] {desc}")
-                messages = self.permanent_memory + self.session_memory + [
-                    {"role": "user", "content": f"{text}\n（我看到的画面：{desc}）"}
-                ]
-            except Exception as e:
-                log(f"[VISION ERROR] {e}")
-                messages = self.permanent_memory + self.session_memory + [
-                    {"role": "user", "content": text}
-                ]
-        else:
-            messages = self.permanent_memory + self.session_memory + [
-                {"role": "user", "content": text}
-            ]
+            self._respond_with_image(text, img_path)
+            return
+
+        self.set_state(BotStates.THINKING, "思考中...")
+        messages = self.permanent_memory + self.session_memory + [
+            {"role": "user", "content": text}
+        ]
 
         full_buf = ""
         sentence_buf = ""
         sentence_re = re.compile(r'[。！？.!?\n]')
         is_action = False
-        # 看图(拍照)那一轮禁止再调工具，否则会无限循环拍照
-        allow_tools = (img_path is None)
+        allow_tools = True
 
         try:
             for chunk in self.llm.chat_stream(messages):
@@ -1012,6 +1000,37 @@ class BotGUI:
             with self.tts_queue_lock:
                 self.tts_queue.append("呃，我连不上服务器。")
             self.set_state(BotStates.ERROR, err)
+
+    def _respond_with_image(self, text, img_path):
+        """看图：Vision 描述 → 干净的 LLM 转述（不带工具，绝不出 JSON）。"""
+        self.set_state(BotStates.THINKING, "看看是什么...", overlay_path=img_path)
+        try:
+            desc = self.vision.describe(img_path, text or "请描述你看到的画面。")
+            log(f"[VISION] {desc}")
+        except Exception as e:
+            log(f"[VISION ERROR] {e}")
+            self._say("我拍好照片了，但是看不太清呢。", overlay_path=img_path)
+            return
+
+        # 视觉返回太短/像乱码 = 多半是黑图/拍糊了
+        if not desc or len(desc.strip()) < 2:
+            self._say("照片好像黑漆漆的，是不是镜头盖没揭、或者光线太暗啦？",
+                      overlay_path=img_path)
+            return
+
+        msgs = [
+            {"role": "system", "content":
+                "你是 BMO，可爱的小机器人。根据下面的画面描述，用一两句活泼的话告诉用户你看到了什么。"
+                "绝对不要输出 JSON，不要调用任何工具。"},
+            {"role": "user", "content": f"用户说：{text}"},
+            {"role": "user", "content": f"画面内容：{desc}"},
+        ]
+        try:
+            final = self.llm.chat_once(msgs)
+        except Exception as e:
+            log(f"[LLM ERROR] {e}")
+            final = f"我看到了：{desc}"
+        self._say(final, remember=text, overlay_path=img_path)
 
     def handle_action_result(self, result, original_text, img_path):
         """工具执行结果处理。"""
@@ -1100,9 +1119,13 @@ class BotGUI:
             self.set_state(BotStates.IDLE, "准备好啦")
             return
 
-    def _say(self, text, remember=None):
+    def _say(self, text, remember=None, overlay_path=None):
         """说一句话并等播放完，再回 IDLE。remember 不为空时把这轮对话存进记忆。"""
-        self.set_state(BotStates.SPEAKING, "说话中...")
+        # 安全网：绝不朗读 JSON
+        text = re.sub(r'\{.*?\}', '', text, flags=re.DOTALL).strip()
+        if not text:
+            text = "好的~"
+        self.set_state(BotStates.SPEAKING, "说话中...", overlay_path=overlay_path)
         self.append_to_text(f"BMO: {text}")
         log(f"[BMO] {text}")
         self.speak_text(text)
