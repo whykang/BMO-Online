@@ -493,6 +493,101 @@ async def get_presets():
 
 
 # =========================================================================
+# 路由：实时拉取 OpenRouter / 硅基流动 全量模型
+# =========================================================================
+
+import requests
+
+_models_cache = {"ts": 0, "data": None}
+_MODELS_TTL = 600  # 10 分钟缓存
+
+
+def _fetch_openrouter():
+    """OpenRouter 模型列表（公开，无需 key）。返回 (llm, vision)。"""
+    try:
+        r = requests.get("https://openrouter.ai/api/v1/models", timeout=20)
+        r.raise_for_status()
+        data = r.json().get("data", [])
+    except Exception as e:
+        print(f"[MODELS] OpenRouter 拉取失败: {e}", flush=True)
+        return [], []
+    llm, vision = [], []
+    for m in data:
+        mid = m.get("id")
+        if not mid:
+            continue
+        name = m.get("name", mid)
+        modality = ((m.get("architecture") or {}).get("modality") or "").lower()
+        item = {"provider": "openrouter", "model": mid, "desc": name}
+        llm.append(item)
+        if "image" in modality:   # 例如 text+image->text
+            vision.append(item)
+    return llm, vision
+
+
+def _fetch_siliconflow(sub_type, mtype="text"):
+    """硅基流动按类型拉取。需要 key。"""
+    key = os.getenv("SILICONFLOW_API_KEY", "")
+    if not key:
+        return []
+    try:
+        r = requests.get(
+            "https://api.siliconflow.cn/v1/models",
+            params={"type": mtype, "sub_type": sub_type},
+            headers={"Authorization": f"Bearer {key}"},
+            timeout=20,
+        )
+        r.raise_for_status()
+        data = r.json().get("data", [])
+    except Exception as e:
+        print(f"[MODELS] 硅基流动({mtype}/{sub_type}) 拉取失败: {e}", flush=True)
+        return []
+    return [{"provider": "siliconflow", "model": m["id"], "desc": m["id"]}
+            for m in data if m.get("id")]
+
+
+def _build_live_models():
+    or_llm, or_vision = _fetch_openrouter()
+    sf_chat = _fetch_siliconflow("chat", "text")
+    sf_img = _fetch_siliconflow("text-to-image", "image")
+    sf_tts = _fetch_siliconflow("text-to-speech", "audio")
+    sf_stt = _fetch_siliconflow("speech-to-text", "audio")
+
+    # 视觉：硅基流动里名字含 VL / vision / internvl 的算视觉模型
+    def is_vision(mid):
+        m = mid.lower()
+        return any(k in m for k in ("-vl", "vl-", "vision", "internvl", "glm-4v", "qwen-vl", "qwen2-vl", "qwen2.5-vl"))
+    sf_vision = [x for x in sf_chat if is_vision(x["model"])]
+
+    return {
+        "llm": or_llm + sf_chat,
+        "vision": or_vision + sf_vision,
+        "image_gen": sf_img,
+        "tts_fallback": sf_tts,
+        "stt": sf_stt,
+        "counts": {
+            "llm": len(or_llm) + len(sf_chat),
+            "vision": len(or_vision) + len(sf_vision),
+            "image_gen": len(sf_img),
+            "tts_fallback": len(sf_tts),
+            "stt": len(sf_stt),
+        },
+    }
+
+
+@app.get("/api/models/live")
+async def models_live(refresh: bool = False):
+    """实时全量模型列表，10 分钟缓存。refresh=true 强制刷新。"""
+    now = time.time()
+    if not refresh and _models_cache["data"] and now - _models_cache["ts"] < _MODELS_TTL:
+        return _models_cache["data"]
+    data = await asyncio.to_thread(_build_live_models)
+    _models_cache["data"] = data
+    _models_cache["ts"] = now
+    return data
+
+
+# =========================================================================
 # 路由：API key 管理
 # =========================================================================
 

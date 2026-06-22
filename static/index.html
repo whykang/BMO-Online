@@ -198,7 +198,19 @@
 <!-- 模型 -->
 <section id="tab-models" class="tab hide">
   <div class="panel">
+    <div class="row">
+      <span id="models-status" class="help">正在从 OpenRouter / 硅基流动 拉取全量模型...</span>
+      <button class="btn secondary" onclick="loadLiveModels(true)">↻ 刷新模型列表</button>
+    </div>
+  </div>
+
+  <div class="panel">
     <h2>LLM 大脑</h2>
+    <div class="row">
+      <label>搜索：</label>
+      <input type="text" id="filter-llm" placeholder="输入关键词过滤，如 deepseek / claude / gpt"
+             style="flex:1; min-width:300px;" oninput="renderModelSelect('llm')">
+    </div>
     <div class="row">
       <label>模型：</label>
       <select id="model-llm" style="min-width: 360px;"></select>
@@ -217,6 +229,11 @@
   <div class="panel">
     <h2>视觉模型</h2>
     <div class="row">
+      <label>搜索：</label>
+      <input type="text" id="filter-vision" placeholder="如 qwen-vl / gpt-4o / internvl"
+             style="flex:1; min-width:300px;" oninput="renderModelSelect('vision')">
+    </div>
+    <div class="row">
       <label>模型：</label>
       <select id="model-vision" style="min-width: 360px;"></select>
     </div>
@@ -228,6 +245,11 @@
   <div class="panel">
     <h2>STT 语音转文字</h2>
     <div class="row">
+      <label>搜索：</label>
+      <input type="text" id="filter-stt" placeholder="如 sensevoice / whisper"
+             style="flex:1; min-width:300px;" oninput="renderModelSelect('stt')">
+    </div>
+    <div class="row">
       <label>模型：</label>
       <select id="model-stt" style="min-width: 360px;"></select>
     </div>
@@ -238,6 +260,11 @@
 
   <div class="panel">
     <h2>文生图</h2>
+    <div class="row">
+      <label>搜索：</label>
+      <input type="text" id="filter-image_gen" placeholder="如 kolors / flux / stable-diffusion"
+             style="flex:1; min-width:300px;" oninput="renderModelSelect('image_gen')">
+    </div>
     <div class="row">
       <label>模型：</label>
       <select id="model-imggen" style="min-width: 360px;"></select>
@@ -566,6 +593,7 @@ async function initAll() {
   loadPwState();
   loadAutostart();
   fillWebuiAutostart();
+  loadLiveModels();   // 打开网页自动拉取 OpenRouter/硅基流动 全量模型
 }
 
 // ============ 自启 ============
@@ -685,25 +713,99 @@ async function saveTTSFallback() {
 }
 
 // ============ 模型 ============
+const MODELS_BY_KIND = { llm: [], vision: [], stt: [], image_gen: [], tts_fallback: [] };
+const KIND_SELECT = { llm: 'model-llm', vision: 'model-vision', stt: 'model-stt', image_gen: 'model-imggen' };
+const KIND_CONFIG = { llm: 'llm', vision: 'vision', stt: 'stt', image_gen: 'image_gen' };
+const KIND_MAX_SHOWN = 400;
+
+function dedupe(list) {
+  const seen = new Set(), out = [];
+  for (const p of list) {
+    const k = p.provider + '|' + p.model;
+    if (!seen.has(k)) { seen.add(k); out.push(p); }
+  }
+  return out;
+}
+
+function renderModelSelect(kind) {
+  const selId = KIND_SELECT[kind];
+  if (!selId) return;
+  const sel = document.getElementById(selId);
+  const filterEl = document.getElementById('filter-' + kind);
+  const q = (filterEl?.value || '').toLowerCase().trim();
+  const cfg = CONFIG[KIND_CONFIG[kind]] || {};
+  let list = MODELS_BY_KIND[kind] || [];
+  if (q) list = list.filter(p =>
+    p.model.toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q) || p.provider.includes(q));
+
+  // 当前选中的模型始终保证在列表里（即使被过滤掉）
+  const hasCurrent = list.some(p => p.model === cfg.model && p.provider === cfg.provider);
+  if (!hasCurrent && cfg.model) {
+    list = [{ provider: cfg.provider, model: cfg.model, desc: cfg.model + '（当前）' }, ...list];
+  }
+
+  const shown = list.slice(0, KIND_MAX_SHOWN);
+  sel.innerHTML = '';
+  for (const p of shown) {
+    const opt = document.createElement('option');
+    opt.value = JSON.stringify({ provider: p.provider, model: p.model });
+    opt.textContent = `[${p.provider}] ${p.model}`;
+    if (p.model === cfg.model && p.provider === cfg.provider) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  if (list.length > KIND_MAX_SHOWN) {
+    const opt = document.createElement('option');
+    opt.disabled = true;
+    opt.textContent = `…还有 ${list.length - KIND_MAX_SHOWN} 个，输入关键词缩小范围`;
+    sel.appendChild(opt);
+  }
+}
+
 function fillModels() {
-  const fill = (selId, presets, current) => {
-    const sel = document.getElementById(selId);
-    sel.innerHTML = '';
-    for (const p of presets) {
-      const opt = document.createElement('option');
-      opt.value = JSON.stringify(p);
-      opt.textContent = `${p.desc} (${p.provider})`;
-      if (p.model === current?.model && p.provider === current?.provider) opt.selected = true;
-      sel.appendChild(opt);
-    }
-  };
-  fill('model-llm', PRESETS.llm || [], CONFIG.llm);
-  fill('model-vision', PRESETS.vision || [], CONFIG.vision);
-  fill('model-stt', PRESETS.stt || [], CONFIG.stt);
-  fill('model-imggen', PRESETS.image_gen || [], CONFIG.image_gen);
+  // 先用 PRESETS 兜底，等 loadLiveModels 拉到再覆盖
+  for (const k of Object.keys(MODELS_BY_KIND)) {
+    if (MODELS_BY_KIND[k].length === 0) MODELS_BY_KIND[k] = dedupe(PRESETS[k] || []);
+    renderModelSelect(k);
+  }
   document.getElementById('model-llm-temp').value = CONFIG.llm?.temperature || 0.7;
   document.getElementById('model-llm-maxtok').value = CONFIG.llm?.max_tokens || 512;
   document.getElementById('model-imggen-size').value = CONFIG.image_gen?.size || '1024x1024';
+}
+
+async function loadLiveModels(refresh = false) {
+  const status = document.getElementById('models-status');
+  status.textContent = refresh ? '正在刷新模型列表...' : '正在从 OpenRouter / 硅基流动 拉取全量模型...';
+  try {
+    const live = await fetchJSON('/api/models/live' + (refresh ? '?refresh=true' : ''));
+    for (const k of Object.keys(MODELS_BY_KIND)) {
+      const merged = dedupe([...(PRESETS[k] || []), ...((live[k]) || [])]);
+      MODELS_BY_KIND[k] = merged;
+      renderModelSelect(k);
+    }
+    const c = live.counts || {};
+    status.textContent = `✓ 已加载：LLM ${c.llm||0} · 视觉 ${c.vision||0} · 文生图 ${c.image_gen||0} · TTS ${c.tts_fallback||0} · STT ${c.stt||0}（10分钟缓存）`;
+    // 兜底 TTS 下拉也用 live 数据刷新
+    renderTTSFallback(live.tts_fallback || []);
+  } catch (e) {
+    status.textContent = '⚠️ 拉取失败（用内置列表）：' + e.message;
+  }
+}
+
+function renderTTSFallback(liveList) {
+  const sel = document.getElementById('tts-fallback');
+  if (!sel) return;
+  const cur = sel.value;
+  const merged = dedupe([...(PRESETS.tts_fallback || []), ...liveList]);
+  sel.innerHTML = '';
+  for (const p of merged) {
+    const opt = document.createElement('option');
+    const voice = p.voice || (p.model + ':alex');
+    opt.value = JSON.stringify({ provider: p.provider || 'siliconflow', model: p.model, voice });
+    opt.textContent = p.desc || p.model;
+    if (p.model === CONFIG.tts?.fallback_model) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  if (cur) sel.value = cur;
 }
 async function saveLLM() {
   const p = JSON.parse(document.getElementById('model-llm').value);
