@@ -225,10 +225,11 @@ class BotGUI:
         # GUI 组件
         self.background_label = tk.Label(master)
         self.background_label.place(x=0, y=0, width=self.BG_WIDTH, height=self.BG_HEIGHT)
-        self.background_label.bind('<Button-1>', self.toggle_hud_visibility)
+        # 单击不再弹文字框；双击屏幕才显示/隐藏退出按钮
+        self.background_label.bind('<Double-Button-1>', self.toggle_exit_button)
 
         self.overlay_label = tk.Label(master, bg='black')
-        self.overlay_label.bind('<Button-1>', self.toggle_hud_visibility)
+        self.overlay_label.bind('<Double-Button-1>', self.toggle_exit_button)
 
         self.response_text = tk.Text(master, height=6, width=60, wrap=tk.WORD,
                                      state=tk.DISABLED, bg="#ffffff", fg="#000000",
@@ -241,11 +242,10 @@ class BotGUI:
 
         self.load_animations()
         self.update_animation()
-        # 默认显示 HUD（状态 + 识别文字），可点屏幕切换
-        if self.config.get("show_hud", True):
+        # 默认只显示脸；show_hud=true 才显示状态栏+识别文字
+        if self.config.get("show_hud", False):
             self.response_text.place(relx=0.5, rely=0.82, anchor=tk.S)
             self.status_label.place(relx=0.5, rely=1.0, anchor=tk.S, relwidth=1)
-            self.exit_button.place(x=10, y=10)
         self.poll_commands_file()  # 启动后台 webui 命令轮询
         self.update_state_file()   # 启动状态写入
 
@@ -346,15 +346,12 @@ class BotGUI:
             pass
         self.safe_exit()
 
-    def toggle_hud_visibility(self, event=None):
+    def toggle_exit_button(self, event=None):
+        """双击屏幕 → 显示/隐藏退出按钮。"""
         try:
-            if self.response_text.winfo_ismapped():
-                self.response_text.place_forget()
-                self.status_label.place_forget()
+            if self.exit_button.winfo_ismapped():
                 self.exit_button.place_forget()
             else:
-                self.response_text.place(relx=0.5, rely=0.82, anchor=tk.S)
-                self.status_label.place(relx=0.5, rely=1.0, anchor=tk.S, relwidth=1)
                 self.exit_button.place(x=10, y=10)
         except tk.TclError:
             pass
