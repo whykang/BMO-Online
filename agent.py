@@ -275,9 +275,13 @@ class BotGUI:
                     threshold=threshold, score=score,
                 )
                 self.wake_backend = "sherpa_onnx"
-                log(f"[INIT] Sherpa-KWS 已加载，关键词: {keywords}")
+                log(f"[INIT] Sherpa-KWS 已加载，生效关键词: {self.sherpa_kws.accepted}")
+                if self.sherpa_kws.rejected:
+                    log(f"[INIT] ⚠️ 这些关键词无法识别已跳过: {self.sherpa_kws.rejected}")
             except Exception as e:
-                log(f"[INIT] Sherpa-KWS 加载失败: {e}")
+                log(f"[INIT] Sherpa-KWS 加载失败，回落 PTT 模式: {e}")
+                self.sherpa_kws = None
+                self.wake_backend = None
 
         elif backend == "openwakeword":
             if not OWW_AVAILABLE:
