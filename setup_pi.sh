@@ -54,6 +54,23 @@ download_if_missing wakewords/alexa.onnx        "$OWW_BASE/alexa_v0.1.onnx"
 download_if_missing wakewords/hey_mycroft.onnx  "$OWW_BASE/hey_mycroft_v0.1.onnx"
 download_if_missing wakewords/hey_rhasspy.onnx  "$OWW_BASE/hey_rhasspy_v0.1.onnx"
 
+# 5. Sherpa-ONNX 中文 KWS 模型（默认后端）
+SHERPA_DIR="wakewords/sherpa-kws-zh"
+SHERPA_TARBALL="sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01.tar.bz2"
+SHERPA_INNER="sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
+SHERPA_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/$SHERPA_TARBALL"
+
+if [ ! -d "$SHERPA_DIR" ]; then
+    echo -e "${YELLOW}下载 Sherpa-ONNX 中文 KWS 模型（约 13MB）...${NC}"
+    if curl -fL --retry 2 -o "wakewords/$SHERPA_TARBALL" "$SHERPA_URL"; then
+        ( cd wakewords && tar xjf "$SHERPA_TARBALL" && mv "$SHERPA_INNER" sherpa-kws-zh && rm "$SHERPA_TARBALL" )
+        echo -e "${GREEN}  ✓ Sherpa KWS 模型已就绪：$SHERPA_DIR${NC}"
+    else
+        echo -e "${RED}  ✗ Sherpa KWS 模型下载失败，中文唤醒词将不可用${NC}"
+        rm -f "wakewords/$SHERPA_TARBALL"
+    fi
+fi
+
 # 5. .env 提醒
 if [ ! -f .env ]; then
     cp .env.example .env

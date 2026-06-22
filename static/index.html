@@ -293,52 +293,77 @@
 <!-- 唤醒词 -->
 <section id="tab-wake" class="tab hide">
   <div class="panel">
-    <h2>唤醒词</h2>
+    <h2>唤醒词总开关</h2>
     <div class="row">
       <label>启用：</label>
       <input type="checkbox" id="wake-enabled">
+      <span class="help">关掉就是纯 PTT 模式（按钮触发）</span>
     </div>
+    <div class="row">
+      <label>引擎：</label>
+      <select id="wake-backend">
+        <option value="sherpa_onnx">Sherpa-ONNX（中文，推荐）</option>
+        <option value="openwakeword">OpenWakeWord（英文，需 .onnx 模型）</option>
+      </select>
+    </div>
+    <div class="row">
+      <button class="btn" onclick="saveWake()">💾 保存所有设置</button>
+      <span class="help" id="wake-status-hint"></span>
+    </div>
+  </div>
+
+  <!-- Sherpa-ONNX 后端 -->
+  <div class="panel" id="wake-panel-sherpa">
+    <h2>关键词（中文/英文都可以）</h2>
+    <div class="help">每行一个关键词，BMO 听到任何一个都会被唤醒。改完点保存。</div>
+    <textarea id="wake-keywords" placeholder="你好小明&#10;嗨小明&#10;嘿哔莫" style="min-height: 120px;"></textarea>
+    <div class="row" style="margin-top: 12px;">
+      <label>识别阈值：</label>
+      <input type="range" id="wake-threshold" min="0.1" max="0.6" step="0.05" value="0.25">
+      <span id="wake-threshold-val">0.25</span>
+      <span class="help">越低越容易触发，越高越严格</span>
+    </div>
+    <div class="row">
+      <label>关键词得分：</label>
+      <input type="range" id="wake-score" min="0.5" max="3.0" step="0.1" value="1.5">
+      <span id="wake-score-val">1.5</span>
+      <span class="help">越高越偏向词典里的词（误唤醒少，但漏唤醒多）</span>
+    </div>
+    <div class="row" id="wake-sherpa-model-status">
+      <label>模型：</label>
+      <span class="pill" id="wake-sherpa-pill">检查中...</span>
+    </div>
+  </div>
+
+  <!-- OpenWakeWord 后端（legacy） -->
+  <div class="panel hide" id="wake-panel-oww">
+    <h2>OpenWakeWord 模型（英文）</h2>
     <div class="row">
       <label>当前模型：</label>
       <select id="wake-model" style="min-width: 320px;"></select>
     </div>
     <div class="row">
-      <label>灵敏度：</label>
-      <input type="range" id="wake-threshold" min="0.1" max="0.9" step="0.05" value="0.5">
-      <span id="wake-threshold-val">0.50</span>
-      <span class="help">值越低越敏感（容易误触），越高越严格</span>
+      <label>识别阈值：</label>
+      <input type="range" id="wake-legacy-threshold" min="0.1" max="0.9" step="0.05" value="0.5">
+      <span id="wake-legacy-threshold-val">0.50</span>
     </div>
+    <h3 style="margin-top: 20px;">上传 .onnx 模型</h3>
     <div class="row">
-      <button class="btn" onclick="saveWake()">💾 保存</button>
-    </div>
-  </div>
-
-  <div class="panel">
-    <h2>上传新唤醒词模型</h2>
-    <div class="help">在 Colab 训好的 .onnx 文件，拖进来即可。</div>
-    <div class="row" style="margin-top: 12px;">
       <input type="file" id="wake-upload" accept=".onnx">
       <button class="btn" onclick="uploadWake()">⬆ 上传</button>
     </div>
-  </div>
-
-  <div class="panel">
-    <h2>本地唤醒词模型库</h2>
+    <h3 style="margin-top: 20px;">本地模型库</h3>
     <div id="wake-list"></div>
   </div>
 
   <div class="panel">
-    <h2>训练自己的中文唤醒词</h2>
-    <p>想要"嘿 BMO"或者其它中文唤醒词？训练步骤：</p>
-    <ol>
-      <li>打开 OpenWakeWord 训练 Colab：
-        <a href="https://colab.research.google.com/drive/1q1oe2zOyZp7UsB3jJiQ1IFn8z5YfjwEb"
-           target="_blank" style="color: var(--accent);">点这里</a></li>
-      <li>填入你的唤醒词文字（中英文都行）</li>
-      <li>等 30~60 分钟训练完成</li>
-      <li>下载生成的 .onnx 文件</li>
-      <li>上传到这里，切换使用</li>
-    </ol>
+    <h2>使用提示</h2>
+    <ul style="line-height: 1.8;">
+      <li><b>Sherpa-ONNX</b> 默认中文 KWS 模型支持任意中文关键词，3~4 字最稳。例：「你好小明」「嗨小明」「嘿哔莫哔莫」</li>
+      <li>关键词越短越容易误唤醒（"你好"会被日常对话触发）；建议至少 3 个字</li>
+      <li>调阈值：误唤醒多 → 调高（0.30~0.40）；唤不醒 → 调低（0.15~0.20）</li>
+      <li><b>OpenWakeWord</b> 后端：英文专用，要先在 Colab 训出 .onnx 才能用</li>
+    </ul>
   </div>
 </section>
 
@@ -722,14 +747,45 @@ async function saveMemory() {
 
 // ============ 唤醒词 ============
 async function fillWake() {
-  document.getElementById('wake-enabled').checked = CONFIG.wake_word?.enabled || false;
-  document.getElementById('wake-threshold').value = CONFIG.wake_word?.threshold || 0.5;
-  document.getElementById('wake-threshold-val').textContent = (CONFIG.wake_word?.threshold || 0.5).toFixed(2);
+  const s = await fetchJSON('/api/wakewords/status');
+  document.getElementById('wake-enabled').checked = !!s.enabled;
+  document.getElementById('wake-backend').value = s.backend || 'sherpa_onnx';
+  document.getElementById('wake-keywords').value = (s.keywords || []).join('\n');
+  document.getElementById('wake-threshold').value = s.threshold ?? 0.25;
+  document.getElementById('wake-threshold-val').textContent = (s.threshold ?? 0.25).toFixed(2);
+  document.getElementById('wake-score').value = s.score ?? 1.5;
+  document.getElementById('wake-score-val').textContent = (s.score ?? 1.5).toFixed(1);
+  document.getElementById('wake-legacy-threshold').value = s.legacy_threshold ?? 0.5;
+  document.getElementById('wake-legacy-threshold-val').textContent = (s.legacy_threshold ?? 0.5).toFixed(2);
+
+  const pill = document.getElementById('wake-sherpa-pill');
+  if (s.sherpa_ready) {
+    pill.textContent = '✓ 已就绪 ' + s.sherpa_model_dir;
+    pill.className = 'pill ok';
+  } else {
+    pill.textContent = '✗ 模型未下载（运行 setup_pi.sh）';
+    pill.className = 'pill err';
+  }
+
+  updateWakeBackendUI();
   await loadWakeList();
 }
+function updateWakeBackendUI() {
+  const backend = document.getElementById('wake-backend').value;
+  document.getElementById('wake-panel-sherpa').classList.toggle('hide', backend !== 'sherpa_onnx');
+  document.getElementById('wake-panel-oww').classList.toggle('hide', backend !== 'openwakeword');
+}
+document.getElementById('wake-backend').addEventListener('change', updateWakeBackendUI);
 document.getElementById('wake-threshold').addEventListener('input', e => {
   document.getElementById('wake-threshold-val').textContent = parseFloat(e.target.value).toFixed(2);
 });
+document.getElementById('wake-score').addEventListener('input', e => {
+  document.getElementById('wake-score-val').textContent = parseFloat(e.target.value).toFixed(1);
+});
+document.getElementById('wake-legacy-threshold').addEventListener('input', e => {
+  document.getElementById('wake-legacy-threshold-val').textContent = parseFloat(e.target.value).toFixed(2);
+});
+
 async function loadWakeList() {
   const list = await fetchJSON('/api/wakewords');
   const sel = document.getElementById('wake-model');
@@ -746,7 +802,7 @@ async function loadWakeList() {
   for (const w of list) {
     const div = document.createElement('div');
     div.className = 'row';
-    div.innerHTML = `<span>${w.filename}</span><span class="pill">${w.size_kb} KB</span>
+    div.innerHTML = `<span>${escapeHtml(w.filename)}</span><span class="pill">${w.size_kb} KB</span>
       <button class="btn danger" onclick="deleteWake('${w.filename}')">删除</button>`;
     box.appendChild(div);
   }
@@ -766,13 +822,20 @@ async function deleteWake(name) {
   await loadWakeList();
 }
 async function saveWake() {
-  CONFIG.wake_word = {
+  const keywords = document.getElementById('wake-keywords').value
+    .split('\n').map(s => s.trim()).filter(Boolean);
+  const payload = {
     enabled: document.getElementById('wake-enabled').checked,
-    model: document.getElementById('wake-model').value,
+    backend: document.getElementById('wake-backend').value,
+    keywords,
     threshold: parseFloat(document.getElementById('wake-threshold').value),
+    score: parseFloat(document.getElementById('wake-score').value),
+    model: document.getElementById('wake-model').value || null,
+    legacy_threshold: parseFloat(document.getElementById('wake-legacy-threshold').value),
   };
-  await putJSON('/api/config', CONFIG);
-  alert('已保存');
+  await putJSON('/api/wakewords/config', payload);
+  document.getElementById('wake-status-hint').textContent = '✓ 已保存（重启 agent 后生效）';
+  setTimeout(() => document.getElementById('wake-status-hint').textContent = '', 3000);
 }
 
 // ============ 历史 ============

@@ -235,11 +235,57 @@ async def test_voice(req: TestVoiceReq):
 
 
 # =========================================================================
-# 路由：唤醒词
+# 路由：唤醒词（双后端 sherpa_onnx / openwakeword）
 # =========================================================================
+
+@app.get("/api/wakewords/status")
+async def wakewords_status():
+    """返回当前后端 + 关键词 + 可用模型。"""
+    cfg = load_config()
+    ww = cfg.get("wake_word", {})
+    sherpa_dir = ww.get("model_dir", "wakewords/sherpa-kws-zh")
+    sherpa_ready = os.path.isdir(sherpa_dir) and any(
+        f.endswith(".onnx") and "encoder" in f for f in os.listdir(sherpa_dir)
+    ) if os.path.isdir(sherpa_dir) else False
+    return {
+        "enabled": ww.get("enabled", False),
+        "backend": ww.get("backend", "sherpa_onnx"),
+        "keywords": ww.get("keywords", []),
+        "threshold": ww.get("threshold", 0.25),
+        "score": ww.get("score", 1.5),
+        "sherpa_model_dir": sherpa_dir,
+        "sherpa_ready": sherpa_ready,
+        "legacy_model": ww.get("model", ""),
+        "legacy_threshold": ww.get("legacy_threshold", 0.5),
+    }
+
+
+class WakewordCfgReq(BaseModel):
+    enabled: bool | None = None
+    backend: str | None = None
+    keywords: list[str] | None = None
+    threshold: float | None = None
+    score: float | None = None
+    model: str | None = None
+    legacy_threshold: float | None = None
+
+
+@app.put("/api/wakewords/config")
+async def update_wakeword_config(req: WakewordCfgReq):
+    cfg = load_config()
+    ww = cfg.setdefault("wake_word", {})
+    for field in ("enabled", "backend", "keywords", "threshold", "score",
+                  "model", "legacy_threshold"):
+        v = getattr(req, field)
+        if v is not None:
+            ww[field] = v
+    save_config(cfg)
+    return {"ok": True, "wake_word": ww}
+
 
 @app.get("/api/wakewords")
 async def list_wakewords():
+    """列出 wakewords/ 里的 .onnx 文件（OpenWakeWord 后端用）。"""
     items = []
     if os.path.isdir(WAKEWORDS_DIR):
         for f in sorted(os.listdir(WAKEWORDS_DIR)):

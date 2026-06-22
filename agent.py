@@ -42,8 +42,9 @@ from providers.vision import VisionProvider
 from providers.image_gen import ImageGenProvider
 from providers.tts_edge import EdgeTTSProvider
 from providers.tts_siliconflow import SiliconFlowTTSProvider
+from providers.wakeword_sherpa import SherpaWakeWord
 
-# --- 唤醒词（可选）---
+# --- 唤醒词后端（都可选）---
 try:
     from openwakeword.model import Model as OWWModel
     OWW_AVAILABLE = True
@@ -245,28 +246,62 @@ class BotGUI:
         threading.Thread(target=self.safe_main_execution, daemon=True).start()
 
     # -------------------------------------------------------------------
-    # 唤醒词
+    # 唤醒词（双后端：openwakeword | sherpa_onnx）
     # -------------------------------------------------------------------
     def _load_wake_word(self):
+        """根据 config.wake_word.backend 加载对应后端。"""
+        self.oww_model = None
+        self.sherpa_kws = None
+        self.wake_backend = None
+
         ww_cfg = self.config.get("wake_word", {})
-        if not ww_cfg.get("enabled") or not OWW_AVAILABLE:
-            log("[INIT] 唤醒词未启用（PTT 模式）")
+        if not ww_cfg.get("enabled"):
+            log("[INIT] 唤醒词未启用（纯 PTT 模式）")
             return
-        model_path = ww_cfg.get("model", "")
-        if not model_path or not os.path.exists(model_path):
-            log(f"[INIT] 唤醒词模型不存在: {model_path}")
-            return
-        try:
-            self.oww_model = OWWModel(wakeword_models=[model_path])
-            log(f"[INIT] 唤醒词已加载: {os.path.basename(model_path)}")
-        except TypeError:
+
+        backend = ww_cfg.get("backend", "sherpa_onnx")
+
+        if backend == "sherpa_onnx":
+            model_dir = ww_cfg.get("model_dir", "wakewords/sherpa-kws-zh")
+            keywords = ww_cfg.get("keywords", [])
+            threshold = float(ww_cfg.get("threshold", 0.25))
+            score = float(ww_cfg.get("score", 1.5))
+            if not SherpaWakeWord.is_available():
+                log("[INIT] sherpa-onnx 未安装，唤醒词关闭")
+                return
             try:
-                self.oww_model = OWWModel(wakeword_model_paths=[model_path])
-                log(f"[INIT] 唤醒词已加载（旧版 API）: {os.path.basename(model_path)}")
+                self.sherpa_kws = SherpaWakeWord(
+                    model_dir=model_dir, keywords=keywords,
+                    threshold=threshold, score=score,
+                )
+                self.wake_backend = "sherpa_onnx"
+                log(f"[INIT] Sherpa-KWS 已加载，关键词: {keywords}")
+            except Exception as e:
+                log(f"[INIT] Sherpa-KWS 加载失败: {e}")
+
+        elif backend == "openwakeword":
+            if not OWW_AVAILABLE:
+                log("[INIT] openwakeword 未安装，唤醒词关闭")
+                return
+            model_path = ww_cfg.get("model", "")
+            if not model_path or not os.path.exists(model_path):
+                log(f"[INIT] 唤醒词模型不存在: {model_path}")
+                return
+            try:
+                self.oww_model = OWWModel(wakeword_models=[model_path])
+            except TypeError:
+                try:
+                    self.oww_model = OWWModel(wakeword_model_paths=[model_path])
+                except Exception as e:
+                    log(f"[INIT] 唤醒词加载失败: {e}")
+                    return
             except Exception as e:
                 log(f"[INIT] 唤醒词加载失败: {e}")
-        except Exception as e:
-            log(f"[INIT] 唤醒词加载失败: {e}")
+                return
+            self.wake_backend = "openwakeword"
+            log(f"[INIT] OpenWakeWord 已加载: {os.path.basename(model_path)}")
+        else:
+            log(f"[INIT] 未知唤醒词后端: {backend}")
 
     # -------------------------------------------------------------------
     # 退出 & UI 工具
@@ -467,8 +502,8 @@ class BotGUI:
         self.set_state(BotStates.IDLE, "等待唤醒...")
         self.ptt_event.clear()
 
-        if self.oww_model is None:
-            # 没唤醒词，纯 PTT 模式
+        # 没装任何唤醒词后端 → 纯 PTT 模式
+        if self.wake_backend is None:
             while not self.ptt_event.is_set():
                 if self.exiting:
                     return "PTT"
@@ -476,17 +511,25 @@ class BotGUI:
             self.ptt_event.clear()
             return "PTT"
 
-        self.oww_model.reset()
-        CHUNK_SIZE = 1280
-        OWW_SR = 16000
+        # 重置后端状态
+        if self.sherpa_kws:
+            self.sherpa_kws.reset()
+        if self.oww_model:
+            self.oww_model.reset()
+
+        # 两个后端都用 16kHz 输入
+        TARGET_SR = 16000
+        # OpenWakeWord 要求 1280 样本/chunk；sherpa 不挑，但 0.1s = 1600 样本一块比较合适
+        target_chunk = 1280 if self.wake_backend == "openwakeword" else 1600
+
         input_rate = choose_input_samplerate(self.input_device, self.config.get("input_sample_rate"))
-        use_resample = (input_rate != OWW_SR)
-        in_chunk = int(CHUNK_SIZE * (input_rate / OWW_SR)) if use_resample else CHUNK_SIZE
+        use_resample = (input_rate != TARGET_SR)
+        in_chunk = int(target_chunk * (input_rate / TARGET_SR)) if use_resample else target_chunk
 
         stream_args = dict(samplerate=input_rate, channels=1, dtype='int16',
                            blocksize=in_chunk, device=self.input_device)
         try:
-            return self._listen_loop(stream_args, in_chunk, CHUNK_SIZE, use_resample)
+            return self._listen_loop(stream_args, in_chunk, target_chunk, use_resample)
         except StopIteration as si:
             return str(si)
         except Exception as e:
@@ -497,9 +540,9 @@ class BotGUI:
             return "PTT"
 
     def _listen_loop(self, args, in_chunk, target_chunk, use_resample):
-        threshold = self.config.get("wake_word", {}).get("threshold", 0.5)
+        oww_threshold = self.config.get("wake_word", {}).get("legacy_threshold", 0.5)
         with sd.InputStream(**args) as stream:
-            log(f"[AUDIO] 听唤醒词 sr={args['samplerate']}")
+            log(f"[AUDIO] 听唤醒词 backend={self.wake_backend} sr={args['samplerate']}")
             while True:
                 if self.exiting:
                     raise StopIteration("EXIT")
@@ -517,12 +560,22 @@ class BotGUI:
                     step = len(audio) / target_chunk
                     idx = np.arange(0, len(audio), step)[:target_chunk].astype(int)
                     audio = audio[idx]
+
+                # ---- Sherpa-ONNX KWS 后端 ----
+                if self.wake_backend == "sherpa_onnx":
+                    hit = self.sherpa_kws.feed(audio)
+                    if hit:
+                        log(f"[WAKE] 触发 '{hit}'")
+                        return "WAKE"
+                    continue
+
+                # ---- OpenWakeWord 后端 ----
                 vol = np.max(np.abs(audio))
                 if vol > 200:
                     self.oww_model.predict(audio)
                     for k in self.oww_model.prediction_buffer.keys():
                         score = list(self.oww_model.prediction_buffer[k])[-1]
-                        if score > threshold:
+                        if score > oww_threshold:
                             log(f"[WAKE] 触发 '{k}' score={score:.2f}")
                             self.oww_model.reset()
                             return "WAKE"

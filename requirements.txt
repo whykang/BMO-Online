@@ -5,7 +5,10 @@ scipy
 Pillow
 python-dotenv
 
-# Wake word (optional)
+# Wake word — 两个都装，config 切换
+# Sherpa-ONNX：中文原生支持、零训练（默认）
+sherpa-onnx
+# OpenWakeWord：英文为主，需要训练 onnx（可选）
 openwakeword
 onnxruntime
 

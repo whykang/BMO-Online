@@ -9,7 +9,7 @@
 - **看图能力**：摄像头拍照 → Qwen2-VL 描述
 - **画图能力**：说"画一只戴帽子的猫" → Kolors 生成 → 屏幕展示
 - **网络搜索**：DuckDuckGo
-- **唤醒词** + **物理按钮 PTT** 两种触发，并存
+- **中文唤醒词**（Sherpa-ONNX KWS，零训练）+ **物理按钮 PTT** 两种触发，并存
 - **网页控制台**（http://树莓派IP:8087）：在线切换音色 / 模型 / 性格 / 唤醒词，看日志、看历史、看画廊、当遥控器
 - **保留 BMO 标志性脸部动画**
 
@@ -57,7 +57,7 @@ chmod +x setup_pi.sh
 这一步会：
 - apt 装系统依赖（python3-tk / portaudio / mpg123 / ffmpeg）
 - 建 venv + 装 Python 包
-- 下载几个默认唤醒词模型
+- 下载 Sherpa-ONNX 中文 KWS 模型（默认）+ 几个英文 OpenWakeWord 模型
 - 创建 `.env`（如果不存在）
 
 ### 4. 填 API key
@@ -103,7 +103,7 @@ hostname -I
 
 | 方式 | 操作 |
 |------|------|
-| 唤醒词 | 默认 "Hey Jarvis"，可在网页换 |
+| 唤醒词 | 默认中文"你好小明 / 嗨小明"，在网页里改成你想要的中文短语即可 |
 | 物理按钮 | 短按 PTT 按钮（toggle 录音）|
 | 网页遥控器 | 控制台 → 仪表板 → "开始录音" |
 
@@ -135,7 +135,7 @@ hostname -I
 | 音色 | 切换 Edge-TTS 音色（中/英/日）+ 试听 + 兜底 TTS 设置 |
 | 模型 | 切换 LLM / Vision / STT / 文生图模型 |
 | 性格 | 编辑 system prompt + 调记忆轮数 |
-| 唤醒词 | 启用/禁用、切换、上传 .onnx、调灵敏度 |
+| 唤醒词 | 中文关键词文本输入（任意短语，零训练）/ 切引擎 / 调灵敏度 |
 | 对话历史 | 查看 + 清空 |
 | 图片画廊 | 看 BMO 画过的图、删除 |
 | 遥控器 | 录音/打断/拍照按钮 + 让 BMO 说一句话 |
@@ -159,12 +159,56 @@ hostname -I
     "fallback_model": "FunAudioLLM/CosyVoice2-0.5B"
   },
   "image_gen": { "provider": "siliconflow", "model": "Kwai-Kolors/Kolors" },
-  "wake_word": { "enabled": true, "model": "wakewords/hey_jarvis.onnx", "threshold": 0.5 },
+  "wake_word": {
+    "enabled": true,
+    "backend": "sherpa_onnx",
+    "keywords": ["你好小明", "嗨小明"],
+    "threshold": 0.25
+  },
   "memory_max_turns": 30
 }
 ```
 
 `.env`：API key 和 Web 控制台端口。
+
+## 🎙 自定义中文唤醒词
+
+默认有两个：**"你好小明"** 和 **"嗨小明"**。想换：
+
+**方式 1（推荐）：网页控制台**
+- 打开「唤醒词」标签
+- 在「关键词」文本框里每行写一个，比如：
+  ```
+  嘿哔莫
+  小明小明
+  哔哔哔
+  ```
+- 保存 → 重启 agent 生效
+
+**方式 2：改 config.json**
+```json
+"wake_word": {
+  "backend": "sherpa_onnx",
+  "keywords": ["嘿哔莫", "你好小明"],
+  "threshold": 0.25
+}
+```
+
+### 几个调参建议
+
+| 现象 | 怎么改 |
+|------|--------|
+| 误唤醒太多（说话总被打断） | 阈值调高（0.30 → 0.40），或选更生僻的关键词 |
+| 唤不醒（怎么喊都没反应） | 阈值调低（0.25 → 0.18） |
+| 中间的字总被吞 | 关键词得分调高（1.5 → 2.0） |
+| 想加英文唤醒词 | 中英文都能加，例：`["你好小明", "hello bmo"]` |
+
+### 引擎切换
+
+| 引擎 | 适用 | 配置 |
+|------|------|------|
+| **Sherpa-ONNX**（默认） | 中文为主，任意短语零训练 | 在网页里直接打字 |
+| **OpenWakeWord** | 英文，需训练 `.onnx` 模型 | 上传 .onnx，老办法 |
 
 ## 🔧 物理按钮（可选）
 
@@ -230,7 +274,7 @@ BMO-Online/
 ├── static/                 # Web 控制台前端（单文件 HTML）
 │   ├── index.html
 │   └── login.html
-├── wakewords/              # 唤醒词 .onnx 模型库
+├── wakewords/              # Sherpa KWS 模型目录 + OpenWakeWord .onnx 模型库
 ├── firmware/               # Pro Micro 按钮固件
 ├── faces/                  # BMO 脸部动画（PNG 序列，需自备）
 ├── sounds/                 # 音效（.wav，需自备）
@@ -248,7 +292,8 @@ BMO-Online/
 ## 🙏 致谢
 
 - 原版 [Be More Agent](https://github.com/brenpoly/be-more-agent) by **brenpoly** — 整个项目的灵感和骨架来源
-- [OpenWakeWord](https://github.com/dscripka/openWakeWord) — 唤醒词检测
+- [Sherpa-ONNX](https://github.com/k2-fsa/sherpa-onnx) — 中文唤醒词 KWS（默认引擎）
+- [OpenWakeWord](https://github.com/dscripka/openWakeWord) — 英文唤醒词引擎（可选）
 - [Edge-TTS](https://github.com/rany2/edge-tts) — 微软 TTS 的 Python 封装
 - [硅基流动](https://siliconflow.cn) — 一站式 AI 模型 API
 - BMO 角色版权归 Cartoon Network；本项目仅作非商业爱好
