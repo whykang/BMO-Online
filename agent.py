@@ -851,12 +851,12 @@ class BotGUI:
                 if self.interrupted.is_set():
                     break
                 full_buf += chunk
-                # 工具调用检测：以 { 开头基本就是工具
-                if not is_action and ("{" in chunk or full_buf.lstrip().startswith("{")):
-                    if full_buf.lstrip().startswith("{"):
-                        is_action = True
-                        self.thinking_sound_active.clear()
-                        continue
+                # 工具调用检测：回复里只要出现 { 就当作工具调用，立刻停止朗读
+                # （模型有时会在 JSON 前加一句话，所以不能只看开头）
+                if not is_action and "{" in full_buf:
+                    is_action = True
+                    self.thinking_sound_active.clear()
+                    continue
                 if is_action:
                     continue
 
@@ -1033,6 +1033,9 @@ class BotGUI:
     def speak(self, text):
         clean = text.strip()
         if not clean:
+            return
+        # 没有可朗读字符（字母/数字/汉字）就跳过，避免对 "{" 这种合成报错
+        if not re.search(r'[0-9A-Za-z一-鿿]', clean):
             return
         log(f"[说] {clean}")
         provider = self.config["tts"].get("provider", "edge")
