@@ -37,8 +37,8 @@
 ```bash
 ssh pi@bmo.local
 cd ~
-git clone https://github.com/你的用户名/be-more-agent-online.git
-cd be-more-agent-online
+git clone https://github.com/whykang/BMO-Online.git
+cd BMO-Online
 ```
 
 ### 3. 一键安装
@@ -205,7 +205,7 @@ REMOTE=pi@192.168.1.50 ./sync.sh
 ## 📚 项目结构
 
 ```
-be-more-agent-online/
+BMO-Online/
 ├── agent.py                # BMO 主程序（GUI + 状态机 + 流水线）
 ├── webui.py                # FastAPI Web 控制台
 ├── providers/              # API provider 抽象层

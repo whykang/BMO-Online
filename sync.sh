@@ -5,7 +5,7 @@
 set -euo pipefail
 
 REMOTE="${REMOTE:-pi@bmo.local}"
-REMOTE_DIR="${REMOTE_DIR:-~/be-more-agent-online/}"
+REMOTE_DIR="${REMOTE_DIR:-~/BMO-Online/}"
 
 echo "→ 同步到 $REMOTE:$REMOTE_DIR"
 
