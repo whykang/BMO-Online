@@ -64,7 +64,7 @@
     "follow_up_max_rounds": 6
   },
 
-  "show_hud": true,
+  "show_hud": false,
 
   "tts_sample_rate": 24000,
   "tts_pcm_chunk_size": 4096,

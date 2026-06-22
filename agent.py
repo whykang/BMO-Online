@@ -887,6 +887,8 @@ class BotGUI:
                     return
 
             # 保存对话历史
+            if not is_action and full_buf.strip():
+                log(f"[BMO] {full_buf.strip()}")
             self.session_memory.append({"role": "user", "content": text})
             self.session_memory.append({"role": "assistant", "content": full_buf})
             self.trim_memory()
@@ -911,8 +913,7 @@ class BotGUI:
                 # 拍完照重新跟 LLM 对话
                 self.chat_and_respond(original_text, img_path=new_img)
             else:
-                self.speak_text("拍照失败了。")
-                self.set_state(BotStates.IDLE, "准备好啦")
+                self._say("拍照失败了。")
             return
 
         if isinstance(result, str) and result.startswith("IMAGE_GEN_TRIGGERED::"):
@@ -922,37 +923,42 @@ class BotGUI:
                 path = self.image_gen.generate(prompt)
                 if path:
                     log(f"[IMAGE GEN] 保存到 {path}")
-                    self.speak_text("画好啦！")
                     self.set_state(BotStates.SPEAKING, "看我画的~", overlay_path=path)
+                    self.speak_text("画好啦！")
                     self.wait_for_tts()
                     # 保持显示一会儿
                     time.sleep(self.config.get("image_display_seconds", 10))
                 else:
-                    self.speak_text("画图失败了。")
+                    self._say("画图失败了。")
+                    return
             except Exception as e:
                 log(f"[IMAGE GEN ERROR] {e}")
-                self.speak_text("画图时出错了。")
+                self._say("画图时出错了。")
+                return
             self.set_state(BotStates.IDLE, "准备好啦")
             return
 
         if result == "IMAGE_GEN_EMPTY":
-            self.speak_text("画什么呀？再告诉我一次。")
-            self.set_state(BotStates.IDLE, "准备好啦")
+            self._say("画什么呀？再告诉我一次。")
             return
 
         if result == "INVALID_ACTION":
-            self.speak_text("我不太确定怎么做这件事。")
-            self.set_state(BotStates.IDLE, "准备好啦")
+            self._say("我不太确定怎么做这件事。")
             return
 
-        if result == "SEARCH_EMPTY":
-            self.speak_text("我搜了一下，没找到相关信息。")
-            self.set_state(BotStates.IDLE, "准备好啦")
-            return
-
-        if result == "SEARCH_ERROR":
-            self.speak_text("我连不上网。")
-            self.set_state(BotStates.IDLE, "准备好啦")
+        # 搜索失败/无结果（如国内 DuckDuckGo 不可达）→ 让 LLM 用已知信息回答
+        if result in ("SEARCH_EMPTY", "SEARCH_ERROR"):
+            fallback_messages = self.permanent_memory + self.session_memory + [
+                {"role": "user", "content": original_text},
+                {"role": "user", "content": "（实时联网搜索不可用。请基于你已有的知识回答用户，"
+                                            "如果涉及最新内容就说明你可能不知道最新情况。一两句话即可。）"}
+            ]
+            try:
+                final_text = self.llm.chat_once(fallback_messages)
+            except Exception as e:
+                log(f"[LLM ERROR] {e}")
+                final_text = "我现在查不到最新信息呢。"
+            self._say(final_text, remember=original_text)
             return
 
         # search_web 返回了正文 / get_time 返回了字符串：让 LLM 再总结一遍
@@ -968,6 +974,7 @@ class BotGUI:
                 final_text = result
             self.set_state(BotStates.SPEAKING, "说话中...", overlay_path=img_path)
             self.append_to_text(f"BMO: {final_text}")
+            log(f"[BMO] {final_text}")
             self.speak_text(final_text)
             self.session_memory.append({"role": "user", "content": original_text})
             self.session_memory.append({"role": "assistant", "content": final_text})
@@ -976,6 +983,20 @@ class BotGUI:
             self.wait_for_tts()
             self.set_state(BotStates.IDLE, "准备好啦")
             return
+
+    def _say(self, text, remember=None):
+        """说一句话并等播放完，再回 IDLE。remember 不为空时把这轮对话存进记忆。"""
+        self.set_state(BotStates.SPEAKING, "说话中...")
+        self.append_to_text(f"BMO: {text}")
+        log(f"[BMO] {text}")
+        self.speak_text(text)
+        if remember:
+            self.session_memory.append({"role": "user", "content": remember})
+            self.session_memory.append({"role": "assistant", "content": text})
+            self.trim_memory()
+            self.save_chat_history()
+        self.wait_for_tts()
+        self.set_state(BotStates.IDLE, "准备好啦")
 
     def speak_text(self, text):
         with self.tts_queue_lock:
