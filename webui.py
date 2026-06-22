@@ -485,6 +485,12 @@ PRESETS = {
         {"provider": "siliconflow", "model": "Kwai-Kolors/Kolors", "desc": "Kolors（中文 prompt 好）"},
         {"provider": "siliconflow", "model": "black-forest-labs/FLUX.1-schnell", "desc": "FLUX.1-schnell（最快）"},
         {"provider": "siliconflow", "model": "stabilityai/stable-diffusion-3-5-large", "desc": "SD 3.5 Large"},
+        {"provider": "openrouter", "model": "google/gemini-3.1-flash-image",
+         "desc": "Gemini 3.1 Flash Image（OpenRouter）"},
+        {"provider": "openrouter", "model": "google/gemini-3-pro-image",
+         "desc": "Gemini 3 Pro Image（OpenRouter）"},
+        {"provider": "openrouter", "model": "recraft/recraft-v4.1",
+         "desc": "Recraft V4.1（OpenRouter）"},
     ],
 }
 
@@ -504,27 +510,74 @@ _models_cache = {"ts": 0, "data": None}
 _MODELS_TTL = 600  # 10 分钟缓存
 
 
+def _openrouter_item(m):
+    arch = m.get("architecture") or {}
+    pricing = m.get("pricing") or {}
+    return {
+        "provider": "openrouter",
+        "model": m.get("id"),
+        "desc": m.get("name") or m.get("id"),
+        "modality": arch.get("modality", ""),
+        "input_modalities": arch.get("input_modalities") or [],
+        "output_modalities": arch.get("output_modalities") or [],
+        "pricing": {
+            "prompt": pricing.get("prompt"),
+            "completion": pricing.get("completion"),
+            "image": pricing.get("image"),
+        },
+    }
+
+
 def _fetch_openrouter():
-    """OpenRouter 模型列表（公开，无需 key）。返回 (llm, vision)。"""
+    """OpenRouter 模型列表（公开，无需 key）。返回 LLM / Vision / Image Gen。"""
     try:
         r = requests.get("https://openrouter.ai/api/v1/models", timeout=20)
         r.raise_for_status()
         data = r.json().get("data", [])
     except Exception as e:
         print(f"[MODELS] OpenRouter 拉取失败: {e}", flush=True)
-        return [], []
-    llm, vision = [], []
+        return [], [], []
+    llm, vision, image_gen = [], [], []
     for m in data:
         mid = m.get("id")
         if not mid:
             continue
-        name = m.get("name", mid)
-        modality = ((m.get("architecture") or {}).get("modality") or "").lower()
-        item = {"provider": "openrouter", "model": mid, "desc": name}
-        llm.append(item)
-        if "image" in modality:   # 例如 text+image->text
+        arch = m.get("architecture") or {}
+        inputs = set(arch.get("input_modalities") or [])
+        outputs = set(arch.get("output_modalities") or [])
+        item = _openrouter_item(m)
+        if "text" in outputs:
+            llm.append(item)
+        if "image" in inputs and "text" in outputs:
             vision.append(item)
-    return llm, vision
+        if "image" in outputs:
+            image_gen.append(item)
+
+    # 再用 OpenRouter 官方过滤参数补一遍，避免全量列表字段变动时漏掉图片输出模型。
+    try:
+        r = requests.get(
+            "https://openrouter.ai/api/v1/models",
+            params={"output_modalities": "image"},
+            timeout=20,
+        )
+        r.raise_for_status()
+        for m in r.json().get("data", []):
+            if m.get("id"):
+                image_gen.append(_openrouter_item(m))
+    except Exception as e:
+        print(f"[MODELS] OpenRouter image 模型拉取失败: {e}", flush=True)
+
+    return dedupe_models(llm), dedupe_models(vision), dedupe_models(image_gen)
+
+
+def dedupe_models(items):
+    seen, out = set(), []
+    for item in items:
+        key = (item.get("provider"), item.get("model"))
+        if item.get("model") and key not in seen:
+            seen.add(key)
+            out.append(item)
+    return out
 
 
 def _fetch_siliconflow(sub_type, mtype="text"):
@@ -549,7 +602,7 @@ def _fetch_siliconflow(sub_type, mtype="text"):
 
 
 def _build_live_models():
-    or_llm, or_vision = _fetch_openrouter()
+    or_llm, or_vision, or_img = _fetch_openrouter()
     sf_chat = _fetch_siliconflow("chat", "text")
     sf_img = _fetch_siliconflow("text-to-image", "image")
     sf_tts = _fetch_siliconflow("text-to-speech", "audio")
@@ -564,13 +617,13 @@ def _build_live_models():
     return {
         "llm": or_llm + sf_chat,
         "vision": or_vision + sf_vision,
-        "image_gen": sf_img,
+        "image_gen": or_img + sf_img,
         "tts_fallback": sf_tts,
         "stt": sf_stt,
         "counts": {
             "llm": len(or_llm) + len(sf_chat),
             "vision": len(or_vision) + len(sf_vision),
-            "image_gen": len(sf_img),
+            "image_gen": len(or_img) + len(sf_img),
             "tts_fallback": len(sf_tts),
             "stt": len(sf_stt),
         },
