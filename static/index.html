@@ -78,6 +78,19 @@
   .pill.err { background: #4a1f1f; color: var(--err); }
   .hide { display: none; }
   .help { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .two-col { display: flex; gap: 16px; flex-wrap: wrap; }
+  .two-col .col { flex: 1; min-width: 280px; position: relative;
+                  background: var(--panel-light); border-radius: 8px; padding: 12px; }
+  .two-col .col h3 { margin: 0 0 8px; font-size: 14px; display: flex;
+                     justify-content: space-between; align-items: center; }
+  .two-col .col input[type=text] { width: 100%; margin-bottom: 8px; box-sizing: border-box; }
+  .two-col .col select { width: 100%; }
+  .col.disabled { opacity: 0.5; }
+  .col.disabled select, .col.disabled input { pointer-events: none; }
+  .key-missing { color: var(--err); font-size: 12px; margin-top: 8px; cursor: pointer;
+                 text-decoration: underline; }
+  .cur-model { margin-top: 10px; font-size: 13px; }
+  .cur-model b { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -206,16 +219,24 @@
 
   <div class="panel">
     <h2>LLM 大脑</h2>
-    <div class="row">
-      <label>搜索：</label>
-      <input type="text" id="filter-llm" placeholder="输入关键词过滤，如 deepseek / claude / gpt"
-             style="flex:1; min-width:300px;" oninput="renderModelSelect('llm')">
+    <div class="two-col">
+      <div class="col" id="col-llm-siliconflow">
+        <h3>硅基流动 <span class="pill" id="key-llm-siliconflow"></span></h3>
+        <input type="text" id="filter-llm-siliconflow" placeholder="搜索 deepseek / qwen / glm…"
+               oninput="renderTwoCol('llm')">
+        <select id="model-llm-siliconflow" size="8" onchange="pickModel('llm','siliconflow')"></select>
+        <div class="key-missing hide" onclick="showTab('keys')">未填写硅基流动 Key，点此去添加 →</div>
+      </div>
+      <div class="col" id="col-llm-openrouter">
+        <h3>OpenRouter <span class="pill" id="key-llm-openrouter"></span></h3>
+        <input type="text" id="filter-llm-openrouter" placeholder="搜索 claude / gpt / gemini…"
+               oninput="renderTwoCol('llm')">
+        <select id="model-llm-openrouter" size="8" onchange="pickModel('llm','openrouter')"></select>
+        <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenRouter Key，点此去添加 →</div>
+      </div>
     </div>
-    <div class="row">
-      <label>模型：</label>
-      <select id="model-llm" style="min-width: 360px;"></select>
-    </div>
-    <div class="row">
+    <div class="cur-model">当前模型：<b id="cur-llm">-</b></div>
+    <div class="row" style="margin-top: 10px;">
       <label>温度：</label>
       <input type="text" id="model-llm-temp" value="0.7" style="width: 80px;">
       <label style="min-width: 80px;">最大 tokens：</label>
@@ -228,16 +249,24 @@
 
   <div class="panel">
     <h2>视觉模型</h2>
-    <div class="row">
-      <label>搜索：</label>
-      <input type="text" id="filter-vision" placeholder="如 qwen-vl / gpt-4o / internvl"
-             style="flex:1; min-width:300px;" oninput="renderModelSelect('vision')">
+    <div class="two-col">
+      <div class="col" id="col-vision-siliconflow">
+        <h3>硅基流动 <span class="pill" id="key-vision-siliconflow"></span></h3>
+        <input type="text" id="filter-vision-siliconflow" placeholder="搜索 qwen-vl / internvl…"
+               oninput="renderTwoCol('vision')">
+        <select id="model-vision-siliconflow" size="8" onchange="pickModel('vision','siliconflow')"></select>
+        <div class="key-missing hide" onclick="showTab('keys')">未填写硅基流动 Key，点此去添加 →</div>
+      </div>
+      <div class="col" id="col-vision-openrouter">
+        <h3>OpenRouter <span class="pill" id="key-vision-openrouter"></span></h3>
+        <input type="text" id="filter-vision-openrouter" placeholder="搜索 gpt-4o / claude / gemini…"
+               oninput="renderTwoCol('vision')">
+        <select id="model-vision-openrouter" size="8" onchange="pickModel('vision','openrouter')"></select>
+        <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenRouter Key，点此去添加 →</div>
+      </div>
     </div>
-    <div class="row">
-      <label>模型：</label>
-      <select id="model-vision" style="min-width: 360px;"></select>
-    </div>
-    <div class="row">
+    <div class="cur-model">当前模型：<b id="cur-vision">-</b></div>
+    <div class="row" style="margin-top: 10px;">
       <button class="btn" onclick="saveVision()">💾 保存</button>
     </div>
   </div>
@@ -714,9 +743,13 @@ async function saveTTSFallback() {
 
 // ============ 模型 ============
 const MODELS_BY_KIND = { llm: [], vision: [], stt: [], image_gen: [], tts_fallback: [] };
-const KIND_SELECT = { llm: 'model-llm', vision: 'model-vision', stt: 'model-stt', image_gen: 'model-imggen' };
+const KIND_SELECT = { stt: 'model-stt', image_gen: 'model-imggen' };  // 单列(仅硅基流动)
+const TWO_COL_KINDS = ['llm', 'vision'];
+const PROVIDERS_2COL = ['siliconflow', 'openrouter'];
 const KIND_CONFIG = { llm: 'llm', vision: 'vision', stt: 'stt', image_gen: 'image_gen' };
 const KIND_MAX_SHOWN = 400;
+let KEYS = { siliconflow: false, openrouter: false, openai: false };
+const SELECTED = { llm: {}, vision: {} };   // 当前选中 {provider, model}
 
 function dedupe(list) {
   const seen = new Set(), out = [];
@@ -727,6 +760,59 @@ function dedupe(list) {
   return out;
 }
 
+// ---- 两列渲染（LLM / 视觉）----
+function renderTwoCol(kind) {
+  const cur = SELECTED[kind] || {};
+  for (const prov of PROVIDERS_2COL) {
+    const col = document.getElementById(`col-${kind}-${prov}`);
+    const sel = document.getElementById(`model-${kind}-${prov}`);
+    const filterEl = document.getElementById(`filter-${kind}-${prov}`);
+    const pill = document.getElementById(`key-${kind}-${prov}`);
+    const missing = col.querySelector('.key-missing');
+    const hasKey = !!KEYS[prov];
+
+    // key 状态
+    pill.textContent = hasKey ? '✓ 已配置' : '✗ 未配置';
+    pill.className = 'pill ' + (hasKey ? 'ok' : 'err');
+    col.classList.toggle('disabled', !hasKey);
+    missing.classList.toggle('hide', hasKey);
+
+    const q = (filterEl?.value || '').toLowerCase().trim();
+    let list = (MODELS_BY_KIND[kind] || []).filter(p => p.provider === prov);
+    if (q) list = list.filter(p => p.model.toLowerCase().includes(q));
+    const shown = list.slice(0, KIND_MAX_SHOWN);
+
+    sel.innerHTML = '';
+    for (const p of shown) {
+      const opt = document.createElement('option');
+      opt.value = p.model;
+      opt.textContent = p.model;
+      if (cur.provider === prov && cur.model === p.model) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    if (list.length > KIND_MAX_SHOWN) {
+      const opt = document.createElement('option');
+      opt.disabled = true;
+      opt.textContent = `…还有 ${list.length - KIND_MAX_SHOWN} 个，输入关键词缩小`;
+      sel.appendChild(opt);
+    }
+  }
+  document.getElementById('cur-' + kind).textContent =
+    cur.model ? `[${cur.provider}] ${cur.model}` : '（未选择）';
+}
+
+function pickModel(kind, prov) {
+  const sel = document.getElementById(`model-${kind}-${prov}`);
+  if (!sel.value) return;
+  SELECTED[kind] = { provider: prov, model: sel.value };
+  // 清掉另一列的选中
+  const other = prov === 'siliconflow' ? 'openrouter' : 'siliconflow';
+  const otherSel = document.getElementById(`model-${kind}-${other}`);
+  if (otherSel) otherSel.selectedIndex = -1;
+  document.getElementById('cur-' + kind).textContent = `[${prov}] ${sel.value}`;
+}
+
+// ---- 单列渲染（STT / 文生图，仅硅基流动）----
 function renderModelSelect(kind) {
   const selId = KIND_SELECT[kind];
   if (!selId) return;
@@ -735,15 +821,9 @@ function renderModelSelect(kind) {
   const q = (filterEl?.value || '').toLowerCase().trim();
   const cfg = CONFIG[KIND_CONFIG[kind]] || {};
   let list = MODELS_BY_KIND[kind] || [];
-  if (q) list = list.filter(p =>
-    p.model.toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q) || p.provider.includes(q));
-
-  // 当前选中的模型始终保证在列表里（即使被过滤掉）
+  if (q) list = list.filter(p => p.model.toLowerCase().includes(q));
   const hasCurrent = list.some(p => p.model === cfg.model && p.provider === cfg.provider);
-  if (!hasCurrent && cfg.model) {
-    list = [{ provider: cfg.provider, model: cfg.model, desc: cfg.model + '（当前）' }, ...list];
-  }
-
+  if (!hasCurrent && cfg.model) list = [{ provider: cfg.provider, model: cfg.model }, ...list];
   const shown = list.slice(0, KIND_MAX_SHOWN);
   sel.innerHTML = '';
   for (const p of shown) {
@@ -753,20 +833,17 @@ function renderModelSelect(kind) {
     if (p.model === cfg.model && p.provider === cfg.provider) opt.selected = true;
     sel.appendChild(opt);
   }
-  if (list.length > KIND_MAX_SHOWN) {
-    const opt = document.createElement('option');
-    opt.disabled = true;
-    opt.textContent = `…还有 ${list.length - KIND_MAX_SHOWN} 个，输入关键词缩小范围`;
-    sel.appendChild(opt);
-  }
 }
 
 function fillModels() {
-  // 先用 PRESETS 兜底，等 loadLiveModels 拉到再覆盖
+  // 初始化 SELECTED 为 config 里的当前模型
+  SELECTED.llm = { provider: CONFIG.llm?.provider, model: CONFIG.llm?.model };
+  SELECTED.vision = { provider: CONFIG.vision?.provider, model: CONFIG.vision?.model };
   for (const k of Object.keys(MODELS_BY_KIND)) {
     if (MODELS_BY_KIND[k].length === 0) MODELS_BY_KIND[k] = dedupe(PRESETS[k] || []);
-    renderModelSelect(k);
   }
+  for (const k of TWO_COL_KINDS) renderTwoCol(k);
+  for (const k of Object.keys(KIND_SELECT)) renderModelSelect(k);
   document.getElementById('model-llm-temp').value = CONFIG.llm?.temperature || 0.7;
   document.getElementById('model-llm-maxtok').value = CONFIG.llm?.max_tokens || 512;
   document.getElementById('model-imggen-size').value = CONFIG.image_gen?.size || '1024x1024';
@@ -778,13 +855,12 @@ async function loadLiveModels(refresh = false) {
   try {
     const live = await fetchJSON('/api/models/live' + (refresh ? '?refresh=true' : ''));
     for (const k of Object.keys(MODELS_BY_KIND)) {
-      const merged = dedupe([...(PRESETS[k] || []), ...((live[k]) || [])]);
-      MODELS_BY_KIND[k] = merged;
-      renderModelSelect(k);
+      MODELS_BY_KIND[k] = dedupe([...(PRESETS[k] || []), ...((live[k]) || [])]);
     }
+    for (const k of TWO_COL_KINDS) renderTwoCol(k);
+    for (const k of Object.keys(KIND_SELECT)) renderModelSelect(k);
     const c = live.counts || {};
     status.textContent = `✓ 已加载：LLM ${c.llm||0} · 视觉 ${c.vision||0} · 文生图 ${c.image_gen||0} · TTS ${c.tts_fallback||0} · STT ${c.stt||0}（10分钟缓存）`;
-    // 兜底 TTS 下拉也用 live 数据刷新
     renderTTSFallback(live.tts_fallback || []);
   } catch (e) {
     status.textContent = '⚠️ 拉取失败（用内置列表）：' + e.message;
@@ -808,7 +884,9 @@ function renderTTSFallback(liveList) {
   if (cur) sel.value = cur;
 }
 async function saveLLM() {
-  const p = JSON.parse(document.getElementById('model-llm').value);
+  const p = SELECTED.llm;
+  if (!p.model) return alert('请先在左/右栏选一个模型');
+  if (!KEYS[p.provider]) return alert(`请先在「API Key」标签填写 ${p.provider} 的 key`);
   CONFIG.llm = {
     ...CONFIG.llm,
     provider: p.provider, model: p.model,
@@ -816,13 +894,15 @@ async function saveLLM() {
     max_tokens: parseInt(document.getElementById('model-llm-maxtok').value),
   };
   await putJSON('/api/config', CONFIG);
-  alert('已保存');
+  alert('已保存：' + p.provider + ' / ' + p.model);
 }
 async function saveVision() {
-  const p = JSON.parse(document.getElementById('model-vision').value);
+  const p = SELECTED.vision;
+  if (!p.model) return alert('请先在左/右栏选一个模型');
+  if (!KEYS[p.provider]) return alert(`请先在「API Key」标签填写 ${p.provider} 的 key`);
   CONFIG.vision = { ...CONFIG.vision, provider: p.provider, model: p.model };
   await putJSON('/api/config', CONFIG);
-  alert('已保存');
+  alert('已保存：' + p.provider + ' / ' + p.model);
 }
 async function saveSTT() {
   const p = JSON.parse(document.getElementById('model-stt').value);
@@ -1046,6 +1126,7 @@ startLogStream();
 // ============ API key ============
 async function loadKeys() {
   const data = await fetchJSON('/api/keys');
+  KEYS = data;   // 给模型两列灰显用
   const box = document.getElementById('key-status');
   box.innerHTML = '';
   for (const [name, ok] of Object.entries(data)) {
@@ -1054,6 +1135,8 @@ async function loadKeys() {
     div.innerHTML = `<label>${name}</label><span class="pill ${ok ? 'ok' : 'err'}">${ok ? '✓ 已配置' : '✗ 未配置'}</span>`;
     box.appendChild(div);
   }
+  // key 状态变了，重渲染两列模型（灰显/恢复）
+  for (const k of TWO_COL_KINDS) renderTwoCol(k);
 }
 async function saveKey() {
   const provider = document.getElementById('key-provider').value;

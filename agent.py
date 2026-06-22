@@ -169,6 +169,12 @@ class BotGUI:
             master.attributes('-fullscreen', True)
         except Exception:
             pass
+        # 隐藏鼠标箭头（双击显示退出按钮时临时恢复）
+        try:
+            master.config(cursor="none")
+        except Exception:
+            pass
+        self._exit_btn_timer = None
         master.bind('<Escape>', self.exit_fullscreen)
         master.bind('<Return>', self.handle_ptt_toggle)
         master.bind('<space>', self.handle_speaking_interrupt)
@@ -347,12 +353,24 @@ class BotGUI:
         self.safe_exit()
 
     def toggle_exit_button(self, event=None):
-        """双击屏幕 → 显示/隐藏退出按钮。"""
+        """双击屏幕 → 显示退出按钮（恢复鼠标），6 秒后自动隐藏。"""
         try:
             if self.exit_button.winfo_ismapped():
-                self.exit_button.place_forget()
+                self._hide_exit_button()
             else:
                 self.exit_button.place(x=10, y=10)
+                self.master.config(cursor="")   # 恢复鼠标好点按钮
+                if self._exit_btn_timer:
+                    self.master.after_cancel(self._exit_btn_timer)
+                self._exit_btn_timer = self.master.after(6000, self._hide_exit_button)
+        except tk.TclError:
+            pass
+
+    def _hide_exit_button(self):
+        try:
+            self.exit_button.place_forget()
+            self.master.config(cursor="none")
+            self._exit_btn_timer = None
         except tk.TclError:
             pass
 
