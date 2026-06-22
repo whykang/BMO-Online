@@ -157,7 +157,7 @@ class SetPasswordReq(BaseModel):
 
 
 @app.post("/api/password")
-async def set_password(req: SetPasswordReq, _: dict = None):
+async def set_password(req: SetPasswordReq):
     auth = load_auth() or {}
     if auth.get("password_hash"):
         if not req.old_password or hash_password(req.old_password) != auth["password_hash"]:
