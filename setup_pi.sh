@@ -32,20 +32,27 @@ pip install --force-reinstall --no-cache-dir sounddevice
 pip install -r requirements.txt
 
 # 4. 下载默认唤醒词
+# 模型从 GitHub Releases 下载（仓库 main 分支不再保留 models 子目录）
 echo -e "${YELLOW}[4/4] 下载默认唤醒词模型...${NC}"
 mkdir -p wakewords
-if [ ! -f wakewords/hey_jarvis.onnx ]; then
-    curl -L -o wakewords/hey_jarvis.onnx \
-        https://github.com/dscripka/openWakeWord/raw/main/openwakeword/resources/models/hey_jarvis_v0.1.onnx
-fi
-if [ ! -f wakewords/alexa.onnx ]; then
-    curl -L -o wakewords/alexa.onnx \
-        https://github.com/dscripka/openWakeWord/raw/main/openwakeword/resources/models/alexa_v0.1.onnx
-fi
-if [ ! -f wakewords/hey_mycroft.onnx ]; then
-    curl -L -o wakewords/hey_mycroft.onnx \
-        https://github.com/dscripka/openWakeWord/raw/main/openwakeword/resources/models/hey_mycroft_v0.1.onnx
-fi
+OWW_BASE="https://github.com/dscripka/openWakeWord/releases/download/v0.5.1"
+
+download_if_missing() {
+    local out="$1"
+    local url="$2"
+    if [ ! -f "$out" ]; then
+        echo "  ↓ $out"
+        if ! curl -fL --retry 2 -o "$out" "$url"; then
+            echo -e "${RED}  下载失败: $url${NC}"
+            rm -f "$out"
+        fi
+    fi
+}
+
+download_if_missing wakewords/hey_jarvis.onnx   "$OWW_BASE/hey_jarvis_v0.1.onnx"
+download_if_missing wakewords/alexa.onnx        "$OWW_BASE/alexa_v0.1.onnx"
+download_if_missing wakewords/hey_mycroft.onnx  "$OWW_BASE/hey_mycroft_v0.1.onnx"
+download_if_missing wakewords/hey_rhasspy.onnx  "$OWW_BASE/hey_rhasspy_v0.1.onnx"
 
 # 5. .env 提醒
 if [ ! -f .env ]; then
