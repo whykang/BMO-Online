@@ -1069,6 +1069,25 @@ class BotGUI:
             text = cmd.get("text") or ""
             if text:
                 self.speak_text(text)
+        elif action == "restart_webui":
+            self._restart_webui()
+
+    def _restart_webui(self):
+        """Kill 当前 webui 子进程并重新 spawn（读最新 config）。"""
+        global WEBUI_PROC
+        try:
+            if WEBUI_PROC and WEBUI_PROC.poll() is None:
+                log("[WEBUI] 重启：终止旧进程")
+                WEBUI_PROC.terminate()
+                try:
+                    WEBUI_PROC.wait(timeout=3)
+                except Exception:
+                    WEBUI_PROC.kill()
+        except Exception as e:
+            log(f"[WEBUI] 终止失败: {e}")
+        # 等 1 秒让端口释放
+        time.sleep(1.0)
+        WEBUI_PROC = maybe_spawn_webui()
 
     def _webui_capture_flow(self):
         img = self.capture_image()
@@ -1091,6 +1110,9 @@ class BotGUI:
         self.master.after(1000, self.update_state_file)
 
 
+WEBUI_PROC = None
+
+
 def maybe_spawn_webui():
     """如果 config 里开了，就 spawn webui 子进程。返回 Popen 句柄。"""
     try:
@@ -1101,7 +1123,7 @@ def maybe_spawn_webui():
         return None
     try:
         env = os.environ.copy()
-        port = str(cfg.get("webui_port", 8080))
+        port = str(cfg.get("webui_port", 8087))
         env["WEBUI_PORT"] = port
         # 把 webui 的 stdout/stderr 也写进日志，方便排错
         webui_log = open(os.path.join(LOG_DIR, "webui.log"), "ab")
@@ -1124,16 +1146,17 @@ if __name__ == "__main__":
         print("❌ 缺少 SILICONFLOW_API_KEY，请检查 .env 文件", flush=True)
         sys.exit(1)
 
-    webui_proc = maybe_spawn_webui()
+    WEBUI_PROC = maybe_spawn_webui()
 
     def _kill_webui():
-        if webui_proc and webui_proc.poll() is None:
+        global WEBUI_PROC
+        if WEBUI_PROC and WEBUI_PROC.poll() is None:
             try:
-                webui_proc.terminate()
-                webui_proc.wait(timeout=3)
+                WEBUI_PROC.terminate()
+                WEBUI_PROC.wait(timeout=3)
             except Exception:
                 try:
-                    webui_proc.kill()
+                    WEBUI_PROC.kill()
                 except Exception:
                     pass
     atexit.register(_kill_webui)

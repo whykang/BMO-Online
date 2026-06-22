@@ -10,7 +10,7 @@
 - **画图能力**：说"画一只戴帽子的猫" → Kolors 生成 → 屏幕展示
 - **网络搜索**：DuckDuckGo
 - **唤醒词** + **物理按钮 PTT** 两种触发，并存
-- **网页控制台**（http://树莓派IP:8080）：在线切换音色 / 模型 / 性格 / 唤醒词，看日志、看历史、看画廊、当遥控器
+- **网页控制台**（http://树莓派IP:8087）：在线切换音色 / 模型 / 性格 / 唤醒词，看日志、看历史、看画廊、当遥控器
 - **保留 BMO 标志性脸部动画**
 
 ## 📦 硬件
@@ -83,9 +83,9 @@ SILICONFLOW_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 **浏览器打开**：
 ```
-http://bmo.local:8080
+http://bmo.local:8087
 ```
-或 `http://树莓派IP:8080`
+或 `http://树莓派IP:8087`
 
 ## 🎮 使用
 
@@ -199,7 +199,7 @@ REMOTE=pi@192.168.1.50 ./sync.sh
 | 麦克风没反应 | `python -c "import sounddevice as sd; print(sd.query_devices())"` 看设备列表，把名字填进 `config.json` 的 `input_device` |
 | TTS 没声音 | 检查 mpg123 是否装好：`which mpg123`；测试：`echo "hi" \| espeak` |
 | 唤醒词不响应 | 网页里调低 threshold；检查录音音量 |
-| Web 控制台连不上 | 检查端口（`sudo ss -tlnp \| grep 8080`）、防火墙 |
+| Web 控制台连不上 | 检查端口（`sudo ss -tlnp \| grep 8087`）、防火墙 |
 | ALSA 错误一堆 | 正常的，无影响（树莓派音频驱动的小毛病） |
 
 ## 📚 项目结构

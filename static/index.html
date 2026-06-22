@@ -138,6 +138,13 @@
       <input type="checkbox" id="webui-autostart" onchange="toggleWebuiAutostart()">
       <span class="help">勾上后，跑 <code>./start_agent.sh</code> 时 webui 也会自动启动</span>
     </div>
+    <div class="row">
+      <label>Web 控制台端口：</label>
+      <input type="number" id="webui-port" min="1024" max="65535" style="width: 100px;">
+      <button class="btn" onclick="saveWebuiPort()">💾 保存</button>
+      <button class="btn secondary" onclick="restartWebui()">↻ 立即重启 webui</button>
+    </div>
+    <div class="help" style="margin-left: 100px;">改完点保存 → 点"立即重启 webui"，几秒后到新端口刷新页面。</div>
   </div>
 </section>
 
@@ -544,10 +551,34 @@ async function toggleAutostart() {
 }
 function fillWebuiAutostart() {
   document.getElementById('webui-autostart').checked = !!CONFIG.webui_auto_start;
+  document.getElementById('webui-port').value = CONFIG.webui_port || 8087;
 }
 async function toggleWebuiAutostart() {
   CONFIG.webui_auto_start = document.getElementById('webui-autostart').checked;
   await putJSON('/api/config', CONFIG);
+}
+async function saveWebuiPort() {
+  const port = parseInt(document.getElementById('webui-port').value);
+  if (!port || port < 1024 || port > 65535) return alert('端口范围 1024~65535');
+  try {
+    const r = await putJSON('/api/webui/port', {port});
+    CONFIG.webui_port = port;
+    alert(r.note || '已保存');
+  } catch (e) {
+    alert('保存失败：' + e.message);
+  }
+}
+async function restartWebui() {
+  if (!confirm('确认重启 webui？连接会短暂断开，几秒后请刷新页面')) return;
+  try {
+    const r = await postJSON('/api/webui/restart');
+    const newPort = CONFIG.webui_port || 8087;
+    const newUrl = `${location.protocol}//${location.hostname}:${newPort}/`;
+    alert(`已通知 agent 重启 webui。\n几秒后访问：\n${newUrl}`);
+    // 不主动跳转，让用户自己刷新（防止端口还没起来）
+  } catch (e) {
+    alert('重启失败：' + e.message);
+  }
 }
 initAll();
 

@@ -1,6 +1,6 @@
 # =========================================================================
 #  BMO Web 控制台 (FastAPI)
-#  浏览器访问: http://树莓派IP:8080
+#  浏览器访问: http://树莓派IP:8087
 # =========================================================================
 
 import os
@@ -497,6 +497,33 @@ async def update_key(req: UpdateKeyReq):
 
 
 # =========================================================================
+# 路由：Web 控制台自身管理（端口、重启）
+# =========================================================================
+
+class PortReq(BaseModel):
+    port: int
+
+
+@app.put("/api/webui/port")
+async def set_webui_port(req: PortReq):
+    if not (1 <= req.port <= 65535):
+        raise HTTPException(400, "端口范围 1~65535")
+    if req.port in (22, 80, 443):
+        raise HTTPException(400, "请勿使用 22/80/443 等系统端口")
+    cfg = load_config()
+    cfg["webui_port"] = req.port
+    save_config(cfg)
+    return {"ok": True, "new_port": req.port, "note": "下次启动 webui 时生效。点'重启 webui'立即生效"}
+
+
+@app.post("/api/webui/restart")
+async def restart_webui():
+    """通过 agent 重启 webui（agent 关闭再 spawn 一次）。"""
+    queue_command({"action": "restart_webui"})
+    return {"ok": True, "note": "已通知 agent 重启 webui，几秒后到新端口刷新页面"}
+
+
+# =========================================================================
 # 路由：开机自启（Pi 桌面 autostart）
 # =========================================================================
 
@@ -561,8 +588,24 @@ async def get_cost():
 # 入口
 # =========================================================================
 
+def resolve_port() -> int:
+    """端口优先级：config.json > 环境变量 > 默认 8087。"""
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        p = cfg.get("webui_port")
+        if isinstance(p, int) and 1 <= p <= 65535:
+            return p
+    except Exception:
+        pass
+    try:
+        return int(os.getenv("WEBUI_PORT", "8087"))
+    except Exception:
+        return 8087
+
+
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("WEBUI_PORT", "8080"))
+    port = resolve_port()
     print(f"--- BMO Web 控制台启动: http://0.0.0.0:{port} ---", flush=True)
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
