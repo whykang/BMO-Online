@@ -1034,6 +1034,7 @@ class BotGUI:
         clean = text.strip()
         if not clean:
             return
+        log(f"[说] {clean}")
         provider = self.config["tts"].get("provider", "edge")
         try:
             if provider == "edge":
