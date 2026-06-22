@@ -791,6 +791,13 @@ function dedupe(list) {
   return out;
 }
 
+function mergePresetAndLive(kind, liveList) {
+  const live = liveList || [];
+  const liveProviders = new Set(live.map(p => p.provider).filter(Boolean));
+  const presets = (PRESETS[kind] || []).filter(p => !liveProviders.has(p.provider));
+  return dedupe([...live, ...presets]);
+}
+
 function priceText(p) {
   const pr = p.pricing || {};
   const items = [];
@@ -946,7 +953,7 @@ async function loadLiveModels(refresh = false) {
   try {
     const live = await fetchJSON('/api/models/live' + (refresh ? '?refresh=true' : ''));
     for (const k of Object.keys(MODELS_BY_KIND)) {
-      MODELS_BY_KIND[k] = dedupe([...(PRESETS[k] || []), ...((live[k]) || [])]);
+      MODELS_BY_KIND[k] = mergePresetAndLive(k, live[k]);
     }
     for (const k of TWO_COL_KINDS) renderTwoCol(k);
     for (const k of Object.keys(KIND_SELECT)) renderModelSelect(k);

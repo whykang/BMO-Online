@@ -1050,7 +1050,12 @@ class BotGUI:
         """看图：Vision 描述 → 干净的 LLM 转述（不带工具，绝不出 JSON）。"""
         self.set_state(BotStates.THINKING, "看看是什么...", overlay_path=img_path)
         try:
+            old_model = self.config.get("vision", {}).get("model")
             desc = self.vision.describe(img_path, text or "请描述你看到的画面。")
+            if self.vision.model and self.vision.model != old_model:
+                self.config.setdefault("vision", {})["model"] = self.vision.model
+                save_config(self.config)
+                log(f"[VISION] 已保存可用模型: {self.vision.model}")
             log(f"[VISION] {desc}")
         except Exception as e:
             log(f"[VISION ERROR] {e}")

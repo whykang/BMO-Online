@@ -466,9 +466,8 @@ PRESETS = {
         {"provider": "openrouter", "model": "openai/gpt-4o-mini", "desc": "GPT-4o mini（OpenRouter）"},
     ],
     "vision": [
-        {"provider": "siliconflow", "model": "Qwen/Qwen2.5-VL-7B-Instruct", "desc": "Qwen2.5-VL 7B"},
-        {"provider": "siliconflow", "model": "Qwen/Qwen2.5-VL-32B-Instruct", "desc": "Qwen2.5-VL 32B"},
-        {"provider": "openrouter", "model": "openai/gpt-4o-mini", "desc": "GPT-4o mini"},
+        {"provider": "openrouter", "model": "openai/gpt-4o-mini", "desc": "GPT-4o mini（OpenRouter）"},
+        {"provider": "openrouter", "model": "google/gemini-2.5-flash", "desc": "Gemini 2.5 Flash（OpenRouter）"},
     ],
     "stt": [
         {"provider": "siliconflow", "model": "FunAudioLLM/SenseVoiceSmall", "desc": "SenseVoice（多语种、便宜）"},
