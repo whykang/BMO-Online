@@ -32,9 +32,8 @@ echo -e "${YELLOW}[3/4] 装 Python 包...${NC}"
 pip install --force-reinstall --no-cache-dir sounddevice
 pip install -r requirements.txt
 
-# 4. 下载默认唤醒词
-# 模型从 GitHub Releases 下载（仓库 main 分支不再保留 models 子目录）
-echo -e "${YELLOW}[4/4] 下载默认唤醒词模型...${NC}"
+# 4. 唤醒词模型（已随仓库自带，无需下载；缺失时才从外部下载兜底）
+echo -e "${YELLOW}[4/4] 检查唤醒词模型...${NC}"
 mkdir -p wakewords
 OWW_BASE="https://github.com/dscripka/openWakeWord/releases/download/v0.5.1"
 
@@ -42,7 +41,7 @@ download_if_missing() {
     local out="$1"
     local url="$2"
     if [ ! -f "$out" ]; then
-        echo "  ↓ $out"
+        echo -e "${YELLOW}  仓库缺 $out，尝试下载兜底...${NC}"
         if ! curl -fL --retry 2 -o "$out" "$url"; then
             echo -e "${RED}  下载失败: $url${NC}"
             rm -f "$out"
@@ -50,26 +49,28 @@ download_if_missing() {
     fi
 }
 
+# OpenWakeWord（英文）模型 —— 正常情况下仓库已自带
 download_if_missing wakewords/hey_jarvis.onnx   "$OWW_BASE/hey_jarvis_v0.1.onnx"
 download_if_missing wakewords/alexa.onnx        "$OWW_BASE/alexa_v0.1.onnx"
 download_if_missing wakewords/hey_mycroft.onnx  "$OWW_BASE/hey_mycroft_v0.1.onnx"
 download_if_missing wakewords/hey_rhasspy.onnx  "$OWW_BASE/hey_rhasspy_v0.1.onnx"
 
-# 5. Sherpa-ONNX 中文 KWS 模型（默认后端）
+# Sherpa-ONNX 中文 KWS 模型 —— 正常情况下仓库已自带（int8 精简版）
 SHERPA_DIR="wakewords/sherpa-kws-zh"
-SHERPA_TARBALL="sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01.tar.bz2"
-SHERPA_INNER="sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
-SHERPA_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/$SHERPA_TARBALL"
-
-if [ ! -d "$SHERPA_DIR" ]; then
-    echo -e "${YELLOW}下载 Sherpa-ONNX 中文 KWS 模型（约 13MB）...${NC}"
+if [ ! -f "$SHERPA_DIR/tokens.txt" ]; then
+    echo -e "${YELLOW}  仓库缺 Sherpa 中文模型，尝试下载兜底...${NC}"
+    SHERPA_TARBALL="sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01.tar.bz2"
+    SHERPA_INNER="sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
+    SHERPA_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/$SHERPA_TARBALL"
     if curl -fL --retry 2 -o "wakewords/$SHERPA_TARBALL" "$SHERPA_URL"; then
         ( cd wakewords && tar xjf "$SHERPA_TARBALL" && mv "$SHERPA_INNER" sherpa-kws-zh && rm "$SHERPA_TARBALL" )
-        echo -e "${GREEN}  ✓ Sherpa KWS 模型已就绪：$SHERPA_DIR${NC}"
+        echo -e "${GREEN}  ✓ Sherpa KWS 模型已就绪${NC}"
     else
         echo -e "${RED}  ✗ Sherpa KWS 模型下载失败，中文唤醒词将不可用${NC}"
         rm -f "wakewords/$SHERPA_TARBALL"
     fi
+else
+    echo -e "${GREEN}  ✓ 唤醒词模型已就绪（仓库自带）${NC}"
 fi
 
 # 5. 创建 config.json（不在 git 里，从模板复制；保留用户已有的）
