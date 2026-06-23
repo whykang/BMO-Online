@@ -743,6 +743,14 @@ async def list_keys():
     }
 
 
+KEY_ENV_MAP = {
+    "siliconflow": "SILICONFLOW_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "volc_apikey": "VOLC_TTS_API_KEY",
+}
+
+
 class UpdateKeyReq(BaseModel):
     provider: str
     key: str
@@ -750,13 +758,7 @@ class UpdateKeyReq(BaseModel):
 
 @app.put("/api/keys")
 async def update_key(req: UpdateKeyReq):
-    env_map = {
-        "siliconflow": "SILICONFLOW_API_KEY",
-        "openrouter": "OPENROUTER_API_KEY",
-        "openai": "OPENAI_API_KEY",
-        "volc_apikey": "VOLC_TTS_API_KEY",
-    }
-    env_name = env_map.get(req.provider)
+    env_name = KEY_ENV_MAP.get(req.provider)
     if not env_name:
         raise HTTPException(400, f"未知 provider: {req.provider}")
     # 改 .env 文件
@@ -778,6 +780,28 @@ async def update_key(req: UpdateKeyReq):
     os.environ[env_name] = req.key
     queue_command({"action": "reload_config"})
     return {"ok": True, "note": "已写入 .env，agent 也已重载"}
+
+
+@app.delete("/api/keys/{provider}")
+async def delete_key(provider: str):
+    env_name = KEY_ENV_MAP.get(provider)
+    if not env_name:
+        raise HTTPException(400, f"未知 provider: {provider}")
+    lines = []
+    if os.path.exists(ENV_FILE):
+        with open(ENV_FILE, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    kept = []
+    for ln in lines:
+        stripped = ln.strip()
+        if stripped.startswith(f"{env_name}=") or stripped.startswith(f"export {env_name}="):
+            continue
+        kept.append(ln)
+    with open(ENV_FILE, "w", encoding="utf-8") as f:
+        f.writelines(kept)
+    os.environ.pop(env_name, None)
+    queue_command({"action": "reload_config"})
+    return {"ok": True, "note": "已从 .env 删除，agent 也已重载"}
 
 
 # =========================================================================

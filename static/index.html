@@ -198,12 +198,13 @@
     <h2>TTS 引擎</h2>
     <div class="row">
       <label>引擎：</label>
-      <select id="tts-provider" onchange="updateTTSProviderUI()">
+      <select id="tts-provider" onchange="handleTTSProviderChange()" onclick="showTTSProviderHelp()">
         <option value="edge">Edge-TTS（云端免费，音色多）</option>
         <option value="doubao">豆包 TTS（火山引擎，需填 .env 凭证）</option>
         <option value="piper">Piper 本地（离线免费，需下模型）</option>
         <option value="siliconflow">硅基流动 CosyVoice（云端）</option>
       </select>
+      <span class="help" id="tts-provider-hint"></span>
     </div>
     <div class="row hide" id="tts-doubao-settings">
       <label>豆包音色 ID：</label>
@@ -687,11 +688,11 @@ async function loadPresets() {
 async function initAll() {
   await loadConfig();
   await loadPresets();
+  await loadKeys();
   fillVoiceTab();
   fillModels();
   fillPrompt();
   fillWake();
-  loadKeys();
   loadPwState();
   loadAutostart();
   fillWebuiAutostart();
@@ -804,11 +805,56 @@ async function setVolume() {
     document.getElementById('volume-hint').textContent = '设置失败：' + e.message;
   }
 }
+function ttsProviderKey(provider) {
+  if (provider === 'doubao') return 'volc_apikey';
+  if (provider === 'siliconflow') return 'siliconflow';
+  return null;
+}
+function ttsProviderKeyName(provider) {
+  if (provider === 'doubao') return '豆包TTS API Key';
+  if (provider === 'siliconflow') return '硅基流动 API Key';
+  return '';
+}
+function canUseTTSProvider(provider) {
+  const key = ttsProviderKey(provider);
+  return !key || !!KEYS[key];
+}
 function updateTTSProviderUI() {
+  const sel = document.getElementById('tts-provider');
+  if (!sel) return;
+  for (const opt of sel.options) {
+    const allowed = canUseTTSProvider(opt.value);
+    opt.disabled = !allowed;
+    opt.title = allowed ? '' : `请先在 API Key 中填写${ttsProviderKeyName(opt.value)}`;
+  }
   const provider = document.getElementById('tts-provider').value;
   document.getElementById('tts-doubao-settings').classList.toggle('hide', provider !== 'doubao');
   document.getElementById('tts-edge-settings').classList.toggle('hide', provider !== 'edge');
+  const hint = document.getElementById('tts-provider-hint');
+  if (hint) {
+    hint.textContent = canUseTTSProvider(provider)
+      ? ''
+      : `请先在 API Key 中填写${ttsProviderKeyName(provider)}`;
+  }
   if (provider === 'edge') loadVoices();
+}
+function showTTSProviderHelp() {
+  const provider = document.getElementById('tts-provider').value;
+  if (!canUseTTSProvider(provider)) return updateTTSProviderUI();
+  const missing = [];
+  if (!KEYS.volc_apikey) missing.push('豆包TTS API Key');
+  if (!KEYS.siliconflow) missing.push('硅基流动 API Key');
+  const hint = document.getElementById('tts-provider-hint');
+  if (hint) hint.textContent = missing.length ? `${missing.join('、')} 未配置，相关选项不可选` : '';
+}
+function handleTTSProviderChange() {
+  const sel = document.getElementById('tts-provider');
+  const provider = sel.value;
+  if (!canUseTTSProvider(provider)) {
+    alert(`请先在「API Key」中填写${ttsProviderKeyName(provider)}`);
+    sel.value = CONFIG.tts?.provider || 'edge';
+  }
+  updateTTSProviderUI();
 }
 function fillVoiceTab() {
   document.getElementById('tts-provider').value = CONFIG.tts?.provider || 'edge';
@@ -834,6 +880,10 @@ function fillVoiceTab() {
 async function saveTTSEngine() {
   CONFIG.tts = CONFIG.tts || {};
   const provider = document.getElementById('tts-provider').value;
+  if (!canUseTTSProvider(provider)) {
+    showTab('keys');
+    return alert(`请先在「API Key」中填写${ttsProviderKeyName(provider)}`);
+  }
   CONFIG.tts.provider = provider;
   // 豆包音色 ID
   const dvt = document.getElementById('doubao-voice-type').value.trim();
@@ -890,7 +940,7 @@ const TWO_COL_KINDS = ['llm', 'vision', 'image_gen'];
 const PROVIDERS_2COL = ['siliconflow', 'openrouter'];
 const KIND_CONFIG = { llm: 'llm', vision: 'vision', stt: 'stt', image_gen: 'image_gen' };
 const KIND_MAX_SHOWN = 1000;
-let KEYS = { siliconflow: false, openrouter: false, openai: false };
+let KEYS = { siliconflow: false, openrouter: false, openai: false, volc_apikey: false };
 const SELECTED = { llm: {}, vision: {}, image_gen: {} };   // 当前选中 {provider, model}
 
 function dedupe(list) {
@@ -1340,14 +1390,33 @@ async function loadKeys() {
   KEYS = data;   // 给模型两列灰显用
   const box = document.getElementById('key-status');
   box.innerHTML = '';
+  const labels = {
+    siliconflow: '硅基流动',
+    openrouter: 'OpenRouter',
+    openai: 'OpenAI',
+    volc_apikey: '豆包TTS API Key',
+  };
   for (const [name, ok] of Object.entries(data)) {
     const div = document.createElement('div');
     div.className = 'row';
-    div.innerHTML = `<label>${name}</label><span class="pill ${ok ? 'ok' : 'err'}">${ok ? '已配置' : '未配置'}</span>`;
+    const label = document.createElement('label');
+    label.textContent = labels[name] || name;
+    const pill = document.createElement('span');
+    pill.className = 'pill ' + (ok ? 'ok' : 'err');
+    pill.textContent = ok ? '已配置' : '未配置';
+    div.append(label, pill);
+    if (ok) {
+      const btn = document.createElement('button');
+      btn.className = 'btn danger';
+      btn.textContent = '删除';
+      btn.onclick = () => deleteKey(name);
+      div.appendChild(btn);
+    }
     box.appendChild(div);
   }
   // key 状态变了，重渲染双列模型（灰显/恢复）
   for (const k of TWO_COL_KINDS) renderTwoCol(k);
+  updateTTSProviderUI();
 }
 async function saveKey() {
   const provider = document.getElementById('key-provider').value;
@@ -1356,6 +1425,12 @@ async function saveKey() {
   await putJSON('/api/keys', {provider, key});
   document.getElementById('key-value').value = '';
   alert('已保存');
+  await loadKeys();
+}
+async function deleteKey(provider) {
+  if (!confirm('确定删除这个 API Key？')) return;
+  await deleteJSON(`/api/keys/${encodeURIComponent(provider)}`);
+  alert('已删除');
   await loadKeys();
 }
 
