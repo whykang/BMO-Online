@@ -273,6 +273,29 @@
       <button class="btn" onclick="saveTTSFallback()">保存</button>
     </div>
   </div>
+
+  <div class="panel">
+    <h2>状态语音提示</h2>
+    <div class="row">
+      <label><input type="checkbox" id="ss-enabled"> 用语音读出状态（开启后不再播放自带音效）</label>
+    </div>
+    <div class="row">
+      <label>开机问候：</label>
+      <input type="text" id="ss-greeting" placeholder="你好，我叫 BMO" style="flex:1; min-width:300px;">
+    </div>
+    <div class="row">
+      <label>唤醒应答：</label>
+      <input type="text" id="ss-ack" placeholder="我在（留空则不出声）" style="flex:1; min-width:300px;">
+    </div>
+    <div class="row">
+      <label>出错提示：</label>
+      <input type="text" id="ss-error" placeholder="哎呀，我出错了（留空则不出声）" style="flex:1; min-width:300px;">
+    </div>
+    <div class="row">
+      <button class="btn" onclick="saveStatusSpeech()">保存</button>
+      <span class="help">这些话用当前 TTS 引擎/音色读出。留空的状态保持安静。</span>
+    </div>
+  </div>
 </section>
 
 <!-- 模型 -->
@@ -816,6 +839,11 @@ async function setVolume() {
 function fillVoiceTab() {
   document.getElementById('tts-provider').value = CONFIG.tts?.provider || 'edge';
   document.getElementById('doubao-voice-type').value = CONFIG.tts?.doubao_voice_type || '';
+  const ss = CONFIG.status_speech || {};
+  document.getElementById('ss-enabled').checked = !!ss.enabled;
+  document.getElementById('ss-greeting').value = ss.greeting || '';
+  document.getElementById('ss-ack').value = ss.ack || '';
+  document.getElementById('ss-error').value = ss.error || '';
   loadAudioOutputs();
   loadVolume();
   document.getElementById('voice-rate').value = CONFIG.tts?.rate || '+0%';
@@ -844,6 +872,16 @@ async function saveTTSEngine() {
   CONFIG.audio_output_device = document.getElementById('audio-output').value;
   await putJSON('/api/config', CONFIG);
   alert('已保存。引擎=' + CONFIG.tts.provider + '，输出=' + (CONFIG.audio_output_device || '系统默认'));
+}
+async function saveStatusSpeech() {
+  CONFIG.status_speech = {
+    enabled: document.getElementById('ss-enabled').checked,
+    greeting: document.getElementById('ss-greeting').value.trim(),
+    ack: document.getElementById('ss-ack').value.trim(),
+    error: document.getElementById('ss-error').value.trim(),
+  };
+  await putJSON('/api/config', CONFIG);
+  alert('已保存。' + (CONFIG.status_speech.enabled ? '状态改用语音播报（音效已关）' : '已关闭语音播报，用回音效'));
 }
 async function testVoice() {
   const body = {

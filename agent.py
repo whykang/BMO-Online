@@ -596,7 +596,7 @@ class BotGUI:
         if state != BotStates.THINKING:
             self.thinking_sound_active.clear()
         if state == BotStates.ERROR:
-            threading.Thread(target=self._play_cue, args=("error_sounds",),
+            threading.Thread(target=self._play_status_cue, args=("error", "error_sounds"),
                              kwargs={"wait": False}, daemon=True).start()
         def _update():
             if msg:
@@ -648,8 +648,8 @@ class BotGUI:
             self.tts_active.set()
             threading.Thread(target=self._tts_worker, daemon=True).start()
             self.set_state(BotStates.IDLE, "准备好啦")
-            # 开机问候音效
-            threading.Thread(target=self._play_cue, args=("greeting_sounds",),
+            # 开机问候（状态语音开启时读自定义文字，否则放音效）
+            threading.Thread(target=self._play_status_cue, args=("greeting", "greeting_sounds"),
                              kwargs={"wait": False}, daemon=True).start()
 
             while not self.exiting:
@@ -660,8 +660,8 @@ class BotGUI:
                     self.interrupted.clear()
                     self.set_state(BotStates.IDLE, "重置")
                     continue
-                # 被唤醒/触发 → 确认音"我听到了"（等播完再录，避免录进音效）
-                self._play_cue("ack_sounds", wait=True)
+                # 被唤醒/触发 → 确认"我听到了"（等播完再录，避免录进自己的提示音）
+                self._play_status_cue("ack", "ack_sounds", wait=True)
 
                 # 每轮都重新读 config，网页改了立即生效
                 conv_cfg = self.config.get("conversation", {})
@@ -1544,7 +1544,22 @@ class BotGUI:
     def _play_cue(self, subdir, wait=True):
         self._play_sound_file(self._get_random_sound(subdir), wait=wait)
 
+    def _play_status_cue(self, kind, subdir, wait=True):
+        """状态提示。开启「状态语音」后：用 TTS 读出后台自定义的文字（不再放自带音效）；
+        文字留空则该状态静默。未开启则播放 sounds/<subdir> 里的 .wav。
+        kind ∈ {greeting, ack, error}。"""
+        ss = self.config.get("status_speech", {})
+        if ss.get("enabled"):
+            text = (ss.get(kind) or "").strip()
+            if text:
+                self.speak(text)   # 同步播放（greeting/error 由调用方放到线程里）
+            return
+        self._play_cue(subdir, wait=wait)
+
     def _run_thinking_sound_loop(self):
+        # 状态语音模式下不放思考哼唱（避免和回复语音抢同一个音频设备）
+        if self.config.get("status_speech", {}).get("enabled"):
+            return
         time.sleep(0.4)
         while self.thinking_sound_active.is_set() and not self.exiting:
             snd = self._get_random_sound("thinking_sounds")
