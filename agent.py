@@ -799,7 +799,10 @@ class BotGUI:
 
     def _listen_loop(self, args, in_chunk, target_chunk, use_resample, refresh_secs=180):
         ww_cfg = self.config.get("wake_word", {})
-        oww_threshold = ww_cfg.get("legacy_threshold", 0.5)
+        oww_threshold = ww_cfg.get("legacy_threshold", 0.3)
+        # 调试：接近阈值时把分数打到日志，方便调灵敏度（legacy_debug=false 可关）
+        oww_debug = ww_cfg.get("legacy_debug", True)
+        oww_near = max(0.2, oww_threshold * 0.5)
         loop_start = time.time()
         last_audio_time = time.time()
         audio_timeout = float(ww_cfg.get("audio_callback_timeout_seconds", 10.0))
@@ -868,15 +871,19 @@ class BotGUI:
                     continue
 
                 # ---- OpenWakeWord 后端 ----
-                vol = np.max(np.abs(audio))
-                if vol > 200:
-                    self.oww_model.predict(audio)
-                    for k in self.oww_model.prediction_buffer.keys():
-                        score = list(self.oww_model.prediction_buffer[k])[-1]
-                        if score > oww_threshold:
-                            log(f"[WAKE] 触发 '{k}' score={score:.2f}")
-                            self.oww_model.reset()
-                            return "WAKE"
+                # 必须连续喂帧：OWW 靠流式上下文打分，按音量门槛跳帧会打断上下文、严重漏检。
+                self.oww_model.predict(audio)
+                best_k, best_score = None, 0.0
+                for k in self.oww_model.prediction_buffer.keys():
+                    score = list(self.oww_model.prediction_buffer[k])[-1]
+                    if score > best_score:
+                        best_k, best_score = k, score
+                if best_score >= oww_threshold:
+                    log(f"[WAKE] 触发 '{best_k}' score={best_score:.2f}")
+                    self.oww_model.reset()
+                    return "WAKE"
+                if oww_debug and best_score >= oww_near:
+                    log(f"[WAKE?] '{best_k}' score={best_score:.2f}（阈值 {oww_threshold:.2f}，没到）")
 
     # -------------------------------------------------------------------
     # 录音
