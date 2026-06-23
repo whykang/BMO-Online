@@ -213,7 +213,6 @@ class BotGUI:
         self.ptt_event = threading.Event()
         self.recording_active = threading.Event()
         self.interrupted = threading.Event()
-        self.thinking_sound_active = threading.Event()
 
         # TTS 队列
         self.tts_queue = []
@@ -367,7 +366,6 @@ class BotGUI:
         except Exception:
             pass
         self.recording_active.clear()
-        self.thinking_sound_active.clear()
         self.tts_active.clear()
         self.save_chat_history()
         try:
@@ -538,7 +536,6 @@ class BotGUI:
         if self.current_state in (BotStates.SPEAKING, BotStates.THINKING):
             log("[打断] 用户按了空格")
             self.interrupted.set()
-            self.thinking_sound_active.clear()
             with self.tts_queue_lock:
                 self.tts_queue.clear()
             if self.current_tts_proc:
@@ -592,12 +589,9 @@ class BotGUI:
             pass
 
     def set_state(self, state, msg="", overlay_path=None):
-        # 离开思考状态 → 停思考音效
-        if state != BotStates.THINKING:
-            self.thinking_sound_active.clear()
         if state == BotStates.ERROR:
-            threading.Thread(target=self._play_status_cue, args=("error", "error_sounds"),
-                             kwargs={"wait": False}, daemon=True).start()
+            threading.Thread(target=self._play_status_cue, args=("error",),
+                             daemon=True).start()
         def _update():
             if msg:
                 log(f"[STATE] {state.upper()}: {msg}")
@@ -648,9 +642,9 @@ class BotGUI:
             self.tts_active.set()
             threading.Thread(target=self._tts_worker, daemon=True).start()
             self.set_state(BotStates.IDLE, "准备好啦")
-            # 开机问候（状态语音开启时读自定义文字，否则放音效）
-            threading.Thread(target=self._play_status_cue, args=("greeting", "greeting_sounds"),
-                             kwargs={"wait": False}, daemon=True).start()
+            # 开机问候：读出自定义状态词（默认"你好，我叫 BMO"）
+            threading.Thread(target=self._play_status_cue, args=("greeting",),
+                             daemon=True).start()
 
             while not self.exiting:
                 trigger = self.detect_wake_word_or_ptt()
@@ -660,8 +654,8 @@ class BotGUI:
                     self.interrupted.clear()
                     self.set_state(BotStates.IDLE, "重置")
                     continue
-                # 被唤醒/触发 → 确认"我听到了"（等播完再录，避免录进自己的提示音）
-                self._play_status_cue("ack", "ack_sounds", wait=True)
+                # 被唤醒/触发 → 读出应答词（等播完再录，避免录进自己的提示音）
+                self._play_status_cue("ack")
 
                 # 每轮都重新读 config，网页改了立即生效
                 conv_cfg = self.config.get("conversation", {})
@@ -1262,9 +1256,8 @@ class BotGUI:
             return
 
         self.set_state(BotStates.THINKING, "思考中...")
-        # 思考音效（循环哼唱，开始说话时停）
-        self.thinking_sound_active.set()
-        threading.Thread(target=self._run_thinking_sound_loop, daemon=True).start()
+        # 思考状态词（默认"让我想想"）：排进 TTS 队列，在回复语句之前先读
+        self._queue_thinking_cue()
         messages = self.permanent_memory + self.session_memory + [
             {"role": "user", "content": text}
         ]
@@ -1283,13 +1276,11 @@ class BotGUI:
                 # 工具调用检测：回复里只要出现 { 就当作工具调用，立刻停止朗读
                 if allow_tools and not is_action and "{" in full_buf:
                     is_action = True
-                    self.thinking_sound_active.clear()
                     continue
                 if is_action:
                     continue
 
                 if self.current_state != BotStates.SPEAKING:
-                    self.thinking_sound_active.clear()  # 开始说话，停思考音效
                     self.set_state(BotStates.SPEAKING, "说话中...", overlay_path=img_path)
                     self.append_to_text("BMO: ", newline=False)
                 self._stream_to_text(chunk)
@@ -1510,65 +1501,36 @@ class BotGUI:
                 time.sleep(0.05)
 
     # -------------------------------------------------------------------
-    # 音效（greeting / ack / thinking / error）→ 走自动检测的音箱
+    # 状态语音提示（greeting / ack / thinking / error）—— 已彻底去掉自带 .wav 音效，
+    # 全部用当前 TTS 引擎/音色读出后台自定义的文字。文字留空 = 该状态静默。
     # -------------------------------------------------------------------
-    def _get_random_sound(self, subdir):
-        d = os.path.join("sounds", subdir)
-        if not os.path.isdir(d):
-            return None
-        files = [f for f in os.listdir(d) if f.lower().endswith(".wav")]
-        return os.path.join(d, random.choice(files)) if files else None
+    # 状态词默认值：config 里没写该字段时用这些（写了空串 = 该状态静默）
+    _STATUS_DEFAULTS = {
+        "greeting": "你好，我叫 BMO",
+        "ack": "我在",
+        "thinking": "让我想想",
+        "error": "哎呀，我出错了",
+    }
 
-    def _play_sound_file(self, path, wait=True):
-        if not path or not os.path.exists(path):
-            return
-        if not self.config.get("enable_sounds", True):
-            return
-        # 读 wav → 16bit 单声道 PCM，走 _play_pcm_aplay（应用软件音量）
-        try:
-            with wave.open(path, "rb") as wf:
-                sr = wf.getframerate()
-                ch = wf.getnchannels()
-                sw = wf.getsampwidth()
-                raw = wf.readframes(wf.getnframes())
-        except Exception as e:
-            log(f"[SOUND] 读取失败: {e}")
-            return
-        if sw != 2:
-            return
-        arr = np.frombuffer(raw, dtype='<i2')
-        if ch > 1:
-            arr = arr.reshape(-1, ch).mean(axis=1).astype('<i2')
-        self._play_pcm_aplay(arr.tobytes(), sr)
-
-    def _play_cue(self, subdir, wait=True):
-        self._play_sound_file(self._get_random_sound(subdir), wait=wait)
-
-    def _play_status_cue(self, kind, subdir, wait=True):
-        """状态提示。开启「状态语音」后：用 TTS 读出后台自定义的文字（不再放自带音效）；
-        文字留空则该状态静默。未开启则播放 sounds/<subdir> 里的 .wav。
-        kind ∈ {greeting, ack, error}。"""
+    def _status_text(self, kind: str) -> str:
         ss = self.config.get("status_speech", {})
-        if ss.get("enabled"):
-            text = (ss.get(kind) or "").strip()
-            if text:
-                self.speak(text)   # 同步播放（greeting/error 由调用方放到线程里）
-            return
-        self._play_cue(subdir, wait=wait)
+        if not ss.get("enabled", True):
+            return ""
+        return (ss.get(kind, self._STATUS_DEFAULTS.get(kind, "")) or "").strip()
 
-    def _run_thinking_sound_loop(self):
-        # 状态语音模式下不放思考哼唱（避免和回复语音抢同一个音频设备）
-        if self.config.get("status_speech", {}).get("enabled"):
-            return
-        time.sleep(0.4)
-        while self.thinking_sound_active.is_set() and not self.exiting:
-            snd = self._get_random_sound("thinking_sounds")
-            if snd:
-                self._play_sound_file(snd, wait=True)
-            for _ in range(15):
-                if not self.thinking_sound_active.is_set():
-                    return
-                time.sleep(0.1)
+    def _play_status_cue(self, kind):
+        """同步读出状态词（greeting/ack/error）。greeting/error 由调用方放到线程里。"""
+        text = self._status_text(kind)
+        if text:
+            self.speak(text)
+
+    def _queue_thinking_cue(self):
+        """把"思考中"状态词排进 TTS 队列：会在回复语句之前由同一个 worker 顺序播放，
+        不和回复抢音频设备。"""
+        text = self._status_text("thinking")
+        if text:
+            with self.tts_queue_lock:
+                self.tts_queue.append(text)
 
     def speak(self, text):
         clean = text.strip()

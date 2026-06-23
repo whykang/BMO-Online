@@ -277,7 +277,7 @@
   <div class="panel">
     <h2>状态语音提示</h2>
     <div class="row">
-      <label><input type="checkbox" id="ss-enabled"> 用语音读出状态（开启后不再播放自带音效）</label>
+      <label><input type="checkbox" id="ss-enabled"> 用语音读出状态（关闭则全部静默）</label>
     </div>
     <div class="row">
       <label>开机问候：</label>
@@ -285,15 +285,19 @@
     </div>
     <div class="row">
       <label>唤醒应答：</label>
-      <input type="text" id="ss-ack" placeholder="我在（留空则不出声）" style="flex:1; min-width:300px;">
+      <input type="text" id="ss-ack" placeholder="我在" style="flex:1; min-width:300px;">
+    </div>
+    <div class="row">
+      <label>思考中：</label>
+      <input type="text" id="ss-thinking" placeholder="让我想想" style="flex:1; min-width:300px;">
     </div>
     <div class="row">
       <label>出错提示：</label>
-      <input type="text" id="ss-error" placeholder="哎呀，我出错了（留空则不出声）" style="flex:1; min-width:300px;">
+      <input type="text" id="ss-error" placeholder="哎呀，我出错了" style="flex:1; min-width:300px;">
     </div>
     <div class="row">
       <button class="btn" onclick="saveStatusSpeech()">保存</button>
-      <span class="help">这些话用当前 TTS 引擎/音色读出。留空的状态保持安静。</span>
+      <span class="help">已去掉自带音效，这些话用当前 TTS 音色读出。某条留空 = 该状态静默。</span>
     </div>
   </div>
 </section>
@@ -841,9 +845,10 @@ function fillVoiceTab() {
   document.getElementById('doubao-voice-type').value = CONFIG.tts?.doubao_voice_type || '';
   const ss = CONFIG.status_speech || {};
   document.getElementById('ss-enabled').checked = !!ss.enabled;
-  document.getElementById('ss-greeting').value = ss.greeting || '';
-  document.getElementById('ss-ack').value = ss.ack || '';
-  document.getElementById('ss-error').value = ss.error || '';
+  document.getElementById('ss-greeting').value = ss.greeting ?? '';
+  document.getElementById('ss-ack').value = ss.ack ?? '';
+  document.getElementById('ss-thinking').value = ss.thinking ?? '';
+  document.getElementById('ss-error').value = ss.error ?? '';
   loadAudioOutputs();
   loadVolume();
   document.getElementById('voice-rate').value = CONFIG.tts?.rate || '+0%';
@@ -878,6 +883,7 @@ async function saveStatusSpeech() {
     enabled: document.getElementById('ss-enabled').checked,
     greeting: document.getElementById('ss-greeting').value.trim(),
     ack: document.getElementById('ss-ack').value.trim(),
+    thinking: document.getElementById('ss-thinking').value.trim(),
     error: document.getElementById('ss-error').value.trim(),
   };
   await putJSON('/api/config', CONFIG);
