@@ -1631,18 +1631,20 @@ class BotGUI:
         if dev:
             cmd += ["-D", dev]
         cmd += ["-"]
+        proc = None
         try:
-            self.current_tts_proc = subprocess.Popen(
-                cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            self.current_tts_proc.stdin.write(pcm)
-            self.current_tts_proc.stdin.close()
-            while self.current_tts_proc.poll() is None:
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            self.current_tts_proc = proc
+            proc.stdin.write(pcm)
+            proc.stdin.close()
+            while proc.poll() is None:
                 if self.interrupted.is_set() or self.exiting:
-                    self.current_tts_proc.terminate()
+                    proc.terminate()
                     break
                 time.sleep(0.05)
         finally:
-            self.current_tts_proc = None
+            if self.current_tts_proc is proc:
+                self.current_tts_proc = None
 
     def _speak_piper(self, text):
         if self.tts_piper is None:
@@ -1661,19 +1663,20 @@ class BotGUI:
         if dev:
             cmd += ["-a", dev]
         cmd += ["-"]
+        proc = None
         try:
-            self.current_tts_proc = subprocess.Popen(
-                cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL,
-            )
-            self.current_tts_proc.stdin.write(mp3)
-            self.current_tts_proc.stdin.close()
-            while self.current_tts_proc.poll() is None:
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            self.current_tts_proc = proc
+            proc.stdin.write(mp3)
+            proc.stdin.close()
+            while proc.poll() is None:
                 if self.interrupted.is_set() or self.exiting:
-                    self.current_tts_proc.terminate()
+                    proc.terminate()
                     break
                 time.sleep(0.05)
         finally:
-            self.current_tts_proc = None
+            if self.current_tts_proc is proc:
+                self.current_tts_proc = None
 
     def _speak_siliconflow(self, text):
         sr = self.config.get("tts_sample_rate", 24000)
