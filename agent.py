@@ -235,6 +235,7 @@ class BotGUI:
             self.config["tts"], endpoints,
             sample_rate=self.config.get("tts_sample_rate", 24000),
         )
+        self.tts_piper = None   # 本地 Piper TTS，懒加载（用到才加载模型）
 
         # 唤醒词
         self.oww_model = None
@@ -1481,25 +1482,61 @@ class BotGUI:
         log(f"[说] {clean}")
         provider = self.config["tts"].get("provider", "edge")
         try:
-            if provider == "edge":
+            if provider in ("piper", "local"):
+                self._speak_piper(clean)
+            elif provider == "edge":
                 self._speak_edge(clean)
             else:
                 self._speak_siliconflow(clean)
         except Exception as e:
             log(f"[TTS] {provider} 失败: {e}, 尝试兜底")
             try:
-                self._speak_siliconflow(clean)
+                self._speak_edge(clean)
             except Exception as e2:
                 log(f"[TTS] 兜底也失败: {e2}")
 
+    def _play_pcm_aplay(self, pcm: bytes, sr: int):
+        """用 aplay 播 16-bit 单声道 PCM，可指定 USB 音箱（audio_output_device）。"""
+        if not pcm:
+            return
+        dev = self.config.get("audio_output_device", "")
+        cmd = ["aplay", "-q", "-f", "S16_LE", "-c", "1", "-r", str(sr)]
+        if dev:
+            cmd += ["-D", dev]
+        cmd += ["-"]
+        try:
+            self.current_tts_proc = subprocess.Popen(
+                cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            self.current_tts_proc.stdin.write(pcm)
+            self.current_tts_proc.stdin.close()
+            while self.current_tts_proc.poll() is None:
+                if self.interrupted.is_set() or self.exiting:
+                    self.current_tts_proc.terminate()
+                    break
+                time.sleep(0.05)
+        finally:
+            self.current_tts_proc = None
+
+    def _speak_piper(self, text):
+        if self.tts_piper is None:
+            from providers.tts_piper import PiperTTSProvider
+            self.tts_piper = PiperTTSProvider(self.config["tts"])
+        pcm, sr = self.tts_piper.synthesize_pcm16(text)
+        self._play_pcm_aplay(pcm, sr)
+
     def _speak_edge(self, text):
-        # Edge-TTS 输出 MP3 → 用 mpg123 解码到扬声器
+        # Edge-TTS 输出 MP3 → 用 mpg123 解码播放（可指定 USB 音箱）
         mp3 = self.tts_edge.synthesize_mp3(text)
         if not mp3:
             return
+        dev = self.config.get("audio_output_device", "")
+        cmd = ["mpg123", "-q"]
+        if dev:
+            cmd += ["-a", dev]
+        cmd += ["-"]
         try:
             self.current_tts_proc = subprocess.Popen(
-                ["mpg123", "-q", "-"], stdin=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL,
             )
             self.current_tts_proc.stdin.write(mp3)
             self.current_tts_proc.stdin.close()
@@ -1620,6 +1657,7 @@ class BotGUI:
                     self.config["tts"], endpoints,
                     sample_rate=self.config.get("tts_sample_rate", 24000),
                 )
+                self.tts_piper = None  # 懒加载，按新 config 下次用时重建
                 self.vision = VisionProvider(self.config["vision"], endpoints)
                 self.image_gen = ImageGenProvider(
                     self.config["image_gen"], endpoints,

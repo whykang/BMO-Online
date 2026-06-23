@@ -196,6 +196,26 @@
 <!-- 音色 -->
 <section id="tab-voice" class="tab hide">
   <div class="panel">
+    <h2>TTS 引擎</h2>
+    <div class="row">
+      <label>引擎：</label>
+      <select id="tts-provider">
+        <option value="edge">Edge-TTS（云端免费，音色多）</option>
+        <option value="piper">Piper 本地（离线免费，需下模型）</option>
+        <option value="siliconflow">硅基流动 CosyVoice（云端）</option>
+      </select>
+    </div>
+    <div class="row">
+      <label>音箱输出设备：</label>
+      <input type="text" id="audio-output" placeholder="留空=系统默认；USB音箱填 plughw:3,0" style="flex:1; min-width:300px;">
+    </div>
+    <div class="row">
+      <button class="btn" onclick="saveTTSEngine()">保存引擎/输出</button>
+      <span class="help">Piper 语速在下方"语速"框（用 0.8~1.2 这种数字）。</span>
+    </div>
+  </div>
+
+  <div class="panel">
     <h2>Edge-TTS 音色（免费）</h2>
     <div class="row">
       <label>语言：</label>
@@ -740,6 +760,8 @@ async function loadVoices() {
   }
 }
 function fillVoiceTab() {
+  document.getElementById('tts-provider').value = CONFIG.tts?.provider || 'edge';
+  document.getElementById('audio-output').value = CONFIG.audio_output_device || '';
   document.getElementById('voice-rate').value = CONFIG.tts?.rate || '+0%';
   document.getElementById('voice-volume').value = CONFIG.tts?.volume || '+0%';
   // 兜底下拉
@@ -752,6 +774,17 @@ function fillVoiceTab() {
     if (p.model === CONFIG.tts?.fallback_model && p.voice === CONFIG.tts?.fallback_voice) opt.selected = true;
     sel.appendChild(opt);
   }
+}
+async function saveTTSEngine() {
+  CONFIG.tts = CONFIG.tts || {};
+  CONFIG.tts.provider = document.getElementById('tts-provider').value;
+  // piper 用数字语速，从"语速"框里取（非百分号时）
+  const rate = document.getElementById('voice-rate').value.trim();
+  const num = parseFloat(rate);
+  if (!isNaN(num) && !rate.includes('%')) CONFIG.tts.piper_speed = num;
+  CONFIG.audio_output_device = document.getElementById('audio-output').value.trim();
+  await putJSON('/api/config', CONFIG);
+  alert('已保存。引擎=' + CONFIG.tts.provider + '，输出=' + (CONFIG.audio_output_device || '系统默认'));
 }
 async function testVoice() {
   const body = {

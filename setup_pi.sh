@@ -105,6 +105,26 @@ else
     echo -e "${GREEN}  ✓ 本地 STT 模型已就绪${NC}"
 fi
 
+# 4c. 本地 TTS 模型（Piper 中文 huayan，可选；约 60MB）
+PIPER_DIR="models/piper-zh"
+if [ ! -f "$PIPER_DIR/tokens.txt" ]; then
+    echo -e "${YELLOW}  下载本地 TTS 模型 Piper 中文（约 60MB）...${NC}"
+    mkdir -p models
+    PIPER_TARBALL="vits-piper-zh_CN-huayan-medium.tar.bz2"
+    PIPER_INNER="vits-piper-zh_CN-huayan-medium"
+    PIPER_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/$PIPER_TARBALL"
+    if curl -fL --retry 2 -o "models/$PIPER_TARBALL" "$PIPER_URL"; then
+        ( cd models && rm -rf "$PIPER_INNER" piper-zh \
+            && tar xjf "$PIPER_TARBALL" && mv "$PIPER_INNER" piper-zh && rm "$PIPER_TARBALL" )
+        echo -e "${GREEN}  ✓ 本地 TTS 模型已就绪：$PIPER_DIR${NC}"
+    else
+        echo -e "${RED}  ✗ 本地 TTS 模型下载失败（不影响 Edge/云端 TTS）${NC}"
+        rm -f "models/$PIPER_TARBALL"
+    fi
+else
+    echo -e "${GREEN}  ✓ 本地 TTS 模型已就绪${NC}"
+fi
+
 # 5. 创建 config.json（不在 git 里，从模板复制；保留用户已有的）
 if [ ! -f config.json ]; then
     cp config.default.json config.json

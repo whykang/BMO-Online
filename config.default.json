@@ -23,7 +23,9 @@
     "volume": "+0%",
     "fallback_provider": "siliconflow",
     "fallback_model": "FunAudioLLM/CosyVoice2-0.5B",
-    "fallback_voice": "FunAudioLLM/CosyVoice2-0.5B:alex"
+    "fallback_voice": "FunAudioLLM/CosyVoice2-0.5B:alex",
+    "piper_model_dir": "models/piper-zh",
+    "piper_speed": 1.0
   },
   "image_gen": {
     "provider": "siliconflow",
@@ -77,5 +79,6 @@
     "openai": "https://api.openai.com/v1",
     "deepseek": "https://api.deepseek.com/v1"
   },
-  "audio_latency": "high"
+  "audio_latency": "high",
+  "audio_output_device": ""
 }
