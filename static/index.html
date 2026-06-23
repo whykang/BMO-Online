@@ -278,19 +278,19 @@
     <h2>状态语音提示</h2>
     <div class="row">
       <label>开机问候：</label>
-      <input type="text" id="ss-greeting" placeholder="你好，我叫 BMO" style="flex:1; min-width:300px;">
+      <input type="text" id="ss-greeting" placeholder="留空则静默" style="flex:1; min-width:300px;">
     </div>
     <div class="row">
       <label>唤醒应答：</label>
-      <input type="text" id="ss-ack" placeholder="我在" style="flex:1; min-width:300px;">
+      <input type="text" id="ss-ack" placeholder="留空则静默" style="flex:1; min-width:300px;">
     </div>
     <div class="row">
       <label>思考中：</label>
-      <input type="text" id="ss-thinking" placeholder="让我想想" style="flex:1; min-width:300px;">
+      <input type="text" id="ss-thinking" placeholder="留空则静默" style="flex:1; min-width:300px;">
     </div>
     <div class="row">
       <label>出错提示：</label>
-      <input type="text" id="ss-error" placeholder="哎呀，我出错了" style="flex:1; min-width:300px;">
+      <input type="text" id="ss-error" placeholder="留空则静默" style="flex:1; min-width:300px;">
     </div>
     <div class="row">
       <button class="btn" onclick="saveStatusSpeech()">保存</button>
@@ -841,10 +841,17 @@ function fillVoiceTab() {
   document.getElementById('tts-provider').value = CONFIG.tts?.provider || 'edge';
   document.getElementById('doubao-voice-type').value = CONFIG.tts?.doubao_voice_type || '';
   const ss = CONFIG.status_speech || {};
-  document.getElementById('ss-greeting').value = ss.greeting ?? '';
-  document.getElementById('ss-ack').value = ss.ack ?? '';
-  document.getElementById('ss-thinking').value = ss.thinking ?? '';
-  document.getElementById('ss-error').value = ss.error ?? '';
+  const ssDefaults = {
+    greeting: '你好，我叫 BMO',
+    ack: '我在',
+    thinking: '让我想想',
+    error: '哎呀，我出错了',
+  };
+  const statusValue = (key) => Object.prototype.hasOwnProperty.call(ss, key) ? (ss[key] ?? '') : ssDefaults[key];
+  document.getElementById('ss-greeting').value = statusValue('greeting');
+  document.getElementById('ss-ack').value = statusValue('ack');
+  document.getElementById('ss-thinking').value = statusValue('thinking');
+  document.getElementById('ss-error').value = statusValue('error');
   loadAudioOutputs();
   loadVolume();
   document.getElementById('voice-rate').value = CONFIG.tts?.rate || '+0%';
