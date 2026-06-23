@@ -732,7 +732,8 @@ class BotGUI:
         in_chunk = int(target_chunk * (input_rate / TARGET_SR)) if use_resample else target_chunk
 
         stream_args = dict(samplerate=input_rate, channels=1, dtype='int16',
-                           blocksize=in_chunk, device=self.input_device)
+                           blocksize=in_chunk, device=self.input_device,
+                           latency=self.config.get("audio_latency", "high"))
         refresh_secs = float(self.config.get("wake_word", {}).get("stream_refresh_seconds", 180))
 
         # 自动重开：定期刷新音频流 + 读取出错时重开，避免长时间空闲后唤不醒
@@ -903,6 +904,7 @@ class BotGUI:
             last_audio = time.time()
             with sd.InputStream(samplerate=sr, channels=1, dtype='int16',
                                 blocksize=chunk_size, device=self.input_device,
+                                latency=self.config.get("audio_latency", "high"),
                                 callback=_cb):
                 while not self.exiting:
                     try:
@@ -973,7 +975,8 @@ class BotGUI:
         buf = []
         try:
             with sd.InputStream(samplerate=sr, channels=1, dtype='int16',
-                                blocksize=chunk_size, device=self.input_device) as stream:
+                                blocksize=chunk_size, device=self.input_device,
+                                latency=self.config.get("audio_latency", "high")) as stream:
                 while self.recording_active.is_set() and not self.exiting:
                     try:
                         data, _ = stream.read(chunk_size)
