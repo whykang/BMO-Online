@@ -70,12 +70,6 @@
 
   "show_hud": false,
 
-  "screen": {
-    "idle_off_seconds": 60,
-    "power_off_command": "",
-    "power_on_command": ""
-  },
-
   "tts_sample_rate": 24000,
   "tts_pcm_chunk_size": 4096,
 

@@ -191,18 +191,6 @@
     </div>
     <div class="help" style="margin-left: 100px;">改完点保存，再点“立即重启 webui”，几秒后到新端口刷新页面。</div>
   </div>
-
-  <div class="panel">
-    <h2>待机熄屏</h2>
-    <div class="row">
-      <label>无操作熄屏：</label>
-      <input type="number" id="screen-idle" min="0" max="3600" style="width: 100px;"> 秒
-      <button class="btn" onclick="saveScreen()">保存</button>
-    </div>
-    <div class="help" style="margin-left: 100px;">
-      等待唤醒超过这个时间，屏幕变黑（仍在监听），听到唤醒词自动亮屏。0 = 不熄屏。
-    </div>
-  </div>
 </section>
 
 <!-- 音色 -->
@@ -707,15 +695,6 @@ async function toggleAutostart() {
 function fillWebuiAutostart() {
   document.getElementById('webui-autostart').checked = !!CONFIG.webui_auto_start;
   document.getElementById('webui-port').value = CONFIG.webui_port || 8087;
-  const sc = CONFIG.screen || {};
-  document.getElementById('screen-idle').value = sc.idle_off_seconds ?? 60;
-}
-async function saveScreen() {
-  const secs = parseInt(document.getElementById('screen-idle').value);
-  if (isNaN(secs) || secs < 0) return alert('请输入 ≥0 的秒数（0=不熄屏）');
-  CONFIG.screen = Object.assign({}, CONFIG.screen, {idle_off_seconds: secs});
-  await putJSON('/api/config', CONFIG);
-  alert('已保存');
 }
 async function toggleWebuiAutostart() {
   CONFIG.webui_auto_start = document.getElementById('webui-autostart').checked;
