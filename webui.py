@@ -277,7 +277,7 @@ def _amixer_control(card):
 async def get_volume():
     # 软件音量为准（不被 PipeWire 重置）
     cfg = load_config()
-    return {"ok": True, "volume": int(cfg.get("volume_percent", 80))}
+    return {"ok": True, "volume": int(cfg.get("volume_percent", 100))}
 
 
 class VolumeReq(BaseModel):
@@ -286,18 +286,20 @@ class VolumeReq(BaseModel):
 
 @app.put("/api/volume")
 async def set_volume(req: VolumeReq):
-    pct = max(0, min(100, int(req.percent)))
+    # 允许到 200%：软件增益可放大（>100%），解决 USB 音箱本身偏小的问题
+    pct = max(0, min(200, int(req.percent)))
     # 1) 写进 config（软件增益，TTS/Piper/音效都会乘上它，谁都改不回去）
     cfg = load_config()
     cfg["volume_percent"] = pct
     save_config(cfg)
     # 2) 附带也设一下硬件 amixer（即时、对其它程序也生效；被 PipeWire 重置也无所谓）
+    #    硬件音量最高 100%，>100% 的部分靠软件增益放大
     card = _output_card_num()
     if card is not None:
         ctrl = _amixer_control(card)
         if ctrl:
             try:
-                subprocess.run(["amixer", "-c", str(card), "sset", ctrl, f"{pct}%", "unmute"],
+                subprocess.run(["amixer", "-c", str(card), "sset", ctrl, f"{min(100, pct)}%", "unmute"],
                                capture_output=True, text=True, timeout=8)
             except Exception:
                 pass

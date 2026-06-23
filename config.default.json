@@ -82,5 +82,5 @@
   "audio_latency": "high",
   "audio_output_device": "auto",
   "enable_sounds": true,
-  "volume_percent": 80
+  "volume_percent": 100
 }

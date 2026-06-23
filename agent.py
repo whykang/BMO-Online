@@ -1612,11 +1612,13 @@ class BotGUI:
         return self._resolved_output
 
     def _gain(self):
-        """软件音量增益 0.0~1.0（来自 config.volume_percent，默认80）。"""
+        """软件音量增益（来自 config.volume_percent，默认100）。
+        100 = 原始音量(直通)；<100 衰减；>100 放大（USB 音箱本身偏小时用来提音量）。
+        上限 3.0(=300%) 防止过度削波；超过后多半失真。"""
         try:
-            return max(0.0, min(1.0, float(self.config.get("volume_percent", 80)) / 100.0))
+            return max(0.0, min(3.0, float(self.config.get("volume_percent", 100)) / 100.0))
         except Exception:
-            return 0.8
+            return 1.0
 
     def _play_pcm_aplay(self, pcm: bytes, sr: int):
         """用 aplay 播 16-bit 单声道 PCM，自动/指定到音响。应用软件音量。"""
@@ -1680,10 +1682,14 @@ class BotGUI:
 
     def _speak_siliconflow(self, text):
         sr = self.config.get("tts_sample_rate", 24000)
+        gain = self._gain()
         with sd.RawOutputStream(samplerate=sr, channels=1, dtype='int16', latency='low') as stream:
             for chunk in self.tts_sf.synthesize_pcm_stream(text):
                 if self.interrupted.is_set() or self.exiting:
                     break
+                if gain != 1.0 and chunk:
+                    arr = np.frombuffer(chunk, dtype='<i2').astype(np.float32) * gain
+                    chunk = np.clip(arr, -32768, 32767).astype('<i2').tobytes()
                 stream.write(chunk)
 
     # -------------------------------------------------------------------

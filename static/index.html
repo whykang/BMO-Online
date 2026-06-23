@@ -212,9 +212,9 @@
     </div>
     <div class="row">
       <label>音量：</label>
-      <input type="range" id="volume-slider" min="0" max="100" step="1" value="80"
+      <input type="range" id="volume-slider" min="0" max="200" step="5" value="100"
              style="flex:1; min-width:200px;" oninput="onVolumeInput()" onchange="setVolume()">
-      <span id="volume-val">80%</span>
+      <span id="volume-val">100%</span>
       <span class="help" id="volume-hint"></span>
     </div>
     <div class="row">
@@ -787,7 +787,7 @@ async function loadVolume() {
     if (v.ok && v.volume != null) {
       document.getElementById('volume-slider').value = v.volume;
       document.getElementById('volume-val').textContent = v.volume + '%';
-      hint.textContent = '软件音量（TTS/音效都跟着变）';
+      hint.textContent = '软件音量：100%=原始，>100% 放大（音箱偏小时调高）';
     } else {
       hint.textContent = v.reason || '无法读取音量';
     }
