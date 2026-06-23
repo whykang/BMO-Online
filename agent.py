@@ -1501,8 +1501,8 @@ class BotGUI:
                 time.sleep(0.05)
 
     # -------------------------------------------------------------------
-    # 状态语音提示（greeting / ack / thinking / error）—— 已彻底去掉自带 .wav 音效，
-    # 全部用当前 TTS 引擎/音色读出后台自定义的文字。文字留空 = 该状态静默。
+    # 状态语音提示（greeting / ack / thinking / error）。
+    # 字段没写时用默认词；字段写成空串时，该状态静默。
     # -------------------------------------------------------------------
     # 状态词默认值：config 里没写该字段时用这些（写了空串 = 该状态静默）
     _STATUS_DEFAULTS = {
@@ -1514,9 +1514,9 @@ class BotGUI:
 
     def _status_text(self, kind: str) -> str:
         ss = self.config.get("status_speech", {})
-        if not ss.get("enabled", True):
-            return ""
-        return (ss.get(kind, self._STATUS_DEFAULTS.get(kind, "")) or "").strip()
+        if kind in ss:
+            return (ss.get(kind) or "").strip()
+        return self._STATUS_DEFAULTS.get(kind, "")
 
     def _play_status_cue(self, kind):
         """同步读出状态词（greeting/ack/error）。greeting/error 由调用方放到线程里。"""

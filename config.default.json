@@ -86,7 +86,6 @@
   "audio_output_device": "auto",
   "enable_sounds": true,
   "status_speech": {
-    "enabled": true,
     "greeting": "你好，我叫 BMO",
     "ack": "我在",
     "thinking": "让我想想",
