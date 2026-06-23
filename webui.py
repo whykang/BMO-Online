@@ -721,132 +721,86 @@ async def restart_webui():
 
 
 # =========================================================================
-# 路由：开机自启（Pi 桌面 autostart / labwc / systemd user）
+# 路由：开机自启（Pi 桌面 XDG autostart）
+# 说明：Pi OS labwc 的系统默认 autostart 会调用 lxsession-xdg-autostart，
+#       它负责处理 ~/.config/autostart/*.desktop。所以只用标准 XDG .desktop
+#       即可，不要去碰 ~/.config/labwc/autostart（一旦创建会覆盖系统默认、
+#       连带把面板和 lxsession-xdg-autostart 一起干掉）。
 # =========================================================================
 
 AUTOSTART_DIR = os.path.expanduser("~/.config/autostart")
 AUTOSTART_FILE = os.path.join(AUTOSTART_DIR, "bmo.desktop")
-SYSTEMD_USER_DIR = os.path.expanduser("~/.config/systemd/user")
-SYSTEMD_SERVICE_FILE = os.path.join(SYSTEMD_USER_DIR, "bmo-agent.service")
-LABWC_AUTOSTART_FILE = os.path.expanduser("~/.config/labwc/autostart")
 PROJECT_DIR = os.path.abspath(os.path.dirname(__file__))
-BMO_AUTOSTART_BEGIN = "# >>> BMO-Online autostart >>>"
-BMO_AUTOSTART_END = "# <<< BMO-Online autostart <<<"
+
+# 旧版本残留（需要主动清理，否则会破坏桌面 / 留下 masked 服务）
+_LEGACY_LABWC_AUTOSTART = os.path.expanduser("~/.config/labwc/autostart")
+_LEGACY_SYSTEMD_SERVICE = os.path.expanduser("~/.config/systemd/user/bmo-agent.service")
+_BMO_BEGIN = "# >>> BMO-Online autostart >>>"
+_BMO_END = "# <<< BMO-Online autostart <<<"
 
 
 def _make_desktop_content() -> str:
-    return f"""[Desktop Entry]
-Type=Application
-Name=BMO Agent
-Comment=Be More Agent (Online) auto-starter
-Exec={PROJECT_DIR}/start_agent.sh
-Path={PROJECT_DIR}
-Terminal=false
-Hidden=false
-NoDisplay=false
-X-GNOME-Autostart-enabled=true
-X-GNOME-Autostart-Delay=8
-"""
-
-
-def _make_systemd_service_content() -> str:
-    return f"""[Unit]
-Description=BMO Online Agent
-After=graphical-session.target
-
-[Service]
-Type=simple
-WorkingDirectory={PROJECT_DIR}
-ExecStartPre=/bin/sleep 8
-ExecStart={PROJECT_DIR}/start_agent.sh
-Restart=on-failure
-RestartSec=5
-Environment=DISPLAY=:0
-Environment=XDG_RUNTIME_DIR=/run/user/%U
-
-[Install]
-WantedBy=default.target
-"""
-
-
-def _make_labwc_autostart_block() -> str:
-    cmd = shlex.quote(os.path.join(PROJECT_DIR, "start_agent.sh"))
-    return f"""{BMO_AUTOSTART_BEGIN}
-( sleep 8; {cmd} ) &
-{BMO_AUTOSTART_END}
-"""
-
-
-def _remove_marked_block(text: str) -> str:
-    pattern = re.compile(
-        rf"\n?{re.escape(BMO_AUTOSTART_BEGIN)}.*?{re.escape(BMO_AUTOSTART_END)}\n?",
-        re.DOTALL,
+    # 用 sh -c 包一层 sleep，等合成器/Xwayland 起来再启动 BMO
+    start = os.path.join(PROJECT_DIR, "start_agent.sh")
+    return (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        "Name=BMO Agent\n"
+        "Comment=Be More Agent (Online) auto-starter\n"
+        f"Exec=sh -c 'sleep 8; exec {start}'\n"
+        f"Path={PROJECT_DIR}\n"
+        "Terminal=false\n"
+        "X-GNOME-Autostart-enabled=true\n"
     )
-    return pattern.sub("\n", text).strip() + ("\n" if text.strip() else "")
 
 
-def _write_labwc_autostart(enabled: bool):
-    path = LABWC_AUTOSTART_FILE
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    old = ""
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            old = f.read()
-    clean = _remove_marked_block(old)
-    if enabled:
-        new = clean.rstrip() + "\n\n" + _make_labwc_autostart_block()
-    else:
-        new = clean
-    if new.strip():
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(new)
+def _cleanup_legacy_autostart():
+    """清理旧版本写坏的 labwc 覆盖文件和 masked 的 systemd 服务。"""
+    # 1. labwc autostart：只删我们标记的块；若文件因此变空则删除整个文件，
+    #    让系统重新回退到 /etc/xdg/labwc/autostart（恢复面板）。
+    try:
+        if os.path.exists(_LEGACY_LABWC_AUTOSTART):
+            with open(_LEGACY_LABWC_AUTOSTART, "r", encoding="utf-8") as f:
+                content = f.read()
+            pattern = re.compile(
+                rf"\n?{re.escape(_BMO_BEGIN)}.*?{re.escape(_BMO_END)}\n?", re.DOTALL)
+            cleaned = pattern.sub("\n", content).strip()
+            if cleaned:
+                with open(_LEGACY_LABWC_AUTOSTART, "w", encoding="utf-8") as f:
+                    f.write(cleaned + "\n")
+            else:
+                os.remove(_LEGACY_LABWC_AUTOSTART)
+    except Exception:
+        pass
+    # 2. systemd user 服务：disable + 删除 + unmask，清干净
+    for args in (["disable", "bmo-agent.service"],
+                 ["unmask", "bmo-agent.service"]):
         try:
-            os.chmod(path, 0o755)
+            subprocess.run(["systemctl", "--user", *args],
+                           capture_output=True, timeout=10)
         except Exception:
             pass
-    elif os.path.exists(path):
-        os.remove(path)
-
-
-def _labwc_autostart_enabled() -> bool:
-    if not os.path.exists(LABWC_AUTOSTART_FILE):
-        return False
     try:
-        with open(LABWC_AUTOSTART_FILE, "r", encoding="utf-8") as f:
-            return BMO_AUTOSTART_BEGIN in f.read()
+        if os.path.exists(_LEGACY_SYSTEMD_SERVICE):
+            os.remove(_LEGACY_SYSTEMD_SERVICE)
+    except Exception:
+        pass
+
+
+def _autostart_enabled() -> bool:
+    # 文件存在且非空才算真正开启
+    try:
+        return os.path.exists(AUTOSTART_FILE) and os.path.getsize(AUTOSTART_FILE) > 0
     except Exception:
         return False
 
 
-def _systemctl_user(args):
-    try:
-        r = subprocess.run(
-            ["systemctl", "--user", *args],
-            text=True,
-            capture_output=True,
-            timeout=12,
-        )
-        return {"ok": r.returncode == 0, "stdout": r.stdout.strip(), "stderr": r.stderr.strip()}
-    except Exception as e:
-        return {"ok": False, "stderr": str(e), "stdout": ""}
-
-
 @app.get("/api/autostart")
 async def get_autostart():
-    service_state = _systemctl_user(["is-enabled", "bmo-agent.service"])
-    desktop_enabled = os.path.exists(AUTOSTART_FILE)
-    service_enabled = service_state["ok"]
-    labwc_enabled = _labwc_autostart_enabled()
-    enabled = desktop_enabled or service_enabled or labwc_enabled
     return {
-        "enabled": enabled,
+        "enabled": _autostart_enabled(),
         "path": AUTOSTART_FILE,
         "project_dir": PROJECT_DIR,
-        "desktop_enabled": desktop_enabled,
-        "systemd_enabled": service_enabled,
-        "systemd_service": SYSTEMD_SERVICE_FILE,
-        "labwc_enabled": labwc_enabled,
-        "labwc_autostart": LABWC_AUTOSTART_FILE,
     }
 
 
@@ -857,32 +811,19 @@ class AutostartReq(BaseModel):
 @app.put("/api/autostart")
 async def set_autostart(req: AutostartReq):
     try:
+        # 不管开还是关，都先清掉旧版本写坏的东西
+        _cleanup_legacy_autostart()
         if req.enabled:
             os.makedirs(AUTOSTART_DIR, exist_ok=True)
+            content = _make_desktop_content()
             with open(AUTOSTART_FILE, "w", encoding="utf-8") as f:
-                f.write(_make_desktop_content())
-            os.makedirs(SYSTEMD_USER_DIR, exist_ok=True)
-            with open(SYSTEMD_SERVICE_FILE, "w", encoding="utf-8") as f:
-                f.write(_make_systemd_service_content())
-            _write_labwc_autostart(True)
-            daemon = _systemctl_user(["daemon-reload"])
-            enable = _systemctl_user(["enable", "bmo-agent.service"])
-            return {
-                "ok": True,
-                "enabled": True,
-                "path": AUTOSTART_FILE,
-                "systemd_service": SYSTEMD_SERVICE_FILE,
-                "labwc_autostart": LABWC_AUTOSTART_FILE,
-                "systemd": {"daemon_reload": daemon, "enable": enable},
-            }
+                f.write(content)
+            ok = _autostart_enabled()
+            return {"ok": ok, "enabled": ok, "path": AUTOSTART_FILE,
+                    "bytes": len(content)}
         else:
-            _systemctl_user(["disable", "bmo-agent.service"])
             if os.path.exists(AUTOSTART_FILE):
                 os.remove(AUTOSTART_FILE)
-            if os.path.exists(SYSTEMD_SERVICE_FILE):
-                os.remove(SYSTEMD_SERVICE_FILE)
-            _systemctl_user(["daemon-reload"])
-            _write_labwc_autostart(False)
             return {"ok": True, "enabled": False}
     except Exception as e:
         raise HTTPException(500, str(e))
