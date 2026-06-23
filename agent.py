@@ -236,6 +236,7 @@ class BotGUI:
             sample_rate=self.config.get("tts_sample_rate", 24000),
         )
         self.tts_piper = None   # 本地 Piper TTS，懒加载（用到才加载模型）
+        self._resolved_output = None   # 自动检测的音响输出设备缓存
 
         # 唤醒词
         self.oww_model = None
@@ -1495,11 +1496,45 @@ class BotGUI:
             except Exception as e2:
                 log(f"[TTS] 兜底也失败: {e2}")
 
+    def _detect_usb_playback(self):
+        """解析 aplay -l，找 USB 播放设备，返回 plughw:卡号,0。找不到返回 ''。"""
+        try:
+            out = subprocess.check_output(["aplay", "-l"], text=True,
+                                          stderr=subprocess.DEVNULL)
+        except Exception:
+            return ""
+        non_hdmi = ""
+        for line in out.splitlines():
+            m = re.match(r"\s*card (\d+): (\S+) \[(.*?)\]", line)
+            if not m:
+                continue
+            card = int(m.group(1))
+            tag = (m.group(2) + " " + m.group(3)).lower()
+            is_hdmi = ("hdmi" in tag) or ("vc4" in tag)
+            if "usb" in tag:
+                return f"plughw:{card},0"
+            if not is_hdmi and not non_hdmi:
+                non_hdmi = f"plughw:{card},0"
+        return non_hdmi
+
+    def _resolve_output_device(self):
+        """auto/空 → 自动检测 USB 音响；显式值 → 直接用。结果缓存。"""
+        dev = (self.config.get("audio_output_device") or "auto").strip()
+        if dev and dev.lower() != "auto":
+            return dev
+        if getattr(self, "_resolved_output", None) is None:
+            self._resolved_output = self._detect_usb_playback()
+            if self._resolved_output:
+                log(f"[AUDIO] 自动选用输出设备: {self._resolved_output}")
+            else:
+                log("[AUDIO] 未检测到 USB 音响，用系统默认输出")
+        return self._resolved_output
+
     def _play_pcm_aplay(self, pcm: bytes, sr: int):
-        """用 aplay 播 16-bit 单声道 PCM，可指定 USB 音箱（audio_output_device）。"""
+        """用 aplay 播 16-bit 单声道 PCM，自动/指定到音响。"""
         if not pcm:
             return
-        dev = self.config.get("audio_output_device", "")
+        dev = self._resolve_output_device()
         cmd = ["aplay", "-q", "-f", "S16_LE", "-c", "1", "-r", str(sr)]
         if dev:
             cmd += ["-D", dev]
@@ -1529,7 +1564,7 @@ class BotGUI:
         mp3 = self.tts_edge.synthesize_mp3(text)
         if not mp3:
             return
-        dev = self.config.get("audio_output_device", "")
+        dev = self._resolve_output_device()
         cmd = ["mpg123", "-q"]
         if dev:
             cmd += ["-a", dev]
@@ -1658,6 +1693,7 @@ class BotGUI:
                     sample_rate=self.config.get("tts_sample_rate", 24000),
                 )
                 self.tts_piper = None  # 懒加载，按新 config 下次用时重建
+                self._resolved_output = None  # 重新检测输出设备
                 self.vision = VisionProvider(self.config["vision"], endpoints)
                 self.image_gen = ImageGenProvider(
                     self.config["image_gen"], endpoints,

@@ -207,11 +207,12 @@
     </div>
     <div class="row">
       <label>音箱输出设备：</label>
-      <input type="text" id="audio-output" placeholder="留空=系统默认；USB音箱填 plughw:3,0" style="flex:1; min-width:300px;">
+      <select id="audio-output" style="min-width: 320px;"></select>
+      <button class="btn secondary" onclick="loadAudioOutputs()">刷新设备</button>
     </div>
     <div class="row">
       <button class="btn" onclick="saveTTSEngine()">保存引擎/输出</button>
-      <span class="help">Piper 语速在下方"语速"框（用 0.8~1.2 这种数字）。</span>
+      <span class="help">默认"自动检测 USB 音响"。多个设备时在这里选。Piper 语速用下方"语速"框填数字(0.8~1.2)。</span>
     </div>
   </div>
 
@@ -759,9 +760,22 @@ async function loadVoices() {
     sel.appendChild(opt);
   }
 }
+async function loadAudioOutputs() {
+  const sel = document.getElementById('audio-output');
+  const cur = CONFIG.audio_output_device || 'auto';
+  let devs = [];
+  try { devs = (await fetchJSON('/api/audio/outputs')).devices || []; } catch (e) {}
+  sel.innerHTML = '';
+  const add = (val, txt) => { const o = document.createElement('option'); o.value = val; o.textContent = txt; if (val === cur) o.selected = true; sel.appendChild(o); };
+  add('auto', '自动检测 USB 音响（推荐）');
+  add('', '系统默认输出');
+  for (const d of devs) add(d.device, `${d.label}  (${d.device})`);
+  // 当前值不在列表里也保留显示
+  if (cur && cur !== 'auto' && cur !== '' && !devs.some(d => d.device === cur)) add(cur, cur + '（当前）');
+}
 function fillVoiceTab() {
   document.getElementById('tts-provider').value = CONFIG.tts?.provider || 'edge';
-  document.getElementById('audio-output').value = CONFIG.audio_output_device || '';
+  loadAudioOutputs();
   document.getElementById('voice-rate').value = CONFIG.tts?.rate || '+0%';
   document.getElementById('voice-volume').value = CONFIG.tts?.volume || '+0%';
   // 兜底下拉
@@ -782,7 +796,7 @@ async function saveTTSEngine() {
   const rate = document.getElementById('voice-rate').value.trim();
   const num = parseFloat(rate);
   if (!isNaN(num) && !rate.includes('%')) CONFIG.tts.piper_speed = num;
-  CONFIG.audio_output_device = document.getElementById('audio-output').value.trim();
+  CONFIG.audio_output_device = document.getElementById('audio-output').value;
   await putJSON('/api/config', CONFIG);
   alert('已保存。引擎=' + CONFIG.tts.provider + '，输出=' + (CONFIG.audio_output_device || '系统默认'));
 }

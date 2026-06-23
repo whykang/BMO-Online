@@ -211,6 +211,29 @@ async def get_config():
     return load_config()
 
 
+@app.get("/api/audio/outputs")
+async def audio_outputs():
+    """列出可用的播放设备（供网页下拉选音响）。"""
+    items = []
+    try:
+        out = subprocess.run(["aplay", "-l"], capture_output=True, text=True, timeout=8).stdout
+        for line in out.splitlines():
+            m = re.match(r"\s*card (\d+): (\S+) \[(.*?)\].*device (\d+):", line)
+            if not m:
+                continue
+            card, cid, name, dev = m.group(1), m.group(2), m.group(3), m.group(4)
+            tag = f"{cid} {name}".lower()
+            kind = "HDMI" if ("hdmi" in tag or "vc4" in tag) else ("USB" if "usb" in tag else "其它")
+            items.append({
+                "device": f"plughw:{card},{dev}",
+                "label": f"[{kind}] card {card}: {name}",
+                "kind": kind,
+            })
+    except Exception as e:
+        return {"devices": [], "error": str(e)}
+    return {"devices": items}
+
+
 @app.get("/api/config/default")
 async def get_default_config():
     """出厂默认配置（config.default.json），用于'重置'。"""

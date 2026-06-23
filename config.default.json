@@ -80,5 +80,5 @@
     "deepseek": "https://api.deepseek.com/v1"
   },
   "audio_latency": "high",
-  "audio_output_device": ""
+  "audio_output_device": "auto"
 }
