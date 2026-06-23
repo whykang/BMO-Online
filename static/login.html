@@ -2,26 +2,42 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BMO 登录</title>
 <style>
-  body { font-family: -apple-system, "Segoe UI", sans-serif; background: #1e1e2e;
-         color: #ddd; display: flex; align-items: center; justify-content: center;
-         min-height: 100vh; margin: 0; }
-  .box { background: #2b2b3d; padding: 40px; border-radius: 12px; min-width: 320px;
-         box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
-  h1 { margin-top: 0; font-size: 24px; }
-  input { width: 100%; padding: 10px; font-size: 16px; border-radius: 6px; border: none;
-          background: #3a3a52; color: #fff; box-sizing: border-box; margin-bottom: 12px; }
-  button { width: 100%; padding: 10px; font-size: 16px; border-radius: 6px; border: none;
-           background: #6a8cff; color: #fff; cursor: pointer; }
-  button:hover { background: #819bff; }
-  .err { color: #ff7777; margin-top: 10px; min-height: 20px; }
+  :root {
+    --bg: #f5f6f4;
+    --panel: #ffffff;
+    --line: #dcded9;
+    --accent: #3f6f66;
+    --accent-soft: #e6efeb;
+    --text: #252923;
+    --muted: #6f756d;
+    --err: #b35b55;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", "Noto Sans CJK SC", sans-serif;
+         background: var(--bg); color: var(--text); display: flex; align-items: center;
+         justify-content: center; min-height: 100vh; margin: 0; font-size: 14px; }
+  .box { background: var(--panel); border: 1px solid var(--line); padding: 32px;
+         border-radius: 8px; min-width: 320px; box-shadow: 0 4px 18px rgba(0,0,0,0.06); }
+  h1 { margin: 0 0 20px; font-size: 18px; font-weight: 600; }
+  input { width: 100%; padding: 9px 11px; font-size: 14px; border-radius: 5px;
+          border: 1px solid var(--line); background: #fff; color: var(--text);
+          box-sizing: border-box; margin-bottom: 14px; }
+  input:focus { outline: none; border-color: #8aa69d;
+                box-shadow: 0 0 0 2px rgba(63,111,102,0.12); }
+  button { width: 100%; padding: 9px; font-size: 14px; border-radius: 5px;
+           border: 1px solid #bfd3cc; background: var(--accent-soft); color: #254f47;
+           cursor: pointer; }
+  button:hover { background: #dceae5; }
+  .err { color: var(--err); margin-top: 12px; min-height: 18px; font-size: 13px; }
 </style>
 </head>
 <body>
   <div class="box">
-    <h1>🤖 BMO 控制台</h1>
-    <input type="password" id="pw" placeholder="密码" autofocus>
+    <h1>BMO 控制台</h1>
+    <input type="password" id="pw" placeholder="请输入访问密码" autofocus>
     <button onclick="login()">登录</button>
     <div class="err" id="err"></div>
   </div>

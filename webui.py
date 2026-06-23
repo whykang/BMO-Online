@@ -130,19 +130,30 @@ class LoginReq(BaseModel):
     password: str
 
 
+def _set_token_cookie(response: Response):
+    token = make_token()
+    SESSION_TOKENS.add(token)
+    response.set_cookie("token", token, httponly=True,
+                        samesite="lax", path="/", max_age=30 * 24 * 3600)
+
+
+@app.get("/api/auth/status")
+async def auth_status(token: str = Cookie(default=None)):
+    auth = load_auth()
+    has_password = bool(auth and auth.get("password_hash"))
+    authed = (not has_password) or (token in SESSION_TOKENS)
+    return {"has_password": has_password, "authed": authed}
+
+
 @app.post("/api/login")
 async def login(req: LoginReq, response: Response):
     auth = load_auth()
     if not auth or not auth.get("password_hash"):
         # 没设置密码，直接通过
-        token = make_token()
-        SESSION_TOKENS.add(token)
-        response.set_cookie("token", token, httponly=True)
+        _set_token_cookie(response)
         return {"ok": True, "no_password": True}
     if hash_password(req.password) == auth["password_hash"]:
-        token = make_token()
-        SESSION_TOKENS.add(token)
-        response.set_cookie("token", token, httponly=True)
+        _set_token_cookie(response)
         return {"ok": True}
     raise HTTPException(401, "密码错误")
 
@@ -161,14 +172,18 @@ class SetPasswordReq(BaseModel):
 
 
 @app.post("/api/password")
-async def set_password(req: SetPasswordReq):
+async def set_password(req: SetPasswordReq, response: Response):
+    if not req.new_password or not req.new_password.strip():
+        raise HTTPException(400, "密码不能为空")
     auth = load_auth() or {}
     if auth.get("password_hash"):
         if not req.old_password or hash_password(req.old_password) != auth["password_hash"]:
             raise HTTPException(401, "原密码错误")
     auth["password_hash"] = hash_password(req.new_password)
     save_auth(auth)
-    SESSION_TOKENS.clear()  # 强制重新登录
+    # 设完密码直接把当前浏览器登录上，避免来回跳转
+    SESSION_TOKENS.clear()
+    _set_token_cookie(response)
     return {"ok": True}
 
 
@@ -192,6 +207,16 @@ async def get_state():
 @app.get("/api/config")
 async def get_config():
     return load_config()
+
+
+@app.get("/api/config/default")
+async def get_default_config():
+    """出厂默认配置（config.default.json），用于'重置'。"""
+    try:
+        with open("config.default.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 
 @app.put("/api/config")

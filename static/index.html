@@ -361,7 +361,7 @@
     <div class="help">只需写性格/说话风格。工具调用说明（查时间/拍照/画图/系统状态等）已内置在程序里，不用也无法在这里写，改性格不会影响工具。改完点保存，agent 自动重载，新对话立刻生效。</div>
     <div class="row" style="margin-top: 12px;">
       <button class="btn" onclick="savePrompt()">保存</button>
-      <button class="btn secondary" onclick="loadConfig().then(fillPrompt)">重置</button>
+      <button class="btn secondary" onclick="resetPromptDefault()">恢复默认</button>
     </div>
   </div>
 
@@ -1059,6 +1059,16 @@ async function savePrompt() {
   await putJSON('/api/config', CONFIG);
   alert('已保存，下一轮对话生效');
 }
+async function resetPromptDefault() {
+  if (!confirm('恢复出厂默认性格？当前编辑会被覆盖（点保存后才真正生效）')) return;
+  try {
+    const def = await fetchJSON('/api/config/default');
+    document.getElementById('prompt-system').value = def.system_prompt || '';
+    alert('已填入默认性格，确认后点“保存”生效');
+  } catch (e) {
+    alert('获取默认失败：' + e.message);
+  }
+}
 async function saveExtras() {
   CONFIG.system_prompt_extras = document.getElementById('prompt-extras').value;
   await putJSON('/api/config', CONFIG);
@@ -1279,24 +1289,14 @@ async function saveKey() {
 
 // ============ 安全 / 密码 ============
 async function loadPwState() {
-  // 通过 /api/login 探测：如果无密码状态会返回 no_password
   try {
-    const r = await fetch('/api/login', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({password: '__probe__'}),
-    });
-    const d = await r.json().catch(() => ({}));
-    if (d.no_password) {
-      document.getElementById('pw-state').textContent = '未设置';
-      document.getElementById('pw-state').className = 'pill';
-      document.getElementById('pw-old-row').style.display = 'none';
-    }
+    const s = await fetchJSON('/api/auth/status');
+    const has = !!s.has_password;
+    document.getElementById('pw-state').textContent = has ? '已设置' : '未设置';
+    document.getElementById('pw-state').className = has ? 'pill ok' : 'pill';
+    document.getElementById('pw-old-row').style.display = has ? 'flex' : 'none';
   } catch (e) {
-    // 401 = 有密码
-    document.getElementById('pw-state').textContent = '已设置';
-    document.getElementById('pw-state').className = 'pill ok';
-    document.getElementById('pw-old-row').style.display = 'flex';
+    document.getElementById('pw-state').textContent = '查询失败';
   }
 }
 async function setPassword() {
@@ -1305,8 +1305,10 @@ async function setPassword() {
   if (!newPw) return alert('请输入新密码');
   try {
     await postJSON('/api/password', {new_password: newPw, old_password: oldPw || null});
-    alert('密码已设置，请重新登录');
-    location.href = '/';
+    document.getElementById('pw-new').value = '';
+    document.getElementById('pw-old').value = '';
+    alert('密码已设置（当前已自动登录，下次访问需输入密码）');
+    await loadPwState();
   } catch (e) {
     alert('设置失败：' + e.message);
   }
