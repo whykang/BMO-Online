@@ -591,6 +591,12 @@ class BotGUI:
             pass
 
     def set_state(self, state, msg="", overlay_path=None):
+        # 离开思考状态 → 停思考音效
+        if state != BotStates.THINKING:
+            self.thinking_sound_active.clear()
+        if state == BotStates.ERROR:
+            threading.Thread(target=self._play_cue, args=("error_sounds",),
+                             kwargs={"wait": False}, daemon=True).start()
         def _update():
             if msg:
                 log(f"[STATE] {state.upper()}: {msg}")
@@ -641,6 +647,9 @@ class BotGUI:
             self.tts_active.set()
             threading.Thread(target=self._tts_worker, daemon=True).start()
             self.set_state(BotStates.IDLE, "准备好啦")
+            # 开机问候音效
+            threading.Thread(target=self._play_cue, args=("greeting_sounds",),
+                             kwargs={"wait": False}, daemon=True).start()
 
             while not self.exiting:
                 trigger = self.detect_wake_word_or_ptt()
@@ -650,6 +659,8 @@ class BotGUI:
                     self.interrupted.clear()
                     self.set_state(BotStates.IDLE, "重置")
                     continue
+                # 被唤醒/触发 → 确认音"我听到了"（等播完再录，避免录进音效）
+                self._play_cue("ack_sounds", wait=True)
 
                 # 每轮都重新读 config，网页改了立即生效
                 conv_cfg = self.config.get("conversation", {})
@@ -1250,6 +1261,9 @@ class BotGUI:
             return
 
         self.set_state(BotStates.THINKING, "思考中...")
+        # 思考音效（循环哼唱，开始说话时停）
+        self.thinking_sound_active.set()
+        threading.Thread(target=self._run_thinking_sound_loop, daemon=True).start()
         messages = self.permanent_memory + self.session_memory + [
             {"role": "user", "content": text}
         ]
@@ -1274,6 +1288,7 @@ class BotGUI:
                     continue
 
                 if self.current_state != BotStates.SPEAKING:
+                    self.thinking_sound_active.clear()  # 开始说话，停思考音效
                     self.set_state(BotStates.SPEAKING, "说话中...", overlay_path=img_path)
                     self.append_to_text("BMO: ", newline=False)
                 self._stream_to_text(chunk)
@@ -1492,6 +1507,51 @@ class BotGUI:
                         self.tts_active.clear()
             else:
                 time.sleep(0.05)
+
+    # -------------------------------------------------------------------
+    # 音效（greeting / ack / thinking / error）→ 走自动检测的音箱
+    # -------------------------------------------------------------------
+    def _get_random_sound(self, subdir):
+        d = os.path.join("sounds", subdir)
+        if not os.path.isdir(d):
+            return None
+        files = [f for f in os.listdir(d) if f.lower().endswith(".wav")]
+        return os.path.join(d, random.choice(files)) if files else None
+
+    def _play_sound_file(self, path, wait=True):
+        if not path or not os.path.exists(path):
+            return
+        if not self.config.get("enable_sounds", True):
+            return
+        dev = self._resolve_output_device()
+        cmd = ["aplay", "-q"]
+        if dev:
+            cmd += ["-D", dev]
+        cmd.append(path)
+        try:
+            proc = subprocess.Popen(cmd, stderr=subprocess.DEVNULL)
+            if wait:
+                while proc.poll() is None:
+                    if self.exiting or self.interrupted.is_set():
+                        proc.terminate()
+                        break
+                    time.sleep(0.05)
+        except Exception as e:
+            log(f"[SOUND] 播放失败: {e}")
+
+    def _play_cue(self, subdir, wait=True):
+        self._play_sound_file(self._get_random_sound(subdir), wait=wait)
+
+    def _run_thinking_sound_loop(self):
+        time.sleep(0.4)
+        while self.thinking_sound_active.is_set() and not self.exiting:
+            snd = self._get_random_sound("thinking_sounds")
+            if snd:
+                self._play_sound_file(snd, wait=True)
+            for _ in range(15):
+                if not self.thinking_sound_active.is_set():
+                    return
+                time.sleep(0.1)
 
     def speak(self, text):
         clean = text.strip()
