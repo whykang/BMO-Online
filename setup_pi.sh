@@ -78,6 +78,7 @@ fi
 #     测试音频，只落地 int8 版（约 230MB），省磁盘、省后续清理。
 #     只有 config.stt.provider = local_sherpa 时才需要；不想要可注释掉这段。
 SV_DIR="models/sense-voice"
+SV_NEWLY_INSTALLED=0
 if [ ! -f "$SV_DIR/tokens.txt" ]; then
     echo -e "${YELLOW}  下载本地 STT 模型 SenseVoice（下载约 1GB，较慢；只保留 int8 约230MB）...${NC}"
     mkdir -p models
@@ -92,7 +93,10 @@ if [ ! -f "$SV_DIR/tokens.txt" ]; then
                  --exclude='*/test_wavs' \
             && mv "$SV_INNER" sense-voice \
             && rm "$SV_TARBALL" )
-        echo -e "${GREEN}  ✓ 本地 STT 模型已就绪：$SV_DIR（仅 int8）${NC}"
+        if [ -f "$SV_DIR/tokens.txt" ]; then
+            SV_NEWLY_INSTALLED=1
+            echo -e "${GREEN}  ✓ 本地 STT 模型已就绪：$SV_DIR（仅 int8）${NC}"
+        fi
     else
         echo -e "${RED}  ✗ 本地 STT 模型下载失败（不影响云端 STT）${NC}"
         rm -f "models/$SV_TARBALL"
@@ -105,6 +109,22 @@ fi
 if [ ! -f config.json ]; then
     cp config.default.json config.json
     echo -e "${GREEN}  ✓ 已从 config.default.json 创建 config.json${NC}"
+fi
+
+# 5b. 本次新装好本地 STT → 默认就用它（只在'本次新下载'时设，不覆盖你之后手动切回云端）
+if [ "$SV_NEWLY_INSTALLED" = "1" ]; then
+    python3 - <<'PYEOF'
+import json
+try:
+    cfg = json.load(open("config.json", encoding="utf-8"))
+    cfg.setdefault("stt", {})
+    cfg["stt"]["provider"] = "local_sherpa"
+    cfg["stt"]["model"] = "models/sense-voice"
+    json.dump(cfg, open("config.json", "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    print("  ✓ 已默认启用本地 STT（local_sherpa）")
+except Exception as e:
+    print(f"  ⚠️ 设置默认 STT 失败: {e}")
+PYEOF
 fi
 
 # 6. .env 提醒
