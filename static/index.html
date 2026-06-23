@@ -621,6 +621,12 @@ function showTab(name) {
   document.getElementById('tab-' + name).classList.remove('hide');
   document.querySelectorAll('nav button').forEach(b =>
     b.classList.toggle('active', b.dataset.tab === name));
+  refreshTab(name);
+}
+
+function refreshTab(name) {
+  if (name === 'history') loadHistory();
+  if (name === 'images') loadImages();
 }
 
 // ============ 状态轮询 ============
@@ -1159,8 +1165,15 @@ async function saveWake() {
 
 // ============ 历史 ============
 async function loadHistory() {
-  const data = await fetchJSON('/api/history');
   const box = document.getElementById('history-list');
+  box.textContent = '正在加载...';
+  let data;
+  try {
+    data = await fetchJSON('/api/history');
+  } catch (e) {
+    box.textContent = '加载失败：' + e.message;
+    return;
+  }
   box.innerHTML = '';
   for (const m of data) {
     const div = document.createElement('div');
@@ -1184,8 +1197,15 @@ function escapeHtml(s) {
 
 // ============ 图片画廊 ============
 async function loadImages() {
-  const data = await fetchJSON('/api/images');
   const box = document.getElementById('image-grid');
+  box.textContent = '正在加载...';
+  let data;
+  try {
+    data = await fetchJSON('/api/images');
+  } catch (e) {
+    box.textContent = '加载失败：' + e.message;
+    return;
+  }
   box.innerHTML = '';
   for (const img of data) {
     const card = document.createElement('div');
