@@ -357,8 +357,8 @@
 <section id="tab-prompt" class="tab hide">
   <div class="panel">
     <h2>System Prompt（BMO 性格设定）</h2>
-    <textarea id="prompt-system" placeholder="System prompt..."></textarea>
-    <div class="help">改完点保存，agent 自动重载，新对话立刻生效。</div>
+    <textarea id="prompt-system" placeholder="只写性格/说话风格，比如：你是可爱的小机器人 BMO，说话活泼简短..."></textarea>
+    <div class="help">只需写性格/说话风格。工具调用说明（查时间/拍照/画图/系统状态等）已内置在程序里，不用也无法在这里写，改性格不会影响工具。改完点保存，agent 自动重载，新对话立刻生效。</div>
     <div class="row" style="margin-top: 12px;">
       <button class="btn" onclick="savePrompt()">保存</button>
       <button class="btn secondary" onclick="loadConfig().then(fillPrompt)">重置</button>

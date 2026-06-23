@@ -96,6 +96,22 @@ def save_config(cfg: dict):
 
 
 # =========================================================================
+# 工具调用说明（硬编码，用户在网页改不到）
+# =========================================================================
+TOOLS_PROMPT = (
+    "你有这几个工具，需要用时整条回复必须是纯 JSON，第一个字符就是 {，"
+    "前后绝对不要加任何文字、不要说'让我试试'之类的话：\n"
+    "1. 查时间：{\"action\": \"get_time\"}\n"
+    "2. 拍照看：{\"action\": \"capture_image\"}\n"
+    "3. 画图：{\"action\": \"generate_image\", \"prompt\": \"图片描述\"}\n"
+    "4. 查看系统状态/温度/CPU/内存/磁盘：{\"action\": \"get_system_status\"}\n\n"
+    "不要调用 search_web，不要为搜索/新闻/查资料输出 JSON。"
+    "用户让你搜索时，直接用大模型已有知识回答；涉及最新信息时说明可能不是最新。\n\n"
+    "不需要工具时，正常聊天即可。聊天回复尽量短，1~3 句话。"
+)
+
+
+# =========================================================================
 # 状态机
 # =========================================================================
 class BotStates:
@@ -1479,29 +1495,13 @@ class BotGUI:
     # 记忆
     # -------------------------------------------------------------------
     def build_system_prompt(self) -> str:
-        base = self._remove_search_web_prompt(self.config.get("system_prompt", ""))
-        if "get_system_status" not in base:
-            base += (
-                "\n\n补充工具：查看系统状态/温度/CPU/内存/磁盘时，回复纯 JSON："
-                "{\"action\": \"get_system_status\"}"
-            )
-        if "search_web" not in base:
-            base += (
-                "\n\n搜索说明：不要调用 search_web，不要为搜索/新闻/查资料输出 JSON。"
-                "用户让你搜索时，直接用大模型已有知识回答；涉及最新信息时说明可能不是最新。"
-            )
-        extras = self.config.get("system_prompt_extras", "")
+        # 工具说明硬编码，始终追加在用户性格之后，用户在网页改不到、删不掉
+        personality = (self.config.get("system_prompt", "") or "").strip()
+        extras = (self.config.get("system_prompt_extras", "") or "").strip()
+        parts = [personality, TOOLS_PROMPT]
         if extras:
-            return f"{base}\n\n{extras}"
-        return base
-
-    def _remove_search_web_prompt(self, text: str) -> str:
-        lines = []
-        for line in (text or "").splitlines():
-            if "search_web" in line or "搜网络" in line or "网络搜索" in line:
-                continue
-            lines.append(line)
-        return "\n".join(lines).strip()
+            parts.append(extras)
+        return "\n\n".join(p for p in parts if p)
 
     def load_chat_history(self):
         sysp = {"role": "system", "content": self.build_system_prompt() if hasattr(self, "config") else ""}
