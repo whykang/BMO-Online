@@ -461,7 +461,9 @@ async def get_history():
         return []
     try:
         with open(MEMORY_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+        # 不显示 system（内部设定，不是对话），只看用户/助手的真实对话
+        return [m for m in data if m.get("role") != "system"]
     except Exception:
         return []
 
