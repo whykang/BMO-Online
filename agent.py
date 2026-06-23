@@ -201,6 +201,10 @@ class BotGUI:
         self.interrupted = threading.Event()
         self.thinking_sound_active = threading.Event()
 
+        # 待机熄屏
+        self.screen_off = False
+        self.last_active_ts = time.time()
+
         # TTS 队列
         self.tts_queue = []
         self.tts_queue_lock = threading.Lock()
@@ -246,6 +250,10 @@ class BotGUI:
         self.exit_button = ttk.Button(master, text="退出", command=self.safe_exit)
         self._set_cursor_visible(False)
 
+        # 黑屏图（待机熄屏用）
+        blank = Image.new('RGB', (self.BG_WIDTH, self.BG_HEIGHT), 'black')
+        self._black_img = ImageTk.PhotoImage(blank)
+
         self.load_animations()
         self.update_animation()
         self._safe_after(500, self._force_hide_cursor)
@@ -255,6 +263,7 @@ class BotGUI:
             self.status_label.place(relx=0.5, rely=1.0, anchor=tk.S, relwidth=1)
         self.poll_commands_file()  # 启动后台 webui 命令轮询
         self.update_state_file()   # 启动状态写入
+        self._screen_idle_check()  # 待机熄屏检查
 
         threading.Thread(target=self.safe_main_execution, daemon=True).start()
 
@@ -553,6 +562,14 @@ class BotGUI:
                 self.animations[s].append(ImageTk.PhotoImage(blank))
 
     def update_animation(self):
+        # 熄屏时只显示黑屏，不画脸
+        if self.screen_off:
+            try:
+                self.background_label.config(image=self._black_img)
+            except tk.TclError:
+                pass
+            self.master.after(1000, self.update_animation)
+            return
         frames = self.animations.get(self.current_state) or self.animations.get(BotStates.IDLE)
         if not frames:
             self.master.after(500, self.update_animation)
@@ -574,10 +591,60 @@ class BotGUI:
         except (RuntimeError, tk.TclError):
             pass
 
+    # -------------------------------------------------------------------
+    # 待机熄屏（继续监听唤醒词；唤醒后亮屏）
+    # -------------------------------------------------------------------
+    def _run_screen_cmd(self, cmd):
+        if not cmd:
+            return
+        try:
+            subprocess.Popen(cmd, shell=True,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:
+            log(f"[SCREEN] 命令失败: {e}")
+
+    def _blank_screen(self):
+        if self.screen_off:
+            return
+        self.screen_off = True
+        log("[SCREEN] 待机熄屏")
+        try:
+            self.background_label.config(image=self._black_img)
+            self.overlay_label.place_forget()
+        except tk.TclError:
+            pass
+        self._run_screen_cmd(self.config.get("screen", {}).get("power_off_command", ""))
+
+    def _wake_screen(self):
+        if not self.screen_off:
+            return
+        self.screen_off = False
+        self.last_active_ts = time.time()
+        log("[SCREEN] 亮屏")
+        self._run_screen_cmd(self.config.get("screen", {}).get("power_on_command", ""))
+        # update_animation 会自动恢复画脸
+
+    def _screen_idle_check(self):
+        try:
+            sc = self.config.get("screen", {})
+            off_secs = float(sc.get("idle_off_seconds", 60))
+            if (off_secs > 0 and not self.screen_off
+                    and self.current_state == BotStates.IDLE
+                    and time.time() - self.last_active_ts > off_secs):
+                self._blank_screen()
+        except Exception:
+            pass
+        self._safe_after(2000, self._screen_idle_check)
+
     def set_state(self, state, msg="", overlay_path=None):
         def _update():
             if msg:
                 log(f"[STATE] {state.upper()}: {msg}")
+            # 任何非 IDLE 状态都算"活动"：刷新计时；若在熄屏则亮屏
+            if state != BotStates.IDLE:
+                self.last_active_ts = time.time()
+                if self.screen_off:
+                    self._wake_screen()
             if self.current_state != state:
                 self.current_state = state
                 self.current_frame_index = 0
