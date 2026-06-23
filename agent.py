@@ -1523,21 +1523,22 @@ class BotGUI:
             return
         if not self.config.get("enable_sounds", True):
             return
-        dev = self._resolve_output_device()
-        cmd = ["aplay", "-q"]
-        if dev:
-            cmd += ["-D", dev]
-        cmd.append(path)
+        # 读 wav → 16bit 单声道 PCM，走 _play_pcm_aplay（应用软件音量）
         try:
-            proc = subprocess.Popen(cmd, stderr=subprocess.DEVNULL)
-            if wait:
-                while proc.poll() is None:
-                    if self.exiting or self.interrupted.is_set():
-                        proc.terminate()
-                        break
-                    time.sleep(0.05)
+            with wave.open(path, "rb") as wf:
+                sr = wf.getframerate()
+                ch = wf.getnchannels()
+                sw = wf.getsampwidth()
+                raw = wf.readframes(wf.getnframes())
         except Exception as e:
-            log(f"[SOUND] 播放失败: {e}")
+            log(f"[SOUND] 读取失败: {e}")
+            return
+        if sw != 2:
+            return
+        arr = np.frombuffer(raw, dtype='<i2')
+        if ch > 1:
+            arr = arr.reshape(-1, ch).mean(axis=1).astype('<i2')
+        self._play_pcm_aplay(arr.tobytes(), sr)
 
     def _play_cue(self, subdir, wait=True):
         self._play_sound_file(self._get_random_sound(subdir), wait=wait)
@@ -1610,10 +1611,21 @@ class BotGUI:
                 log("[AUDIO] 未检测到 USB 音响，用系统默认输出")
         return self._resolved_output
 
+    def _gain(self):
+        """软件音量增益 0.0~1.0（来自 config.volume_percent，默认80）。"""
+        try:
+            return max(0.0, min(1.0, float(self.config.get("volume_percent", 80)) / 100.0))
+        except Exception:
+            return 0.8
+
     def _play_pcm_aplay(self, pcm: bytes, sr: int):
-        """用 aplay 播 16-bit 单声道 PCM，自动/指定到音响。"""
+        """用 aplay 播 16-bit 单声道 PCM，自动/指定到音响。应用软件音量。"""
         if not pcm:
             return
+        gain = self._gain()
+        if gain != 1.0:
+            arr = np.frombuffer(pcm, dtype='<i2').astype(np.float32) * gain
+            pcm = np.clip(arr, -32768, 32767).astype('<i2').tobytes()
         dev = self._resolve_output_device()
         cmd = ["aplay", "-q", "-f", "S16_LE", "-c", "1", "-r", str(sr)]
         if dev:
@@ -1645,7 +1657,7 @@ class BotGUI:
         if not mp3:
             return
         dev = self._resolve_output_device()
-        cmd = ["mpg123", "-q"]
+        cmd = ["mpg123", "-q", "-f", str(int(32768 * self._gain()))]  # -f 软件音量
         if dev:
             cmd += ["-a", dev]
         cmd += ["-"]

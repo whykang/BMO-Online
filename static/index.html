@@ -787,7 +787,7 @@ async function loadVolume() {
     if (v.ok && v.volume != null) {
       document.getElementById('volume-slider').value = v.volume;
       document.getElementById('volume-val').textContent = v.volume + '%';
-      hint.textContent = '设备 card ' + v.card + ' / ' + v.control;
+      hint.textContent = '软件音量（TTS/音效都跟着变）';
     } else {
       hint.textContent = v.reason || '无法读取音量';
     }

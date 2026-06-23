@@ -275,20 +275,9 @@ def _amixer_control(card):
 
 @app.get("/api/volume")
 async def get_volume():
-    card = _output_card_num()
-    if card is None:
-        return {"ok": False, "reason": "没找到输出声卡"}
-    ctrl = _amixer_control(card)
-    if not ctrl:
-        return {"ok": False, "card": card, "reason": "该音箱无可调音量控件（音量固定）"}
-    try:
-        out = subprocess.run(["amixer", "-c", str(card), "sget", ctrl],
-                             capture_output=True, text=True, timeout=8).stdout
-        m = re.search(r"\[(\d+)%\]", out)
-        return {"ok": True, "card": card, "control": ctrl,
-                "volume": int(m.group(1)) if m else None}
-    except Exception as e:
-        return {"ok": False, "card": card, "reason": str(e)}
+    # 软件音量为准（不被 PipeWire 重置）
+    cfg = load_config()
+    return {"ok": True, "volume": int(cfg.get("volume_percent", 80))}
 
 
 class VolumeReq(BaseModel):
@@ -298,18 +287,21 @@ class VolumeReq(BaseModel):
 @app.put("/api/volume")
 async def set_volume(req: VolumeReq):
     pct = max(0, min(100, int(req.percent)))
+    # 1) 写进 config（软件增益，TTS/Piper/音效都会乘上它，谁都改不回去）
+    cfg = load_config()
+    cfg["volume_percent"] = pct
+    save_config(cfg)
+    # 2) 附带也设一下硬件 amixer（即时、对其它程序也生效；被 PipeWire 重置也无所谓）
     card = _output_card_num()
-    if card is None:
-        raise HTTPException(400, "没找到输出声卡")
-    ctrl = _amixer_control(card)
-    if not ctrl:
-        raise HTTPException(400, "该音箱无可调音量控件（音量固定，无法软调）")
-    try:
-        subprocess.run(["amixer", "-c", str(card), "sset", ctrl, f"{pct}%", "unmute"],
-                       capture_output=True, text=True, timeout=8)
-        return {"ok": True, "card": card, "control": ctrl, "volume": pct}
-    except Exception as e:
-        raise HTTPException(500, str(e))
+    if card is not None:
+        ctrl = _amixer_control(card)
+        if ctrl:
+            try:
+                subprocess.run(["amixer", "-c", str(card), "sset", ctrl, f"{pct}%", "unmute"],
+                               capture_output=True, text=True, timeout=8)
+            except Exception:
+                pass
+    return {"ok": True, "volume": pct}
 
 
 @app.get("/api/config/default")
