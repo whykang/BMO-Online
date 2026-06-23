@@ -656,6 +656,8 @@ class BotGUI:
                     self.interrupted.clear()
                     self.set_state(BotStates.IDLE, "重置")
                     continue
+                # 先把动画切到"在听"，立刻给视觉反馈；否则要等应答音(TTS ~2s)念完动画才变
+                self.set_state(BotStates.LISTENING, "在听...")
                 # 被唤醒/触发 → 读出应答词（等播完再录，避免录进自己的提示音）
                 self._play_status_cue("ack")
 
