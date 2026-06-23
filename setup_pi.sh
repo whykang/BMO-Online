@@ -73,19 +73,26 @@ else
     echo -e "${GREEN}  ✓ 唤醒词模型已就绪（仓库自带）${NC}"
 fi
 
-# 4b. 本地 STT 模型（SenseVoice，可选；约 230MB，太大不入仓库，按需下载）
-#     只有 config.stt.provider = local_sherpa 时才需要。这里默认下载方便切换；
-#     不想要可注释掉这段。
+# 4b. 本地 STT 模型（SenseVoice，可选）。
+#     官方打成一个 .tar.bz2（下载约 1GB，改不了），但解压时排除非 int8 大模型和
+#     测试音频，只落地 int8 版（约 230MB），省磁盘、省后续清理。
+#     只有 config.stt.provider = local_sherpa 时才需要；不想要可注释掉这段。
 SV_DIR="models/sense-voice"
 if [ ! -f "$SV_DIR/tokens.txt" ]; then
-    echo -e "${YELLOW}  下载本地 STT 模型 SenseVoice（约 230MB，较慢）...${NC}"
+    echo -e "${YELLOW}  下载本地 STT 模型 SenseVoice（下载约 1GB，较慢；只保留 int8 约230MB）...${NC}"
     mkdir -p models
     SV_TARBALL="sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2"
     SV_INNER="sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
     SV_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/$SV_TARBALL"
     if curl -fL --retry 2 -o "models/$SV_TARBALL" "$SV_URL"; then
-        ( cd models && tar xjf "$SV_TARBALL" && rm -rf sense-voice && mv "$SV_INNER" sense-voice && rm "$SV_TARBALL" )
-        echo -e "${GREEN}  ✓ 本地 STT 模型已就绪：$SV_DIR${NC}"
+        ( cd models \
+            && rm -rf "$SV_INNER" sense-voice \
+            && tar xjf "$SV_TARBALL" \
+                 --exclude='*/model.onnx' \
+                 --exclude='*/test_wavs' \
+            && mv "$SV_INNER" sense-voice \
+            && rm "$SV_TARBALL" )
+        echo -e "${GREEN}  ✓ 本地 STT 模型已就绪：$SV_DIR（仅 int8）${NC}"
     else
         echo -e "${RED}  ✗ 本地 STT 模型下载失败（不影响云端 STT）${NC}"
         rm -f "models/$SV_TARBALL"
