@@ -1159,7 +1159,7 @@ async function saveWake() {
     legacy_threshold: parseFloat(document.getElementById('wake-legacy-threshold').value),
   };
   await putJSON('/api/wakewords/config', payload);
-  document.getElementById('wake-status-hint').textContent = '已保存（重启 agent 后生效）';
+  document.getElementById('wake-status-hint').textContent = '已保存，正在重载唤醒词';
   setTimeout(() => document.getElementById('wake-status-hint').textContent = '', 3000);
 }
 

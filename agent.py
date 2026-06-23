@@ -320,6 +320,17 @@ class BotGUI:
         else:
             log(f"[INIT] 未知唤醒词后端: {backend}")
 
+    def _reload_wake_word_if_needed(self):
+        if not self.wake_reload_pending:
+            return False
+        self.wake_reload_pending = False
+        log("[CMD] 重载唤醒词后端...")
+        try:
+            self._load_wake_word()
+        except Exception as e:
+            log(f"[CMD] 唤醒词重载失败: {e}")
+        return True
+
     # -------------------------------------------------------------------
     # 退出 & UI 工具
     # -------------------------------------------------------------------
@@ -676,22 +687,20 @@ class BotGUI:
         self.ptt_event.clear()
 
         # 配置变更后在本线程安全重载唤醒词（避免和监听循环跨线程竞争）
-        if self.wake_reload_pending:
-            self.wake_reload_pending = False
-            log("[CMD] 重载唤醒词后端...")
-            try:
-                self._load_wake_word()
-            except Exception as e:
-                log(f"[CMD] 唤醒词重载失败: {e}")
+        self._reload_wake_word_if_needed()
 
         # 没装任何唤醒词后端 → 纯 PTT 模式
         if self.wake_backend is None:
             while not self.ptt_event.is_set():
                 if self.exiting:
                     return "PTT"
+                if self._reload_wake_word_if_needed():
+                    if self.wake_backend is not None:
+                        break
                 time.sleep(0.1)
-            self.ptt_event.clear()
-            return "PTT"
+            if self.ptt_event.is_set():
+                self.ptt_event.clear()
+                return "PTT"
 
         # 重置后端状态
         if self.sherpa_kws:
@@ -737,6 +746,9 @@ class BotGUI:
             fail_count = 0
             if result == "REFRESH":
                 continue          # 定期刷新，重开音频流继续听
+            if result == "RELOAD":
+                self._reload_wake_word_if_needed()
+                return self.detect_wake_word_or_ptt()  # 配置变更，按新后端重算音频参数
             return result          # "WAKE"
         return "PTT"
 
@@ -770,6 +782,8 @@ class BotGUI:
             while True:
                 if self.exiting:
                     raise StopIteration("EXIT")
+                if self.wake_reload_pending:
+                    return "RELOAD"
                 if self.ptt_event.is_set():
                     self.ptt_event.clear()
                     raise StopIteration("PTT")
@@ -1586,7 +1600,7 @@ class BotGUI:
                     output_dir=self.config.get("generated_dir", "generated"),
                 )
                 # 唤醒词不能在这个线程里重建（监听循环在另一个线程跑，会撞车）。
-                # 设个标志，让监听线程在下一轮自己重载。
+                # 设个标志；监听线程会立刻退出当前音频流并按新配置重载。
                 self.wake_reload_pending = True
                 # 更新 system prompt
                 if self.permanent_memory:
