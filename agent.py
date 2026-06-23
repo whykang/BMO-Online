@@ -1620,10 +1620,55 @@ class BotGUI:
         except Exception:
             return 1.0
 
+    def _amixer_ctrl_for(self, card):
+        """找声卡的播放音量控件名，结果缓存（避免每句都扫一次）。"""
+        cache = getattr(self, "_amixer_ctrl_cache", None)
+        if cache is None:
+            cache = self._amixer_ctrl_cache = {}
+        if card in cache:
+            return cache[card]
+        ctrl = None
+        try:
+            out = subprocess.check_output(["amixer", "-c", str(card), "scontrols"],
+                                          text=True, stderr=subprocess.DEVNULL, timeout=5)
+            names = re.findall(r"'([^']+)'", out)
+            for pref in ("Master", "PCM", "Speaker", "Headphone", "Playback"):
+                if pref in names:
+                    ctrl = pref
+                    break
+            if not ctrl and names:
+                ctrl = names[0]
+        except Exception:
+            ctrl = None
+        cache[card] = ctrl
+        return ctrl
+
+    def _pin_hw_volume(self):
+        """每次播放前把输出声卡硬件音量顶到 100% 并取消静音。
+        PipeWire/WirePlumber 常在每段播放结束后把硬件音量复位（表现为"这句大、
+        下一句又变小"），所以每句都重新顶一次；用户音量统一交给软件增益 _gain()。
+        config.hw_volume_pin=false 可关掉这个行为。"""
+        if not self.config.get("hw_volume_pin", True):
+            return
+        dev = self._resolve_output_device()  # "plughw:N,0" 或 ""
+        m = re.search(r"hw:(\d+)", dev or "")
+        if not m:
+            return
+        card = m.group(1)
+        ctrl = self._amixer_ctrl_for(card)
+        if not ctrl:
+            return
+        try:
+            subprocess.run(["amixer", "-c", card, "sset", ctrl, "100%", "unmute"],
+                           capture_output=True, timeout=5)
+        except Exception:
+            pass
+
     def _play_pcm_aplay(self, pcm: bytes, sr: int):
         """用 aplay 播 16-bit 单声道 PCM，自动/指定到音响。应用软件音量。"""
         if not pcm:
             return
+        self._pin_hw_volume()
         gain = self._gain()
         if gain != 1.0:
             arr = np.frombuffer(pcm, dtype='<i2').astype(np.float32) * gain
@@ -1660,6 +1705,7 @@ class BotGUI:
         mp3 = self.tts_edge.synthesize_mp3(text)
         if not mp3:
             return
+        self._pin_hw_volume()
         dev = self._resolve_output_device()
         cmd = ["mpg123", "-q", "-f", str(int(32768 * self._gain()))]  # -f 软件音量
         if dev:
@@ -1682,6 +1728,7 @@ class BotGUI:
 
     def _speak_siliconflow(self, text):
         sr = self.config.get("tts_sample_rate", 24000)
+        self._pin_hw_volume()
         gain = self._gain()
         with sd.RawOutputStream(samplerate=sr, channels=1, dtype='int16', latency='low') as stream:
             for chunk in self.tts_sf.synthesize_pcm_stream(text):

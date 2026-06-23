@@ -234,45 +234,6 @@ async def audio_outputs():
     return {"devices": items}
 
 
-def _output_card_num():
-    """取输出声卡号：优先 config 里的 plughw:N，否则自动找 USB/非HDMI 播放卡。"""
-    cfg = load_config()
-    dev = (cfg.get("audio_output_device") or "auto").strip()
-    m = re.search(r"hw:(\d+)", dev)
-    if m:
-        return int(m.group(1))
-    try:
-        out = subprocess.run(["aplay", "-l"], capture_output=True, text=True, timeout=8).stdout
-        non_hdmi = None
-        for line in out.splitlines():
-            mm = re.match(r"\s*card (\d+): (\S+) \[(.*?)\]", line)
-            if not mm:
-                continue
-            c = int(mm.group(1))
-            tag = (mm.group(2) + " " + mm.group(3)).lower()
-            if "usb" in tag:
-                return c
-            if "hdmi" not in tag and "vc4" not in tag and non_hdmi is None:
-                non_hdmi = c
-        return non_hdmi
-    except Exception:
-        return None
-
-
-def _amixer_control(card):
-    """找一个能调的播放音量控件名。"""
-    try:
-        out = subprocess.run(["amixer", "-c", str(card), "scontrols"],
-                             capture_output=True, text=True, timeout=8).stdout
-        names = re.findall(r"'([^']+)'", out)
-        for pref in ("Master", "PCM", "Speaker", "Headphone", "Playback"):
-            if pref in names:
-                return pref
-        return names[0] if names else None
-    except Exception:
-        return None
-
-
 @app.get("/api/volume")
 async def get_volume():
     # 软件音量为准（不被 PipeWire 重置）
@@ -288,21 +249,12 @@ class VolumeReq(BaseModel):
 async def set_volume(req: VolumeReq):
     # 允许到 200%：软件增益可放大（>100%），解决 USB 音箱本身偏小的问题
     pct = max(0, min(200, int(req.percent)))
-    # 1) 写进 config（软件增益，TTS/Piper/音效都会乘上它，谁都改不回去）
+    # 只写软件增益到 config（TTS/Piper/音效都会乘上它）。
+    # 硬件 amixer 不在这里设：PipeWire 会在每段播放后把它复位（表现为"这句大、
+    # 下一句又变小"）。改由 agent 在每次播放前把硬件顶到 100%，软件增益做唯一音量旋钮。
     cfg = load_config()
     cfg["volume_percent"] = pct
     save_config(cfg)
-    # 2) 附带也设一下硬件 amixer（即时、对其它程序也生效；被 PipeWire 重置也无所谓）
-    #    硬件音量最高 100%，>100% 的部分靠软件增益放大
-    card = _output_card_num()
-    if card is not None:
-        ctrl = _amixer_control(card)
-        if ctrl:
-            try:
-                subprocess.run(["amixer", "-c", str(card), "sset", ctrl, f"{min(100, pct)}%", "unmute"],
-                               capture_output=True, text=True, timeout=8)
-            except Exception:
-                pass
     return {"ok": True, "volume": pct}
 
 
