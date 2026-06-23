@@ -115,11 +115,13 @@ def make_token() -> str:
 
 @app.get("/", response_class=HTMLResponse)
 async def index(token: str = Cookie(default=None)):
+    # 禁止缓存：否则登录前缓存的登录页会在登录后被直接复用，看着像没跳转
+    no_cache = {"Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache", "Expires": "0"}
     auth = load_auth()
     if auth and auth.get("password_hash") and (not token or token not in SESSION_TOKENS):
-        # 需要登录
-        return FileResponse("static/login.html")
-    return FileResponse("static/index.html")
+        return FileResponse("static/login.html", headers=no_cache)
+    return FileResponse("static/index.html", headers=no_cache)
 
 
 # =========================================================================
