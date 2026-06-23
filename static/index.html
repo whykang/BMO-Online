@@ -139,7 +139,7 @@
 
 <nav>
   <button class="active" data-tab="dashboard" onclick="showTab('dashboard')">仪表板</button>
-  <button data-tab="voice" onclick="showTab('voice')">音色</button>
+  <button data-tab="voice" onclick="showTab('voice')">语音设置</button>
   <button data-tab="models" onclick="showTab('models')">模型</button>
   <button data-tab="prompt" onclick="showTab('prompt')">性格</button>
   <button data-tab="wake" onclick="showTab('wake')">唤醒词</button>
@@ -193,24 +193,24 @@
   </div>
 </section>
 
-<!-- 音色 -->
+<!-- 语音设置 -->
 <section id="tab-voice" class="tab hide">
   <div class="panel">
     <h2>TTS 引擎</h2>
     <div class="row">
       <label>引擎：</label>
-      <select id="tts-provider">
+      <select id="tts-provider" onchange="updateTTSProviderUI()">
         <option value="edge">Edge-TTS（云端免费，音色多）</option>
         <option value="doubao">豆包 TTS（火山引擎，需填 .env 凭证）</option>
         <option value="piper">Piper 本地（离线免费，需下模型）</option>
         <option value="siliconflow">硅基流动 CosyVoice（云端）</option>
       </select>
     </div>
-    <div class="row">
+    <div class="row hide" id="tts-doubao-settings">
       <label>豆包音色 ID：</label>
       <input type="text" id="doubao-voice-type" placeholder="zh_female_cancan_mars_bigtts"
              style="flex:1; min-width:280px;">
-      <span class="help">仅"豆包"引擎用。填火山控制台已开通的音色代号。</span>
+      <span class="help">填火山控制台已开通的音色代号。</span>
     </div>
     <div class="row">
       <label>音箱输出设备：</label>
@@ -225,12 +225,12 @@
       <span class="help" id="volume-hint"></span>
     </div>
     <div class="row">
-      <button class="btn" onclick="saveTTSEngine()">保存引擎/输出</button>
-      <span class="help">默认"自动检测 USB 音响"。多个设备时在这里选。Piper 语速用下方"语速"框填数字(0.8~1.2)。</span>
+      <button class="btn" onclick="saveTTSEngine()">保存语音设置</button>
+      <span class="help">默认“自动检测 USB 音响”。多个设备时在这里选。</span>
     </div>
   </div>
 
-  <div class="panel">
+  <div class="panel hide" id="tts-edge-settings">
     <h2>Edge-TTS 音色（免费）</h2>
     <div class="row">
       <label>语言：</label>
@@ -260,17 +260,6 @@
       <button class="btn" onclick="testVoice()">试听</button>
       <button class="btn" onclick="saveVoice()">保存为默认</button>
       <audio id="voice-audio" controls></audio>
-    </div>
-  </div>
-
-  <div class="panel">
-    <h2>TTS 兜底（Edge 失效时用）</h2>
-    <div class="row">
-      <label>兜底模型：</label>
-      <select id="tts-fallback"></select>
-    </div>
-    <div class="row">
-      <button class="btn" onclick="saveTTSFallback()">保存</button>
     </div>
   </div>
 
@@ -723,7 +712,6 @@ async function initAll() {
   fillModels();
   fillPrompt();
   fillWake();
-  loadVoices();
   loadKeys();
   loadPwState();
   loadAutostart();
@@ -785,7 +773,7 @@ async function restartWebui() {
 }
 initAll();
 
-// ============ 音色 ============
+// ============ 语音设置 ============
 async function loadVoices() {
   const lang = document.getElementById('voice-lang').value;
   const voices = await fetchJSON(`/api/voices?lang=${lang}`);
@@ -837,9 +825,16 @@ async function setVolume() {
     document.getElementById('volume-hint').textContent = '设置失败：' + e.message;
   }
 }
+function updateTTSProviderUI() {
+  const provider = document.getElementById('tts-provider').value;
+  document.getElementById('tts-doubao-settings').classList.toggle('hide', provider !== 'doubao');
+  document.getElementById('tts-edge-settings').classList.toggle('hide', provider !== 'edge');
+  if (provider === 'edge') loadVoices();
+}
 function fillVoiceTab() {
   document.getElementById('tts-provider').value = CONFIG.tts?.provider || 'edge';
   document.getElementById('doubao-voice-type').value = CONFIG.tts?.doubao_voice_type || '';
+  updateTTSProviderUI();
   const ss = CONFIG.status_speech || {};
   const ssDefaults = {
     greeting: '你好，我叫 BMO',
@@ -856,23 +851,14 @@ function fillVoiceTab() {
   loadVolume();
   document.getElementById('voice-rate').value = CONFIG.tts?.rate || '+0%';
   document.getElementById('voice-volume').value = CONFIG.tts?.volume || '+0%';
-  // 兜底下拉
-  const sel = document.getElementById('tts-fallback');
-  sel.innerHTML = '';
-  for (const p of (PRESETS.tts_fallback || [])) {
-    const opt = document.createElement('option');
-    opt.value = JSON.stringify(p);
-    opt.textContent = p.desc;
-    if (p.model === CONFIG.tts?.fallback_model && p.voice === CONFIG.tts?.fallback_voice) opt.selected = true;
-    sel.appendChild(opt);
-  }
 }
 async function saveTTSEngine() {
   CONFIG.tts = CONFIG.tts || {};
-  CONFIG.tts.provider = document.getElementById('tts-provider').value;
+  const provider = document.getElementById('tts-provider').value;
+  CONFIG.tts.provider = provider;
   // 豆包音色 ID
   const dvt = document.getElementById('doubao-voice-type').value.trim();
-  if (dvt) CONFIG.tts.doubao_voice_type = dvt;
+  if (provider === 'doubao') CONFIG.tts.doubao_voice_type = dvt;
   // piper 用数字语速，从"语速"框里取（非百分号时）
   const rate = document.getElementById('voice-rate').value.trim();
   const num = parseFloat(rate);
@@ -909,6 +895,7 @@ async function testVoice() {
   audio.play();
 }
 async function saveVoice() {
+  CONFIG.tts = CONFIG.tts || {};
   CONFIG.tts.voice = document.getElementById('voice-name').value;
   CONFIG.tts.rate = document.getElementById('voice-rate').value;
   CONFIG.tts.volume = document.getElementById('voice-volume').value;
@@ -916,17 +903,9 @@ async function saveVoice() {
   await putJSON('/api/config', CONFIG);
   alert('已保存');
 }
-async function saveTTSFallback() {
-  const p = JSON.parse(document.getElementById('tts-fallback').value);
-  CONFIG.tts.fallback_provider = p.provider;
-  CONFIG.tts.fallback_model = p.model;
-  CONFIG.tts.fallback_voice = p.voice;
-  await putJSON('/api/config', CONFIG);
-  alert('已保存');
-}
 
 // ============ 模型 ============
-const MODELS_BY_KIND = { llm: [], vision: [], stt: [], image_gen: [], tts_fallback: [] };
+const MODELS_BY_KIND = { llm: [], vision: [], stt: [], image_gen: [] };
 const KIND_SELECT = { stt: 'model-stt' };
 const TWO_COL_KINDS = ['llm', 'vision', 'image_gen'];
 const PROVIDERS_2COL = ['siliconflow', 'openrouter'];
@@ -1111,28 +1090,10 @@ async function loadLiveModels(refresh = false) {
     for (const k of TWO_COL_KINDS) renderTwoCol(k);
     for (const k of Object.keys(KIND_SELECT)) renderModelSelect(k);
     const c = live.counts || {};
-    status.textContent = `已加载：LLM ${c.llm||0} · 视觉 ${c.vision||0} · 文生图 ${c.image_gen||0} · TTS ${c.tts_fallback||0} · STT ${c.stt||0}（10分钟缓存）`;
-    renderTTSFallback(live.tts_fallback || []);
+    status.textContent = `已加载：LLM ${c.llm||0} · 视觉 ${c.vision||0} · 文生图 ${c.image_gen||0} · STT ${c.stt||0}（10分钟缓存）`;
   } catch (e) {
     status.textContent = '拉取失败（使用内置列表）：' + e.message;
   }
-}
-
-function renderTTSFallback(liveList) {
-  const sel = document.getElementById('tts-fallback');
-  if (!sel) return;
-  const cur = sel.value;
-  const merged = dedupe([...(PRESETS.tts_fallback || []), ...liveList]);
-  sel.innerHTML = '';
-  for (const p of merged) {
-    const opt = document.createElement('option');
-    const voice = p.voice || (p.model + ':alex');
-    opt.value = JSON.stringify({ provider: p.provider || 'siliconflow', model: p.model, voice });
-    opt.textContent = p.desc || p.model;
-    if (p.model === CONFIG.tts?.fallback_model) opt.selected = true;
-    sel.appendChild(opt);
-  }
-  if (cur) sel.value = cur;
 }
 async function saveLLM() {
   const p = SELECTED.llm;
