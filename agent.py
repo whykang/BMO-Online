@@ -236,6 +236,7 @@ class BotGUI:
             sample_rate=self.config.get("tts_sample_rate", 24000),
         )
         self.tts_piper = None   # 本地 Piper TTS，懒加载（用到才加载模型）
+        self.tts_doubao = None  # 豆包/火山引擎 TTS，懒加载（用到才校验凭证）
         self._resolved_output = None   # 自动检测的音响输出设备缓存
 
         # 唤醒词
@@ -1566,6 +1567,8 @@ class BotGUI:
         try:
             if provider in ("piper", "local"):
                 self._speak_piper(clean)
+            elif provider in ("doubao", "volcengine", "seed"):
+                self._speak_doubao(clean)
             elif provider == "edge":
                 self._speak_edge(clean)
             else:
@@ -1700,6 +1703,64 @@ class BotGUI:
         pcm, sr = self.tts_piper.synthesize_pcm16(text)
         self._play_pcm_aplay(pcm, sr)
 
+    def _speak_doubao(self, text):
+        if self.tts_doubao is None:
+            from providers.tts_doubao import DoubaoTTSProvider
+            self.tts_doubao = DoubaoTTSProvider(self.config["tts"])
+        # 流式：WS 边收边播，走 USB 输出 + 软件增益 + 硬件顶满
+        self._play_pcm_stream_aplay(
+            self.tts_doubao.synthesize_pcm_stream(text), self.tts_doubao.rate,
+        )
+
+    def _play_pcm_stream_aplay(self, chunks, sr: int):
+        """把一串 PCM 帧边收边写进 aplay（流式播放）。应用软件音量、路由到音箱。"""
+        self._pin_hw_volume()
+        gain = self._gain()
+        dev = self._resolve_output_device()
+        cmd = ["aplay", "-q", "-f", "S16_LE", "-c", "1", "-r", str(sr)]
+        if dev:
+            cmd += ["-D", dev]
+        cmd += ["-"]
+        proc = None
+        carry = b""   # 应用增益时需要偶数字节对齐，落单的半个采样留到下一帧
+        try:
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            self.current_tts_proc = proc
+            for chunk in chunks:
+                if self.interrupted.is_set() or self.exiting:
+                    break
+                if not chunk:
+                    continue
+                if gain != 1.0:
+                    buf = carry + chunk
+                    if len(buf) % 2:
+                        carry = buf[-1:]
+                        buf = buf[:-1]
+                    else:
+                        carry = b""
+                    if buf:
+                        arr = np.frombuffer(buf, dtype='<i2').astype(np.float32) * gain
+                        chunk = np.clip(arr, -32768, 32767).astype('<i2').tobytes()
+                    else:
+                        continue
+                try:
+                    proc.stdin.write(chunk)
+                except (BrokenPipeError, OSError):
+                    break
+            try:
+                if proc.stdin:
+                    proc.stdin.close()
+            except Exception:
+                pass
+            while proc.poll() is None:
+                if self.interrupted.is_set() or self.exiting:
+                    proc.terminate()
+                    break
+                time.sleep(0.05)
+        finally:
+            if self.current_tts_proc is proc:
+                self.current_tts_proc = None
+
     def _speak_edge(self, text):
         # Edge-TTS 输出 MP3 → 用 mpg123 解码播放（可指定 USB 音箱）
         mp3 = self.tts_edge.synthesize_mp3(text)
@@ -1827,6 +1888,8 @@ class BotGUI:
             log("[CMD] 记忆已清空")
         elif action == "reload_config":
             try:
+                # 重新读 .env，让网页新填的 key/凭证（如火山 appid/token）立即生效，无需重启
+                load_dotenv(override=True)
                 self.config = load_config()
                 # 重建相关 provider
                 endpoints = self.config["providers_endpoints"]
@@ -1841,6 +1904,7 @@ class BotGUI:
                     sample_rate=self.config.get("tts_sample_rate", 24000),
                 )
                 self.tts_piper = None  # 懒加载，按新 config 下次用时重建
+                self.tts_doubao = None  # 同上，换音色/凭证后下次用时重建
                 self._resolved_output = None  # 重新检测输出设备
                 self.vision = VisionProvider(self.config["vision"], endpoints)
                 self.image_gen = ImageGenProvider(

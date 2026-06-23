@@ -25,7 +25,10 @@
     "fallback_model": "FunAudioLLM/CosyVoice2-0.5B",
     "fallback_voice": "FunAudioLLM/CosyVoice2-0.5B:alex",
     "piper_model_dir": "models/piper-zh",
-    "piper_speed": 1.0
+    "piper_speed": 1.0,
+    "doubao_resource_id": "seed-tts-2.0",
+    "doubao_voice_type": "zh_female_gaolengyujie_uranus_bigtts",
+    "doubao_rate": 24000
   },
   "image_gen": {
     "provider": "siliconflow",

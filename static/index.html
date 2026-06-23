@@ -201,9 +201,16 @@
       <label>引擎：</label>
       <select id="tts-provider">
         <option value="edge">Edge-TTS（云端免费，音色多）</option>
+        <option value="doubao">豆包 TTS（火山引擎，需填 .env 凭证）</option>
         <option value="piper">Piper 本地（离线免费，需下模型）</option>
         <option value="siliconflow">硅基流动 CosyVoice（云端）</option>
       </select>
+    </div>
+    <div class="row">
+      <label>豆包音色 ID：</label>
+      <input type="text" id="doubao-voice-type" placeholder="zh_female_cancan_mars_bigtts"
+             style="flex:1; min-width:280px;">
+      <span class="help">仅"豆包"引擎用。填火山控制台已开通的音色代号。</span>
     </div>
     <div class="row">
       <label>音箱输出设备：</label>
@@ -575,6 +582,7 @@
         <option value="siliconflow">硅基流动</option>
         <option value="openrouter">OpenRouter</option>
         <option value="openai">OpenAI</option>
+        <option value="volc_apikey">豆包TTS API Key（火山 seed-tts-2.0）</option>
       </select>
     </div>
     <div class="row">
@@ -807,6 +815,7 @@ async function setVolume() {
 }
 function fillVoiceTab() {
   document.getElementById('tts-provider').value = CONFIG.tts?.provider || 'edge';
+  document.getElementById('doubao-voice-type').value = CONFIG.tts?.doubao_voice_type || '';
   loadAudioOutputs();
   loadVolume();
   document.getElementById('voice-rate').value = CONFIG.tts?.rate || '+0%';
@@ -825,6 +834,9 @@ function fillVoiceTab() {
 async function saveTTSEngine() {
   CONFIG.tts = CONFIG.tts || {};
   CONFIG.tts.provider = document.getElementById('tts-provider').value;
+  // 豆包音色 ID
+  const dvt = document.getElementById('doubao-voice-type').value.trim();
+  if (dvt) CONFIG.tts.doubao_voice_type = dvt;
   // piper 用数字语速，从"语速"框里取（非百分号时）
   const rate = document.getElementById('voice-rate').value.trim();
   const num = parseFloat(rate);
