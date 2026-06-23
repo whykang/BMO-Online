@@ -176,15 +176,9 @@ class BotGUI:
         self._cursor_should_hide = True
         self._blank_cursor = self._create_blank_cursor()
         try:
-            master.option_add("*cursor", self._blank_cursor)
-        except Exception:
-            pass
-        try:
             master.attributes('-fullscreen', True)
         except Exception:
             pass
-        # 隐藏鼠标箭头（双击显示退出按钮时临时恢复）
-        self._set_cursor_visible(False)
         self._exit_btn_timer = None
         master.bind('<Escape>', self.exit_fullscreen)
         master.bind('<Return>', self.handle_ptt_toggle)
@@ -380,6 +374,8 @@ class BotGUI:
             xbm = (
                 "#define blank_width 16\n"
                 "#define blank_height 16\n"
+                "#define blank_x_hot 0\n"
+                "#define blank_y_hot 0\n"
                 "static unsigned char blank_bits[] = {\n"
                 "  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,\n"
                 "  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,\n"
@@ -456,10 +452,15 @@ class BotGUI:
         cursor = "" if visible else self._blank_cursor
 
         def apply(widget):
+            nonlocal cursor
             try:
                 widget.config(cursor=cursor)
             except tk.TclError:
                 if not visible:
+                    if cursor != "none":
+                        log("[CURSOR] 透明 XBM 光标不可用，回退 cursor=none")
+                        self._blank_cursor = "none"
+                        cursor = "none"
                     try:
                         widget.config(cursor="none")
                     except tk.TclError:
