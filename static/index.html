@@ -6,81 +6,90 @@
 <title>BMO 控制台</title>
 <style>
   :root {
-    --bg: #1e1e2e;
-    --panel: #2b2b3d;
-    --panel-light: #3a3a52;
-    --accent: #6a8cff;
-    --text: #e8e8ec;
-    --muted: #9090a8;
-    --ok: #4ade80;
-    --err: #ff7777;
+    --bg: #f5f6f4;
+    --panel: #ffffff;
+    --panel-light: #f2f4f2;
+    --line: #dcded9;
+    --accent: #3f6f66;
+    --accent-soft: #e6efeb;
+    --text: #252923;
+    --muted: #6f756d;
+    --ok: #2d7a51;
+    --err: #b35b55;
   }
   * { box-sizing: border-box; }
   body { font-family: -apple-system, "Segoe UI", "Noto Sans CJK SC", sans-serif;
-         background: var(--bg); color: var(--text); margin: 0; }
+         background: var(--bg); color: var(--text); margin: 0; font-size: 14px; }
   header {
-    background: var(--panel); padding: 12px 20px;
+    background: var(--panel); padding: 12px 24px;
     display: flex; align-items: center; gap: 16px;
-    border-bottom: 1px solid #444;
+    border-bottom: 1px solid var(--line);
   }
-  header h1 { margin: 0; font-size: 20px; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0; }
   header .status {
     flex: 1; color: var(--muted); font-size: 13px;
   }
   header .status .badge {
-    display: inline-block; padding: 2px 8px; border-radius: 10px;
-    background: var(--panel-light); margin-right: 8px;
+    display: inline-block; padding: 2px 7px; border-radius: 5px;
+    background: var(--panel-light); border: 1px solid var(--line); margin-right: 8px;
   }
   nav {
     background: var(--panel); display: flex; flex-wrap: wrap;
-    padding: 0 20px; border-bottom: 1px solid #444; gap: 4px;
+    padding: 0 24px; border-bottom: 1px solid var(--line); gap: 2px;
   }
   nav button {
     background: transparent; color: var(--muted); border: none;
-    padding: 10px 16px; cursor: pointer; font-size: 14px;
+    padding: 11px 12px 10px; cursor: pointer; font-size: 13px;
     border-bottom: 2px solid transparent;
   }
-  nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+  nav button.active { color: var(--text); border-bottom-color: var(--accent); }
   nav button:hover { color: var(--text); }
-  main { padding: 20px; max-width: 1100px; margin: 0 auto; }
-  .panel { background: var(--panel); border-radius: 10px; padding: 20px; margin-bottom: 20px; }
-  .panel h2 { margin-top: 0; font-size: 18px; }
-  .row { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
-  .row label { min-width: 100px; color: var(--muted); }
+  main { padding: 18px 24px; max-width: 1120px; margin: 0 auto; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 6px; padding: 16px; margin-bottom: 14px;
+  }
+  .panel h2 { margin: 0 0 14px; font-size: 16px; font-weight: 600; }
+  .row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  .row label { min-width: 104px; color: var(--muted); font-size: 13px; }
   input, select, textarea {
-    background: var(--panel-light); color: var(--text); border: 1px solid #444;
-    border-radius: 6px; padding: 8px 10px; font-size: 14px; font-family: inherit;
+    background: #fff; color: var(--text); border: 1px solid var(--line);
+    border-radius: 5px; padding: 7px 9px; font-size: 14px; font-family: inherit;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: #8aa69d; box-shadow: 0 0 0 2px rgba(63,111,102,0.12);
   }
   input[type=text], input[type=password], select { min-width: 200px; }
   textarea { width: 100%; min-height: 100px; resize: vertical; }
   button.btn {
-    background: var(--accent); color: #fff; border: none; padding: 8px 16px;
-    border-radius: 6px; cursor: pointer; font-size: 14px;
+    background: var(--accent-soft); color: #254f47; border: 1px solid #bfd3cc;
+    padding: 7px 13px; border-radius: 5px; cursor: pointer; font-size: 13px;
   }
-  button.btn:hover { background: #819bff; }
-  button.btn.danger { background: #c0392b; }
-  button.btn.secondary { background: var(--panel-light); }
+  button.btn:hover { background: #dceae5; }
+  button.btn.danger { background: #f7e9e7; color: #8b403b; border-color: #e0c1bd; }
+  button.btn.secondary { background: #fff; color: var(--text); border-color: var(--line); }
   .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
-  .img-card { background: var(--panel-light); border-radius: 8px; overflow: hidden; }
+  .img-card { background: #fff; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
   .img-card img { width: 100%; display: block; }
   .img-card .meta { padding: 8px; font-size: 12px; color: var(--muted); display: flex;
                     justify-content: space-between; align-items: center; }
-  .msg { margin: 8px 0; padding: 8px 12px; border-radius: 6px; }
-  .msg.user { background: #3b4a73; }
-  .msg.assistant { background: #3a3a52; }
-  .msg.system { background: #4a3a52; color: var(--muted); font-size: 12px; }
-  .log-box { background: #000; color: #6f6; font-family: monospace; font-size: 12px;
-             padding: 12px; border-radius: 6px; height: 400px; overflow: auto;
+  .msg { margin: 8px 0; padding: 8px 10px; border-radius: 5px; border: 1px solid var(--line); }
+  .msg.user { background: #eef3f6; }
+  .msg.assistant { background: #f4f5f1; }
+  .msg.system { background: #f7f4f1; color: var(--muted); font-size: 12px; }
+  .log-box { background: #151714; color: #c8d0c4; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;
+             padding: 12px; border-radius: 5px; height: 400px; overflow: auto;
              white-space: pre-wrap; word-break: break-all; }
-  .pill { display: inline-block; padding: 2px 8px; border-radius: 10px;
-          background: var(--panel-light); font-size: 12px; color: var(--muted); }
-  .pill.ok { background: #163d2a; color: var(--ok); }
-  .pill.err { background: #4a1f1f; color: var(--err); }
+  .pill { display: inline-block; padding: 2px 7px; border-radius: 5px;
+          background: var(--panel-light); border: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .pill.ok { background: #eef6f1; border-color: #c8dfd0; color: var(--ok); }
+  .pill.err { background: #fbefee; border-color: #e7c8c5; color: var(--err); }
   .hide { display: none; }
   .help { color: var(--muted); font-size: 12px; margin-top: 4px; }
-  .two-col { display: flex; gap: 16px; flex-wrap: wrap; }
+  .two-col { display: flex; gap: 12px; flex-wrap: wrap; }
   .two-col .col { flex: 1; min-width: 280px; position: relative;
-                  background: var(--panel-light); border-radius: 8px; padding: 12px; }
+                  background: var(--panel-light); border: 1px solid var(--line);
+                  border-radius: 6px; padding: 12px; }
   .two-col .col h3 { margin: 0 0 8px; font-size: 14px; display: flex;
                      justify-content: space-between; align-items: center; }
   .two-col .col input[type=text] { width: 100%; margin-bottom: 8px; box-sizing: border-box; }
@@ -97,12 +106,12 @@
   }
   .model-item {
     width: 100%; text-align: left; color: var(--text);
-    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 8px; padding: 10px; cursor: pointer;
+    background: #fff; border: 1px solid var(--line);
+    border-radius: 5px; padding: 10px; cursor: pointer;
   }
-  .model-item:hover { border-color: var(--accent); background: rgba(106,140,255,0.12); }
+  .model-item:hover { border-color: #9eb9b0; background: #fbfcfb; }
   .model-item.selected {
-    border-color: var(--accent); background: rgba(106,140,255,0.20);
+    border-color: #9eb9b0; background: #eef5f2;
     box-shadow: inset 3px 0 0 var(--accent);
   }
   .model-title { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
@@ -111,7 +120,7 @@
   .model-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .model-chip {
     color: var(--muted); font-size: 11px; padding: 2px 6px;
-    border-radius: 999px; background: rgba(0,0,0,0.22);
+    border-radius: 5px; background: #eef0ec; border: 1px solid #dde1db;
   }
   .model-empty { color: var(--muted); font-size: 13px; padding: 12px; text-align: center; }
 </style>
@@ -119,7 +128,7 @@
 <body>
 
 <header>
-  <h1>🤖 BMO 控制台</h1>
+  <h1>BMO 控制台</h1>
   <div class="status">
     <span class="badge" id="agent-state">unknown</span>
     <span id="agent-status">连接中...</span>
@@ -156,10 +165,10 @@
   <div class="panel">
     <h2>快捷操作</h2>
     <div class="row">
-      <button class="btn" onclick="trigger('record')">▶ 开始录音</button>
-      <button class="btn secondary" onclick="trigger('stop')">■ 停止录音</button>
-      <button class="btn danger" onclick="trigger('interrupt')">⏸ 打断说话</button>
-      <button class="btn" onclick="trigger('capture')">📷 拍照</button>
+      <button class="btn" onclick="trigger('record')">开始录音</button>
+      <button class="btn secondary" onclick="trigger('stop')">停止录音</button>
+      <button class="btn danger" onclick="trigger('interrupt')">打断说话</button>
+      <button class="btn" onclick="trigger('capture')">拍照</button>
     </div>
   </div>
   <div class="panel">
@@ -177,10 +186,10 @@
     <div class="row">
       <label>Web 控制台端口：</label>
       <input type="number" id="webui-port" min="1024" max="65535" style="width: 100px;">
-      <button class="btn" onclick="saveWebuiPort()">💾 保存</button>
-      <button class="btn secondary" onclick="restartWebui()">↻ 立即重启 webui</button>
+      <button class="btn" onclick="saveWebuiPort()">保存</button>
+      <button class="btn secondary" onclick="restartWebui()">立即重启 webui</button>
     </div>
-    <div class="help" style="margin-left: 100px;">改完点保存 → 点"立即重启 webui"，几秒后到新端口刷新页面。</div>
+    <div class="help" style="margin-left: 100px;">改完点保存，再点“立即重启 webui”，几秒后到新端口刷新页面。</div>
   </div>
 </section>
 
@@ -213,8 +222,8 @@
       <input type="text" id="voice-test-text" value="你好，我是 BMO，很高兴见到你。" style="flex: 1; min-width: 300px;">
     </div>
     <div class="row">
-      <button class="btn" onclick="testVoice()">🔊 试听</button>
-      <button class="btn" onclick="saveVoice()">💾 保存为默认</button>
+      <button class="btn" onclick="testVoice()">试听</button>
+      <button class="btn" onclick="saveVoice()">保存为默认</button>
       <audio id="voice-audio" controls></audio>
     </div>
   </div>
@@ -226,7 +235,7 @@
       <select id="tts-fallback"></select>
     </div>
     <div class="row">
-      <button class="btn" onclick="saveTTSFallback()">💾 保存</button>
+      <button class="btn" onclick="saveTTSFallback()">保存</button>
     </div>
   </div>
 </section>
@@ -236,7 +245,7 @@
   <div class="panel">
     <div class="row">
       <span id="models-status" class="help">正在从 OpenRouter / 硅基流动 拉取全量模型...</span>
-      <button class="btn secondary" onclick="loadLiveModels(true)">↻ 刷新模型列表</button>
+      <button class="btn secondary" onclick="loadLiveModels(true)">刷新模型列表</button>
     </div>
   </div>
 
@@ -248,14 +257,14 @@
         <input type="text" id="filter-llm-siliconflow" placeholder="搜索 deepseek / qwen / glm…"
                oninput="renderTwoCol('llm')">
         <div id="model-llm-siliconflow" class="model-list"></div>
-        <div class="key-missing hide" onclick="showTab('keys')">未填写硅基流动 Key，点此去添加 →</div>
+        <div class="key-missing hide" onclick="showTab('keys')">未填写硅基流动 Key，点此去添加</div>
       </div>
       <div class="col" id="col-llm-openrouter">
         <h3>OpenRouter <span class="pill" id="key-llm-openrouter"></span></h3>
         <input type="text" id="filter-llm-openrouter" placeholder="搜索 claude / gpt / gemini…"
                oninput="renderTwoCol('llm')">
         <div id="model-llm-openrouter" class="model-list"></div>
-        <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenRouter Key，点此去添加 →</div>
+        <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenRouter Key，点此去添加</div>
       </div>
     </div>
     <div class="cur-model">当前模型：<b id="cur-llm">-</b></div>
@@ -266,7 +275,7 @@
       <input type="text" id="model-llm-maxtok" value="512" style="width: 100px;">
     </div>
     <div class="row">
-      <button class="btn" onclick="saveLLM()">💾 保存</button>
+      <button class="btn" onclick="saveLLM()">保存</button>
     </div>
   </div>
 
@@ -278,19 +287,19 @@
         <input type="text" id="filter-vision-siliconflow" placeholder="搜索 qwen-vl / internvl…"
                oninput="renderTwoCol('vision')">
         <div id="model-vision-siliconflow" class="model-list"></div>
-        <div class="key-missing hide" onclick="showTab('keys')">未填写硅基流动 Key，点此去添加 →</div>
+        <div class="key-missing hide" onclick="showTab('keys')">未填写硅基流动 Key，点此去添加</div>
       </div>
       <div class="col" id="col-vision-openrouter">
         <h3>OpenRouter <span class="pill" id="key-vision-openrouter"></span></h3>
         <input type="text" id="filter-vision-openrouter" placeholder="搜索 gpt-4o / claude / gemini…"
                oninput="renderTwoCol('vision')">
         <div id="model-vision-openrouter" class="model-list"></div>
-        <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenRouter Key，点此去添加 →</div>
+        <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenRouter Key，点此去添加</div>
       </div>
     </div>
     <div class="cur-model">当前模型：<b id="cur-vision">-</b></div>
     <div class="row" style="margin-top: 10px;">
-      <button class="btn" onclick="saveVision()">💾 保存</button>
+      <button class="btn" onclick="saveVision()">保存</button>
     </div>
   </div>
 
@@ -306,7 +315,7 @@
       <select id="model-stt" style="min-width: 360px;"></select>
     </div>
     <div class="row">
-      <button class="btn" onclick="saveSTT()">💾 保存</button>
+      <button class="btn" onclick="saveSTT()">保存</button>
     </div>
   </div>
 
@@ -318,14 +327,14 @@
         <input type="text" id="filter-image_gen-siliconflow" placeholder="搜索 kolors / flux / stable-diffusion…"
                oninput="renderTwoCol('image_gen')">
         <div id="model-image_gen-siliconflow" class="model-list"></div>
-        <div class="key-missing hide" onclick="showTab('keys')">未填写硅基流动 Key，点此去添加 →</div>
+        <div class="key-missing hide" onclick="showTab('keys')">未填写硅基流动 Key，点此去添加</div>
       </div>
       <div class="col" id="col-image_gen-openrouter">
         <h3>OpenRouter <span class="pill" id="key-image_gen-openrouter"></span></h3>
         <input type="text" id="filter-image_gen-openrouter" placeholder="搜索 gemini image / recraft / flux…"
                oninput="renderTwoCol('image_gen')">
         <div id="model-image_gen-openrouter" class="model-list"></div>
-        <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenRouter Key，点此去添加 →</div>
+        <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenRouter Key，点此去添加</div>
       </div>
     </div>
     <div class="cur-model">当前模型：<b id="cur-image_gen">-</b></div>
@@ -339,7 +348,7 @@
       </select>
     </div>
     <div class="row">
-      <button class="btn" onclick="saveImgGen()">💾 保存</button>
+      <button class="btn" onclick="saveImgGen()">保存</button>
     </div>
   </div>
 </section>
@@ -351,8 +360,8 @@
     <textarea id="prompt-system" placeholder="System prompt..."></textarea>
     <div class="help">改完点保存，agent 自动重载，新对话立刻生效。</div>
     <div class="row" style="margin-top: 12px;">
-      <button class="btn" onclick="savePrompt()">💾 保存</button>
-      <button class="btn secondary" onclick="loadConfig().then(fillPrompt)">↺ 重置</button>
+      <button class="btn" onclick="savePrompt()">保存</button>
+      <button class="btn secondary" onclick="loadConfig().then(fillPrompt)">重置</button>
     </div>
   </div>
 
@@ -360,7 +369,7 @@
     <h2>附加说明（可选）</h2>
     <textarea id="prompt-extras" placeholder="额外的设定，比如「你的主人叫小明」"></textarea>
     <div class="row" style="margin-top: 12px;">
-      <button class="btn" onclick="saveExtras()">💾 保存</button>
+      <button class="btn" onclick="saveExtras()">保存</button>
     </div>
   </div>
 
@@ -387,7 +396,7 @@
       <span class="help">秒。答完后等你接话多久没说话就结束</span>
     </div>
     <div class="row">
-      <button class="btn" onclick="saveConversation()">💾 保存</button>
+      <button class="btn" onclick="saveConversation()">保存</button>
     </div>
   </div>
 </section>
@@ -409,7 +418,7 @@
       </select>
     </div>
     <div class="row">
-      <button class="btn" onclick="saveWake()">💾 保存所有设置</button>
+      <button class="btn" onclick="saveWake()">保存所有设置</button>
       <span class="help" id="wake-status-hint"></span>
     </div>
   </div>
@@ -452,7 +461,7 @@
     <h3 style="margin-top: 20px;">上传 .onnx 模型</h3>
     <div class="row">
       <input type="file" id="wake-upload" accept=".onnx">
-      <button class="btn" onclick="uploadWake()">⬆ 上传</button>
+      <button class="btn" onclick="uploadWake()">上传</button>
     </div>
     <h3 style="margin-top: 20px;">本地模型库</h3>
     <div id="wake-list"></div>
@@ -463,7 +472,7 @@
     <ul style="line-height: 1.8;">
       <li><b>Sherpa-ONNX</b> 默认中文 KWS 模型支持任意中文关键词，3~4 字最稳。例：「你好小明」「嗨小明」「嘿哔莫哔莫」</li>
       <li>关键词越短越容易误唤醒（"你好"会被日常对话触发）；建议至少 3 个字</li>
-      <li>调阈值：误唤醒多 → 调高（0.30~0.40）；唤不醒 → 调低（0.15~0.20）</li>
+      <li>调阈值：误唤醒多时调高（0.30~0.40）；唤不醒时调低（0.15~0.20）</li>
       <li><b>OpenWakeWord</b> 后端：英文专用，要先在 Colab 训出 .onnx 才能用</li>
     </ul>
   </div>
@@ -474,8 +483,8 @@
   <div class="panel">
     <h2>对话历史</h2>
     <div class="row">
-      <button class="btn" onclick="loadHistory()">↻ 刷新</button>
-      <button class="btn danger" onclick="clearHistory()">🗑 清空记忆</button>
+      <button class="btn" onclick="loadHistory()">刷新</button>
+      <button class="btn danger" onclick="clearHistory()">清空记忆</button>
     </div>
     <div id="history-list" style="margin-top: 12px;"></div>
   </div>
@@ -486,7 +495,7 @@
   <div class="panel">
     <h2>BMO 画过的图</h2>
     <div class="row">
-      <button class="btn" onclick="loadImages()">↻ 刷新</button>
+      <button class="btn" onclick="loadImages()">刷新</button>
     </div>
     <div id="image-grid" class="grid" style="margin-top: 16px;"></div>
   </div>
@@ -497,10 +506,10 @@
   <div class="panel">
     <h2>遥控器</h2>
     <div class="row">
-      <button class="btn" onclick="trigger('record')">▶ 开始录音</button>
-      <button class="btn secondary" onclick="trigger('stop')">■ 停止录音</button>
-      <button class="btn danger" onclick="trigger('interrupt')">⏸ 打断说话</button>
-      <button class="btn" onclick="trigger('capture')">📷 拍照对话</button>
+      <button class="btn" onclick="trigger('record')">开始录音</button>
+      <button class="btn secondary" onclick="trigger('stop')">停止录音</button>
+      <button class="btn danger" onclick="trigger('interrupt')">打断说话</button>
+      <button class="btn" onclick="trigger('capture')">拍照对话</button>
     </div>
   </div>
   <div class="panel">
@@ -517,7 +526,7 @@
   <div class="panel">
     <h2>实时日志</h2>
     <div class="row">
-      <button class="btn" onclick="reloadLogs()">↻ 刷新</button>
+      <button class="btn" onclick="reloadLogs()">刷新</button>
       <label style="min-width: auto;"><input type="checkbox" id="log-autoscroll" checked> 自动滚动</label>
     </div>
     <div class="log-box" id="log-box"></div>
@@ -545,14 +554,14 @@
       <input type="password" id="key-value" placeholder="sk-..." style="flex: 1; min-width: 300px;">
     </div>
     <div class="row">
-      <button class="btn" onclick="saveKey()">💾 保存到 .env</button>
+      <button class="btn" onclick="saveKey()">保存到 .env</button>
     </div>
   </div>
   <div class="panel">
     <h2>API 花费</h2>
     <p>硅基流动暂未开放公开余额查询 API，请到官方控制台查看：
       <a href="https://cloud.siliconflow.cn/account/billing" target="_blank" style="color: var(--accent);">
-        硅基流动控制台 →</a>
+        硅基流动控制台</a>
     </p>
   </div>
 </section>
@@ -571,8 +580,8 @@
       <input type="password" id="pw-new">
     </div>
     <div class="row">
-      <button class="btn" onclick="setPassword()">💾 设置 / 修改</button>
-      <button class="btn danger" onclick="removePassword()">🗑 取消密码</button>
+      <button class="btn" onclick="setPassword()">设置 / 修改</button>
+      <button class="btn danger" onclick="removePassword()">取消密码</button>
     </div>
   </div>
 </section>
@@ -626,7 +635,7 @@ async function pollState() {
     document.getElementById('db-queue').textContent = s.tts_queue_len;
     document.getElementById('db-mem').textContent = s.memory_turns;
   } catch (e) {
-    document.getElementById('agent-status').textContent = '⚠️ 连接不上 agent';
+    document.getElementById('agent-status').textContent = '连接不上 agent';
   }
 }
 setInterval(pollState, 1500);
@@ -663,14 +672,14 @@ async function loadAutostart() {
     document.getElementById('boot-autostart').checked = s.enabled;
     document.getElementById('boot-autostart-hint').textContent = s.enabled ? '开' : '关';
   } catch (e) {
-    document.getElementById('boot-autostart-hint').textContent = '⚠️ ' + e.message;
+    document.getElementById('boot-autostart-hint').textContent = e.message;
   }
 }
 async function toggleAutostart() {
   const enabled = document.getElementById('boot-autostart').checked;
   try {
     await putJSON('/api/autostart', {enabled});
-    document.getElementById('boot-autostart-hint').textContent = enabled ? '✓ 已启用' : '✓ 已禁用';
+    document.getElementById('boot-autostart-hint').textContent = enabled ? '已启用' : '已禁用';
     setTimeout(loadAutostart, 800);
   } catch (e) {
     alert('设置失败：' + e.message);
@@ -867,7 +876,7 @@ function renderTwoCol(kind) {
     const hasKey = !!KEYS[prov];
 
     // key 状态
-    pill.textContent = hasKey ? '✓ 已配置' : '✗ 未配置';
+    pill.textContent = hasKey ? '已配置' : '未配置';
     pill.className = 'pill ' + (hasKey ? 'ok' : 'err');
     col.classList.toggle('disabled', !hasKey);
     missing.classList.toggle('hide', hasKey);
@@ -958,10 +967,10 @@ async function loadLiveModels(refresh = false) {
     for (const k of TWO_COL_KINDS) renderTwoCol(k);
     for (const k of Object.keys(KIND_SELECT)) renderModelSelect(k);
     const c = live.counts || {};
-    status.textContent = `✓ 已加载：LLM ${c.llm||0} · 视觉 ${c.vision||0} · 文生图 ${c.image_gen||0} · TTS ${c.tts_fallback||0} · STT ${c.stt||0}（10分钟缓存）`;
+    status.textContent = `已加载：LLM ${c.llm||0} · 视觉 ${c.vision||0} · 文生图 ${c.image_gen||0} · TTS ${c.tts_fallback||0} · STT ${c.stt||0}（10分钟缓存）`;
     renderTTSFallback(live.tts_fallback || []);
   } catch (e) {
-    status.textContent = '⚠️ 拉取失败（用内置列表）：' + e.message;
+    status.textContent = '拉取失败（使用内置列表）：' + e.message;
   }
 }
 
@@ -1070,10 +1079,10 @@ async function fillWake() {
 
   const pill = document.getElementById('wake-sherpa-pill');
   if (s.sherpa_ready) {
-    pill.textContent = '✓ 已就绪 ' + s.sherpa_model_dir;
+    pill.textContent = '已就绪 ' + s.sherpa_model_dir;
     pill.className = 'pill ok';
   } else {
-    pill.textContent = '✗ 模型未下载（运行 setup_pi.sh）';
+    pill.textContent = '模型未下载（运行 setup_pi.sh）';
     pill.className = 'pill err';
   }
 
@@ -1144,7 +1153,7 @@ async function saveWake() {
     legacy_threshold: parseFloat(document.getElementById('wake-legacy-threshold').value),
   };
   await putJSON('/api/wakewords/config', payload);
-  document.getElementById('wake-status-hint').textContent = '✓ 已保存（重启 agent 后生效）';
+  document.getElementById('wake-status-hint').textContent = '已保存（重启 agent 后生效）';
   setTimeout(() => document.getElementById('wake-status-hint').textContent = '', 3000);
 }
 
@@ -1232,7 +1241,7 @@ async function loadKeys() {
   for (const [name, ok] of Object.entries(data)) {
     const div = document.createElement('div');
     div.className = 'row';
-    div.innerHTML = `<label>${name}</label><span class="pill ${ok ? 'ok' : 'err'}">${ok ? '✓ 已配置' : '✗ 未配置'}</span>`;
+    div.innerHTML = `<label>${name}</label><span class="pill ${ok ? 'ok' : 'err'}">${ok ? '已配置' : '未配置'}</span>`;
     box.appendChild(div);
   }
   // key 状态变了，重渲染双列模型（灰显/恢复）
