@@ -738,7 +738,6 @@ async def list_keys():
     return {
         "siliconflow": bool(os.getenv("SILICONFLOW_API_KEY")),
         "openrouter": bool(os.getenv("OPENROUTER_API_KEY")),
-        "openai": bool(os.getenv("OPENAI_API_KEY")),
         "volc_apikey": bool(os.getenv("VOLC_TTS_API_KEY")),
     }
 
@@ -746,7 +745,6 @@ async def list_keys():
 KEY_ENV_MAP = {
     "siliconflow": "SILICONFLOW_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
-    "openai": "OPENAI_API_KEY",
     "volc_apikey": "VOLC_TTS_API_KEY",
 }
 
