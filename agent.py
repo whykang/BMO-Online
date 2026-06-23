@@ -2000,8 +2000,7 @@ def maybe_spawn_webui():
 if __name__ == "__main__":
     print("--- BMO 在线版启动 ---", flush=True)
     if not os.getenv("SILICONFLOW_API_KEY"):
-        print("❌ 缺少 SILICONFLOW_API_KEY，请检查 .env 文件", flush=True)
-        sys.exit(1)
+        print("[INIT] 未配置 SILICONFLOW_API_KEY；需要硅基流动时可在 Web 控制台 API Key 中填写", flush=True)
 
     WEBUI_PROC = maybe_spawn_webui()
 
