@@ -53,12 +53,6 @@ try:
 except Exception:
     OWW_AVAILABLE = False
 
-# --- 搜索 ---
-try:
-    from duckduckgo_search import DDGS
-except Exception:
-    DDGS = None
-
 # =========================================================================
 # 配置 & 常量
 # =========================================================================
@@ -1123,7 +1117,6 @@ class BotGUI:
         value = action_data.get("value") or action_data.get("query") or action_data.get("prompt")
 
         ALIASES = {
-            "google": "search_web", "browser": "search_web", "news": "search_web",
             "look": "capture_image", "see": "capture_image",
             "check_time": "get_time", "draw": "generate_image", "paint": "generate_image",
             "status": "get_system_status", "system_status": "get_system_status",
@@ -1142,31 +1135,10 @@ class BotGUI:
             return self.get_system_status()
 
         if action == "search_web":
-            if not value:
-                return "SEARCH_EMPTY"
-            if DDGS is None:
-                return "SEARCH_ERROR"
-            try:
-                with DDGS() as ddgs:
-                    results = []
-                    try:
-                        results = list(ddgs.news(value, max_results=1))
-                    except Exception:
-                        pass
-                    if not results:
-                        try:
-                            results = list(ddgs.text(value, max_results=1))
-                        except Exception:
-                            results = []
-                    if not results:
-                        return "SEARCH_EMPTY"
-                    r = results[0]
-                    title = r.get("title", "")
-                    body = r.get("body", r.get("snippet", ""))
-                    return f"SEARCH 结果 '{value}':\n标题: {title}\n摘要: {body[:300]}"
-            except Exception as e:
-                log(f"[SEARCH] {e}")
-                return "SEARCH_ERROR"
+            return f"SEARCH_DISABLED::{value or ''}"
+
+        if action in ("google", "browser", "news"):
+            return f"SEARCH_DISABLED::{value or ''}"
 
         if action == "capture_image":
             return "IMAGE_CAPTURE_TRIGGERED"
@@ -1349,22 +1321,24 @@ class BotGUI:
             self._say("我不太确定怎么做这件事。")
             return
 
-        # 搜索失败/无结果（如国内 DuckDuckGo 不可达）→ 让 LLM 用已知信息回答
-        if result in ("SEARCH_EMPTY", "SEARCH_ERROR"):
+        # 兼容旧配置/旧上下文：如果模型仍输出 search_web JSON，不联网搜索，改让模型直接回答。
+        if isinstance(result, str) and result.startswith("SEARCH_DISABLED::"):
+            query = result.split("::", 1)[1].strip() or original_text
             fallback_messages = self.permanent_memory + self.session_memory + [
                 {"role": "user", "content": original_text},
-                {"role": "user", "content": "（实时联网搜索不可用。请基于你已有的知识回答用户，"
-                                            "如果涉及最新内容就说明你可能不知道最新情况。一两句话即可。）"}
+                {"role": "user", "content": f"用户想查询：{query}。不要调用任何工具，不要输出 JSON。"
+                                            "请直接用你已有的知识回答；如果涉及最新内容，就说明可能不是最新信息。"
+                                            "一两句话即可。"}
             ]
             try:
                 final_text = self.llm.chat_once(fallback_messages)
             except Exception as e:
                 log(f"[LLM ERROR] {e}")
-                final_text = "我现在查不到最新信息呢。"
+                final_text = "这个我可以按已有知识回答，但可能不是最新信息。"
             self._say(final_text, remember=original_text)
             return
 
-        # search_web 返回了正文 / get_time 返回了字符串：让 LLM 再总结一遍
+        # get_time / get_system_status 返回了字符串：让 LLM 再总结一遍
         if isinstance(result, str) and result:
             # 用干净的 system prompt，避免又触发工具调用
             summary_messages = [
@@ -1497,16 +1471,29 @@ class BotGUI:
     # 记忆
     # -------------------------------------------------------------------
     def build_system_prompt(self) -> str:
-        base = self.config.get("system_prompt", "")
+        base = self._remove_search_web_prompt(self.config.get("system_prompt", ""))
         if "get_system_status" not in base:
             base += (
                 "\n\n补充工具：查看系统状态/温度/CPU/内存/磁盘时，回复纯 JSON："
                 "{\"action\": \"get_system_status\"}"
             )
+        if "search_web" not in base:
+            base += (
+                "\n\n搜索说明：不要调用 search_web，不要为搜索/新闻/查资料输出 JSON。"
+                "用户让你搜索时，直接用大模型已有知识回答；涉及最新信息时说明可能不是最新。"
+            )
         extras = self.config.get("system_prompt_extras", "")
         if extras:
             return f"{base}\n\n{extras}"
         return base
+
+    def _remove_search_web_prompt(self, text: str) -> str:
+        lines = []
+        for line in (text or "").splitlines():
+            if "search_web" in line or "搜网络" in line or "网络搜索" in line:
+                continue
+            lines.append(line)
+        return "\n".join(lines).strip()
 
     def load_chat_history(self):
         sysp = {"role": "system", "content": self.build_system_prompt() if hasattr(self, "config") else ""}
