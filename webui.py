@@ -234,6 +234,84 @@ async def audio_outputs():
     return {"devices": items}
 
 
+def _output_card_num():
+    """取输出声卡号：优先 config 里的 plughw:N，否则自动找 USB/非HDMI 播放卡。"""
+    cfg = load_config()
+    dev = (cfg.get("audio_output_device") or "auto").strip()
+    m = re.search(r"hw:(\d+)", dev)
+    if m:
+        return int(m.group(1))
+    try:
+        out = subprocess.run(["aplay", "-l"], capture_output=True, text=True, timeout=8).stdout
+        non_hdmi = None
+        for line in out.splitlines():
+            mm = re.match(r"\s*card (\d+): (\S+) \[(.*?)\]", line)
+            if not mm:
+                continue
+            c = int(mm.group(1))
+            tag = (mm.group(2) + " " + mm.group(3)).lower()
+            if "usb" in tag:
+                return c
+            if "hdmi" not in tag and "vc4" not in tag and non_hdmi is None:
+                non_hdmi = c
+        return non_hdmi
+    except Exception:
+        return None
+
+
+def _amixer_control(card):
+    """找一个能调的播放音量控件名。"""
+    try:
+        out = subprocess.run(["amixer", "-c", str(card), "scontrols"],
+                             capture_output=True, text=True, timeout=8).stdout
+        names = re.findall(r"'([^']+)'", out)
+        for pref in ("Master", "PCM", "Speaker", "Headphone", "Playback"):
+            if pref in names:
+                return pref
+        return names[0] if names else None
+    except Exception:
+        return None
+
+
+@app.get("/api/volume")
+async def get_volume():
+    card = _output_card_num()
+    if card is None:
+        return {"ok": False, "reason": "没找到输出声卡"}
+    ctrl = _amixer_control(card)
+    if not ctrl:
+        return {"ok": False, "card": card, "reason": "该音箱无可调音量控件（音量固定）"}
+    try:
+        out = subprocess.run(["amixer", "-c", str(card), "sget", ctrl],
+                             capture_output=True, text=True, timeout=8).stdout
+        m = re.search(r"\[(\d+)%\]", out)
+        return {"ok": True, "card": card, "control": ctrl,
+                "volume": int(m.group(1)) if m else None}
+    except Exception as e:
+        return {"ok": False, "card": card, "reason": str(e)}
+
+
+class VolumeReq(BaseModel):
+    percent: int
+
+
+@app.put("/api/volume")
+async def set_volume(req: VolumeReq):
+    pct = max(0, min(100, int(req.percent)))
+    card = _output_card_num()
+    if card is None:
+        raise HTTPException(400, "没找到输出声卡")
+    ctrl = _amixer_control(card)
+    if not ctrl:
+        raise HTTPException(400, "该音箱无可调音量控件（音量固定，无法软调）")
+    try:
+        subprocess.run(["amixer", "-c", str(card), "sset", ctrl, f"{pct}%", "unmute"],
+                       capture_output=True, text=True, timeout=8)
+        return {"ok": True, "card": card, "control": ctrl, "volume": pct}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 @app.get("/api/config/default")
 async def get_default_config():
     """出厂默认配置（config.default.json），用于'重置'。"""

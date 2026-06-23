@@ -211,6 +211,13 @@
       <button class="btn secondary" onclick="loadAudioOutputs()">刷新设备</button>
     </div>
     <div class="row">
+      <label>音量：</label>
+      <input type="range" id="volume-slider" min="0" max="100" step="1" value="80"
+             style="flex:1; min-width:200px;" oninput="onVolumeInput()" onchange="setVolume()">
+      <span id="volume-val">80%</span>
+      <span class="help" id="volume-hint"></span>
+    </div>
+    <div class="row">
       <button class="btn" onclick="saveTTSEngine()">保存引擎/输出</button>
       <span class="help">默认"自动检测 USB 音响"。多个设备时在这里选。Piper 语速用下方"语速"框填数字(0.8~1.2)。</span>
     </div>
@@ -773,9 +780,35 @@ async function loadAudioOutputs() {
   // 当前值不在列表里也保留显示
   if (cur && cur !== 'auto' && cur !== '' && !devs.some(d => d.device === cur)) add(cur, cur + '（当前）');
 }
+async function loadVolume() {
+  const hint = document.getElementById('volume-hint');
+  try {
+    const v = await fetchJSON('/api/volume');
+    if (v.ok && v.volume != null) {
+      document.getElementById('volume-slider').value = v.volume;
+      document.getElementById('volume-val').textContent = v.volume + '%';
+      hint.textContent = '设备 card ' + v.card + ' / ' + v.control;
+    } else {
+      hint.textContent = v.reason || '无法读取音量';
+    }
+  } catch (e) { hint.textContent = e.message; }
+}
+function onVolumeInput() {
+  document.getElementById('volume-val').textContent =
+    document.getElementById('volume-slider').value + '%';
+}
+async function setVolume() {
+  const pct = parseInt(document.getElementById('volume-slider').value);
+  try {
+    await putJSON('/api/volume', {percent: pct});
+  } catch (e) {
+    document.getElementById('volume-hint').textContent = '设置失败：' + e.message;
+  }
+}
 function fillVoiceTab() {
   document.getElementById('tts-provider').value = CONFIG.tts?.provider || 'edge';
   loadAudioOutputs();
+  loadVolume();
   document.getElementById('voice-rate').value = CONFIG.tts?.rate || '+0%';
   document.getElementById('voice-volume').value = CONFIG.tts?.volume || '+0%';
   // 兜底下拉
