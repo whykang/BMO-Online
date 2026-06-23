@@ -65,16 +65,16 @@ BMO_IMAGE_FILE = "current_image.jpg"
 LOG_DIR = "logs"
 
 os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, f"{datetime.date.today().isoformat()}.log")
 
 
 def log(msg: str):
-    """同时打印到终端和写入日志文件。"""
-    stamp = datetime.datetime.now().strftime("%H:%M:%S")
-    line = f"[{stamp}] {msg}"
+    """同时打印到终端和写入日志文件。日志文件按当天日期命名，跨午夜自动滚动到新文件。"""
+    now = datetime.datetime.now()
+    line = f"[{now.strftime('%H:%M:%S')}] {msg}"
     print(line, flush=True)
     try:
-        with open(LOG_FILE, "a", encoding="utf-8") as f:
+        log_file = os.path.join(LOG_DIR, f"{now.date().isoformat()}.log")
+        with open(log_file, "a", encoding="utf-8") as f:
             f.write(line + "\n")
     except Exception:
         pass

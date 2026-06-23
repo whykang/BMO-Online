@@ -501,10 +501,28 @@ async def trigger_speak(req: SpeakReq):
 # 路由：日志流（SSE）
 # =========================================================================
 
+def _current_log_file() -> str:
+    """优先今天的 agent 日志；若它还没有内容（比如 agent 进程跨天仍在写昨天的文件），
+    就取 logs/ 里最新的那个按日期命名的 .log，避免跨午夜后日志面板变空。"""
+    today = os.path.join(LOG_DIR, f"{datetime.date.today().isoformat()}.log")
+    if os.path.exists(today) and os.path.getsize(today) > 0:
+        return today
+    try:
+        cands = [
+            os.path.join(LOG_DIR, f) for f in os.listdir(LOG_DIR)
+            if f.endswith(".log") and f != "webui.log"
+        ]
+        cands = [p for p in cands if os.path.isfile(p)]
+        if cands:
+            return max(cands, key=os.path.getmtime)
+    except Exception:
+        pass
+    return today
+
+
 @app.get("/api/logs/tail")
 async def logs_tail(lines: int = 200):
-    today = datetime.date.today().isoformat()
-    log_file = os.path.join(LOG_DIR, f"{today}.log")
+    log_file = _current_log_file()
     if not os.path.exists(log_file):
         return {"lines": []}
     with open(log_file, "r", encoding="utf-8") as f:
@@ -515,15 +533,22 @@ async def logs_tail(lines: int = 200):
 @app.get("/api/logs/stream")
 async def logs_stream():
     async def gen():
-        today = datetime.date.today().isoformat()
-        log_file = os.path.join(LOG_DIR, f"{today}.log")
-        last_size = 0
-        if os.path.exists(log_file):
-            last_size = os.path.getsize(log_file)
+        log_file = _current_log_file()
+        last_size = os.path.getsize(log_file) if os.path.exists(log_file) else 0
+        ticks = 0
         while True:
             try:
+                # 每 ~5s 重新挑一次最新日志文件（跨午夜 / agent 重启后自动跟上）
+                ticks += 1
+                if ticks % 10 == 0:
+                    newest = _current_log_file()
+                    if newest != log_file:
+                        log_file = newest
+                        last_size = 0
                 if os.path.exists(log_file):
                     size = os.path.getsize(log_file)
+                    if size < last_size:   # 文件被换了/截断，从头读
+                        last_size = 0
                     if size > last_size:
                         with open(log_file, "r", encoding="utf-8") as f:
                             f.seek(last_size)
