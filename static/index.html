@@ -144,8 +144,7 @@
   <button data-tab="prompt" onclick="showTab('prompt')">性格</button>
   <button data-tab="wake" onclick="showTab('wake')">唤醒词</button>
   <button data-tab="history" onclick="showTab('history')">对话历史</button>
-  <button data-tab="images" onclick="showTab('images')">图片画廊</button>
-  <button data-tab="remote" onclick="showTab('remote')">遥控器</button>
+  <button data-tab="images" onclick="showTab('images')">图片生成</button>
   <button data-tab="logs" onclick="showTab('logs')">日志</button>
   <button data-tab="keys" onclick="showTab('keys')">API Key</button>
   <button data-tab="security" onclick="showTab('security')">安全</button>
@@ -538,34 +537,14 @@
   </div>
 </section>
 
-<!-- 图片画廊 -->
+<!-- 图片生成 -->
 <section id="tab-images" class="tab hide">
   <div class="panel">
-    <h2>BMO 画过的图</h2>
+    <h2>图片生成</h2>
     <div class="row">
       <button class="btn" onclick="loadImages()">刷新</button>
     </div>
     <div id="image-grid" class="grid" style="margin-top: 16px;"></div>
-  </div>
-</section>
-
-<!-- 遥控器 -->
-<section id="tab-remote" class="tab hide">
-  <div class="panel">
-    <h2>遥控器</h2>
-    <div class="row">
-      <button class="btn" onclick="trigger('record')">开始录音</button>
-      <button class="btn secondary" onclick="trigger('stop')">停止录音</button>
-      <button class="btn danger" onclick="trigger('interrupt')">打断说话</button>
-      <button class="btn" onclick="trigger('capture')">拍照对话</button>
-    </div>
-  </div>
-  <div class="panel">
-    <h2>让 BMO 说一句</h2>
-    <div class="row">
-      <input type="text" id="remote-speak" placeholder="想让它说什么..." style="flex: 1; min-width: 300px;">
-      <button class="btn" onclick="sendSpeak()">📢 说</button>
-    </div>
   </div>
 </section>
 
@@ -1304,7 +1283,7 @@ function escapeHtml(s) {
   return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// ============ 图片画廊 ============
+// ============ 图片生成 ============
 async function loadImages() {
   const box = document.getElementById('image-grid');
   box.textContent = '正在加载...';
@@ -1332,15 +1311,9 @@ async function deleteImage(name) {
   await loadImages();
 }
 
-// ============ 遥控 ============
+// ============ 快捷操作 ============
 async function trigger(action) {
   await postJSON(`/api/trigger/${action}`);
-}
-async function sendSpeak() {
-  const text = document.getElementById('remote-speak').value.trim();
-  if (!text) return;
-  await postJSON('/api/trigger/speak', {text});
-  document.getElementById('remote-speak').value = '';
 }
 
 // ============ 日志 ============
