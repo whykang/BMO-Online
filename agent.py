@@ -105,8 +105,6 @@ TOOLS_PROMPT = (
     "2. 拍照看：{\"action\": \"capture_image\"}\n"
     "3. 画图：{\"action\": \"generate_image\", \"prompt\": \"图片描述\"}\n"
     "4. 查看系统状态/温度/CPU/内存/磁盘：{\"action\": \"get_system_status\"}\n\n"
-    "不要调用 search_web，不要为搜索/新闻/查资料输出 JSON。"
-    "用户让你搜索时，直接用大模型已有知识回答；涉及最新信息时说明可能不是最新。\n\n"
     "不需要工具时，正常聊天即可。聊天回复尽量短，1~3 句话。"
 )
 
