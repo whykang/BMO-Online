@@ -196,6 +196,14 @@ async def get_config():
 
 @app.put("/api/config")
 async def update_config(cfg: dict):
+    # 唤醒词由专属接口 /api/wakewords/config 管理。整份保存（性格/模型/音色等）
+    # 时永远保留文件里已有的 wake_word，避免前端 CONFIG 过期把唤醒词覆盖回旧值。
+    try:
+        existing = load_config()
+        if "wake_word" in existing:
+            cfg["wake_word"] = existing["wake_word"]
+    except Exception:
+        pass
     save_config(cfg)
     return {"ok": True}
 
