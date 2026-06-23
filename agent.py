@@ -1178,12 +1178,6 @@ class BotGUI:
             self.set_state(BotStates.IDLE, "记忆已清空")
             return
 
-        if any(kw in text.lower() for kw in [
-            "系统状态", "树莓派状态", "cpu", "内存", "磁盘", "负载", "system status",
-        ]):
-            self._say(self.get_system_status(), remember=text)
-            return
-
         # 看图(拍照)走独立干净流程：不进工具检测，绝不念 JSON
         if img_path:
             self._respond_with_image(text, img_path)
