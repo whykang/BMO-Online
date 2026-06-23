@@ -219,6 +219,8 @@ class BotGUI:
         self.tts_queue_lock = threading.Lock()
         self.tts_active = threading.Event()
         self.current_tts_proc = None
+        self.thinking_cue_lock = threading.Lock()
+        self.thinking_cue_token = 0
 
         # Providers
         endpoints = self.config["providers_endpoints"]
@@ -1256,8 +1258,8 @@ class BotGUI:
             return
 
         self.set_state(BotStates.THINKING, "思考中...")
-        # 思考状态词（默认"让我想想"）：排进 TTS 队列，在回复语句之前先读
-        self._queue_thinking_cue()
+        # 思考状态词：超过 10 秒还没有回复时才读，快速回复时保持安静。
+        self._schedule_thinking_cue()
         messages = self.permanent_memory + self.session_memory + [
             {"role": "user", "content": text}
         ]
@@ -1281,6 +1283,7 @@ class BotGUI:
                     continue
 
                 if self.current_state != BotStates.SPEAKING:
+                    self._cancel_thinking_cue()
                     self.set_state(BotStates.SPEAKING, "说话中...", overlay_path=img_path)
                     self.append_to_text("BMO: ", newline=False)
                 self._stream_to_text(chunk)
@@ -1524,13 +1527,32 @@ class BotGUI:
         if text:
             self.speak(text)
 
-    def _queue_thinking_cue(self):
-        """把"思考中"状态词排进 TTS 队列：会在回复语句之前由同一个 worker 顺序播放，
-        不和回复抢音频设备。"""
+    def _schedule_thinking_cue(self, delay=10.0):
+        """超过 delay 秒还没开始回复时，才播放"思考中"状态词。"""
         text = self._status_text("thinking")
-        if text:
+        if not text:
+            return
+        with self.thinking_cue_lock:
+            self.thinking_cue_token += 1
+            token = self.thinking_cue_token
+
+        def _delayed():
+            time.sleep(delay)
+            if self.exiting or self.interrupted.is_set():
+                return
+            with self.thinking_cue_lock:
+                if token != self.thinking_cue_token:
+                    return
+            if self.current_state != BotStates.THINKING:
+                return
             with self.tts_queue_lock:
                 self.tts_queue.append(text)
+
+        threading.Thread(target=_delayed, daemon=True).start()
+
+    def _cancel_thinking_cue(self):
+        with self.thinking_cue_lock:
+            self.thinking_cue_token += 1
 
     def speak(self, text):
         clean = text.strip()
