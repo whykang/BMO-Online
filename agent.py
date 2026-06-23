@@ -173,7 +173,12 @@ class BotGUI:
         self.master = master
         master.title("Be More Agent (Online)")
         self._cursor_hider_proc = None
+        self._cursor_should_hide = True
         self._blank_cursor = self._create_blank_cursor()
+        try:
+            master.option_add("*cursor", self._blank_cursor)
+        except Exception:
+            pass
         try:
             master.attributes('-fullscreen', True)
         except Exception:
@@ -255,6 +260,7 @@ class BotGUI:
 
         self.load_animations()
         self.update_animation()
+        self._safe_after(500, self._force_hide_cursor)
         # 默认只显示脸；show_hud=true 才显示状态栏+识别文字
         if self.config.get("show_hud", False):
             self.response_text.place(relx=0.5, rely=0.82, anchor=tk.S)
@@ -419,19 +425,34 @@ class BotGUI:
         self._cursor_hider_proc = None
 
     def _move_pointer_away(self):
-        xdotool = shutil.which("xdotool")
-        if not xdotool:
-            return
         try:
-            subprocess.Popen(
-                [xdotool, "mousemove", "799", "479"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+            self.master.event_generate(
+                "<Motion>",
+                warp=True,
+                x=self.BG_WIDTH - 2,
+                y=self.BG_HEIGHT - 2,
             )
         except Exception:
             pass
+        xdotool = shutil.which("xdotool")
+        if xdotool:
+            try:
+                subprocess.Popen(
+                    [xdotool, "mousemove", str(self.BG_WIDTH - 2), str(self.BG_HEIGHT - 2)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception:
+                pass
+
+    def _force_hide_cursor(self):
+        if self.exiting or not self._cursor_should_hide:
+            return
+        self._set_cursor_visible(False)
+        self._safe_after(1000, self._force_hide_cursor)
 
     def _set_cursor_visible(self, visible: bool):
+        self._cursor_should_hide = not visible
         cursor = "" if visible else self._blank_cursor
 
         def apply(widget):
@@ -471,6 +492,7 @@ class BotGUI:
         try:
             self.exit_button.place_forget()
             self._set_cursor_visible(False)
+            self._safe_after(1000, self._force_hide_cursor)
             self._exit_btn_timer = None
         except tk.TclError:
             pass
