@@ -752,13 +752,21 @@ class BotGUI:
                 if self.ptt_event.is_set():
                     self.ptt_event.clear()
                     return "PTT"
-                if fail_count >= 10:
+                # 连续失败 → 彻底重置 PortAudio，强制重新枚举设备（清掉卡死的 ALSA 句柄）
+                if fail_count in (2, 4, 6):
+                    self._reset_portaudio()
+                if fail_count >= 12:
                     log("[AUDIO] 连续重开失败，回落 PTT")
                     while not self.ptt_event.is_set() and not self.exiting:
                         time.sleep(0.1)
                     self.ptt_event.clear()
                     return "PTT"
-                time.sleep(0.5)
+                # 卡死后多等一会，让 USB/ALSA 完全释放再重开
+                try:
+                    sd.stop()
+                except Exception:
+                    pass
+                time.sleep(1.5)
                 continue
             fail_count = 0
             if result == "REFRESH":
@@ -768,6 +776,18 @@ class BotGUI:
                 return self.detect_wake_word_or_ptt()  # 配置变更，按新后端重算音频参数
             return result          # "WAKE"
         return "PTT"
+
+    def _reset_portaudio(self):
+        """彻底重启 PortAudio，强制重新枚举音频设备（清掉卡死的 ALSA 句柄）。"""
+        try:
+            log("[AUDIO] 重置 PortAudio（重新枚举设备）...")
+            sd.stop()
+            sd._terminate()
+            time.sleep(0.8)
+            sd._initialize()
+            time.sleep(0.4)
+        except Exception as e:
+            log(f"[AUDIO] 重置 PortAudio 失败: {e}")
 
     def _listen_loop(self, args, in_chunk, target_chunk, use_resample, refresh_secs=180):
         ww_cfg = self.config.get("wake_word", {})
