@@ -881,16 +881,41 @@ class BotGUI:
         n = 0
         timeout = False
 
+        # 回调+队列：避免阻塞 read 在 USB 卡住时把整个录音冻死
+        stall_timeout = float(rec_cfg.get("stall_timeout_seconds", 8.0))
+        audio_q = queue.Queue(maxsize=16)
+        stalled = False
+
+        def _cb(indata, frames, time_info, status):
+            try:
+                audio_q.put_nowait(indata.copy())
+            except queue.Full:
+                try:
+                    audio_q.get_nowait()
+                except queue.Empty:
+                    pass
+                try:
+                    audio_q.put_nowait(indata.copy())
+                except queue.Full:
+                    pass
+
         try:
+            last_audio = time.time()
             with sd.InputStream(samplerate=sr, channels=1, dtype='int16',
-                                blocksize=chunk_size, device=self.input_device) as stream:
+                                blocksize=chunk_size, device=self.input_device,
+                                callback=_cb):
                 while not self.exiting:
                     try:
-                        data, _ = stream.read(chunk_size)
-                    except Exception as e:
-                        log(f"[AUDIO] 读取失败，放弃录音: {e}")
-                        return None
-                    audio = np.frombuffer(data, dtype=np.int16).astype(np.float32)
+                        indata = audio_q.get(timeout=0.5)
+                        last_audio = time.time()
+                    except queue.Empty:
+                        if time.time() - last_audio > stall_timeout:
+                            log("[AUDIO] 录音音频流卡住，放弃本次录音")
+                            stalled = True
+                            break
+                        continue
+
+                    audio = np.asarray(indata, dtype=np.float32).flatten()
                     buf.append(audio.copy())
                     n += 1
                     vn = float(np.sqrt(np.mean(audio ** 2)) / 32768.0)
@@ -928,6 +953,8 @@ class BotGUI:
             log(f"[AUDIO ERROR] 自适应录音失败: {e}")
             return None
 
+        if stalled:
+            return None
         if timeout or not speaking:
             log(f"[REC] {onset_timeout:.0f}s 没开口 噪音地板={noise:.4f} 阈值={thr:.4f} 峰值={peak:.4f}（峰值没过阈值=没听到你说话）")
             return None
