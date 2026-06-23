@@ -575,6 +575,8 @@ PRESETS = {
         {"provider": "siliconflow", "model": "meta-llama/Meta-Llama-3.1-8B-Instruct", "desc": "Llama 3.1 8B"},
         {"provider": "openrouter", "model": "anthropic/claude-haiku-4.5", "desc": "Claude Haiku 4.5（OpenRouter）"},
         {"provider": "openrouter", "model": "openai/gpt-4o-mini", "desc": "GPT-4o mini（OpenRouter）"},
+        {"provider": "deepseek", "model": "deepseek-v4-flash", "desc": "DeepSeek V4 Flash（快）"},
+        {"provider": "deepseek", "model": "deepseek-v4-pro", "desc": "DeepSeek V4 Pro（强）"},
     ],
     "vision": [
         {"provider": "openrouter", "model": "openai/gpt-4o-mini", "desc": "GPT-4o mini（OpenRouter）"},

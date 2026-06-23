@@ -314,6 +314,13 @@
         <div id="model-llm-openrouter" class="model-list"></div>
         <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenRouter Key，点此去添加</div>
       </div>
+      <div class="col" id="col-llm-deepseek">
+        <h3>DeepSeek <span class="pill" id="key-llm-deepseek"></span></h3>
+        <input type="text" id="filter-llm-deepseek" placeholder="搜索 deepseek…"
+               oninput="renderTwoCol('llm')">
+        <div id="model-llm-deepseek" class="model-list"></div>
+        <div class="key-missing hide" onclick="showTab('keys')">未填写 DeepSeek Key，点此去添加</div>
+      </div>
     </div>
     <div class="cur-model">当前模型：<b id="cur-llm">-</b></div>
     <div class="row" style="margin-top: 10px;">
@@ -938,9 +945,15 @@ const MODELS_BY_KIND = { llm: [], vision: [], stt: [], image_gen: [] };
 const KIND_SELECT = { stt: 'model-stt' };
 const TWO_COL_KINDS = ['llm', 'vision', 'image_gen'];
 const PROVIDERS_2COL = ['siliconflow', 'openrouter'];
+// 各类型显示哪些 provider 列：只有 LLM 多一列 DeepSeek
+const PROVIDERS_BY_KIND = {
+  llm: ['siliconflow', 'openrouter', 'deepseek'],
+  vision: ['siliconflow', 'openrouter'],
+  image_gen: ['siliconflow', 'openrouter'],
+};
 const KIND_CONFIG = { llm: 'llm', vision: 'vision', stt: 'stt', image_gen: 'image_gen' };
 const KIND_MAX_SHOWN = 1000;
-let KEYS = { siliconflow: false, openrouter: false, openai: false, volc_apikey: false };
+let KEYS = { siliconflow: false, openrouter: false, deepseek: false, volc_apikey: false };
 const SELECTED = { llm: {}, vision: {}, image_gen: {} };   // 当前选中 {provider, model}
 
 function dedupe(list) {
@@ -1019,9 +1032,10 @@ function appendModelRow(listEl, kind, prov, p, selected) {
 // ---- 两列渲染（LLM / 视觉 / 文生图）----
 function renderTwoCol(kind) {
   const cur = SELECTED[kind] || {};
-  for (const prov of PROVIDERS_2COL) {
+  for (const prov of (PROVIDERS_BY_KIND[kind] || PROVIDERS_2COL)) {
     const col = document.getElementById(`col-${kind}-${prov}`);
     const listEl = document.getElementById(`model-${kind}-${prov}`);
+    if (!col || !listEl) continue;
     const filterEl = document.getElementById(`filter-${kind}-${prov}`);
     const pill = document.getElementById(`key-${kind}-${prov}`);
     const missing = col.querySelector('.key-missing');
