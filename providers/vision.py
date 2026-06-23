@@ -11,9 +11,9 @@ class VisionProvider:
         self.model = config.get("model", "Qwen/Qwen2-VL-7B-Instruct")
         self.base_url = env_endpoints.get(self.provider, "")
         self.api_key = self._get_key()
-        if not self.api_key:
-            raise RuntimeError(f"{self.provider} 缺少 API key")
-        self.client = OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=45.0, max_retries=1)
+        self.client = None
+        if self.api_key:
+            self.client = OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=45.0, max_retries=1)
 
     def _get_key(self) -> str:
         env_map = {
@@ -22,6 +22,14 @@ class VisionProvider:
             "openai": "OPENAI_API_KEY",
         }
         return os.getenv(env_map.get(self.provider, ""), "")
+
+    def _client(self):
+        self.api_key = self._get_key()
+        if not self.api_key:
+            raise RuntimeError(f"{self.provider} 缺少 API key，请在 Web 控制台 API Key 中填写")
+        if self.client is None:
+            self.client = OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=45.0, max_retries=1)
+        return self.client
 
     def describe(self, image_path: str, user_text: str) -> str:
         with open(image_path, "rb") as f:
@@ -50,7 +58,7 @@ class VisionProvider:
         return resp.choices[0].message.content or ""
 
     def _describe_once(self, messages, model: str):
-        return self.client.chat.completions.create(
+        return self._client().chat.completions.create(
             model=model,
             messages=messages,
             max_tokens=256,

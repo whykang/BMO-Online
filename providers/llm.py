@@ -13,13 +13,13 @@ class LLMProvider:
         base_url = env_endpoints.get(self.provider)
         if not base_url:
             raise ValueError(f"未知 provider: {self.provider}")
+        self.base_url = base_url
 
         api_key = self._get_key()
-        if not api_key:
-            raise RuntimeError(f"缺少 {self.provider} API key，请在 .env 里填写")
-
-        # timeout：连接 + 读取都设上限，避免网络卡住时无限等待
-        self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=30.0, max_retries=1)
+        self.client = None
+        if api_key:
+            # timeout：连接 + 读取都设上限，避免网络卡住时无限等待
+            self.client = OpenAI(api_key=api_key, base_url=self.base_url, timeout=30.0, max_retries=1)
 
     def _get_key(self) -> str:
         env_map = {
@@ -30,9 +30,17 @@ class LLMProvider:
         }
         return os.getenv(env_map.get(self.provider, ""), "")
 
+    def _client(self):
+        api_key = self._get_key()
+        if not api_key:
+            raise RuntimeError(f"缺少 {self.provider} API key，请在 Web 控制台 API Key 中填写")
+        if self.client is None:
+            self.client = OpenAI(api_key=api_key, base_url=self.base_url, timeout=30.0, max_retries=1)
+        return self.client
+
     def chat_stream(self, messages):
         """流式聊天，逐 chunk yield 文本片段。"""
-        stream = self.client.chat.completions.create(
+        stream = self._client().chat.completions.create(
             model=self.model,
             messages=messages,
             stream=True,
@@ -48,7 +56,7 @@ class LLMProvider:
 
     def chat_once(self, messages) -> str:
         """非流式，一次拿完整回答。"""
-        resp = self.client.chat.completions.create(
+        resp = self._client().chat.completions.create(
             model=self.model,
             messages=messages,
             stream=False,
