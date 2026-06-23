@@ -942,7 +942,7 @@ class BotGUI:
             with sd.InputStream(samplerate=sr, channels=1, dtype='int16',
                                 blocksize=chunk_size, device=self.input_device,
                                 latency=self.config.get("audio_latency", "high"),
-                                callback=_cb):
+                                callback=_cb) as stream:
                 while not self.exiting:
                     try:
                         indata = audio_q.get(timeout=0.5)
@@ -951,6 +951,11 @@ class BotGUI:
                         if time.time() - last_audio > stall_timeout:
                             log("[AUDIO] 录音音频流卡住，放弃本次录音")
                             stalled = True
+                            # 立即 abort 卡死的流：坏流上 close 可能挂住（表现为整个程序冻住）
+                            try:
+                                stream.abort(ignore_errors=True)
+                            except Exception:
+                                pass
                             break
                         continue
 
@@ -993,6 +998,9 @@ class BotGUI:
             return None
 
         if stalled:
+            # 录音流卡死多半是 USB 声卡进了坏状态（常发生在刚播完 TTS 又马上录音）：
+            # 重置 PortAudio 重新枚举设备，让下一轮唤醒/录音能恢复，而不是一直冻住。
+            self._reset_portaudio()
             return None
         if timeout or not speaking:
             log(f"[REC] {onset_timeout:.0f}s 没开口 噪音地板={noise:.4f} 阈值={thr:.4f} 峰值={peak:.4f}（峰值没过阈值=没听到你说话）")
