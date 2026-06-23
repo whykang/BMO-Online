@@ -73,6 +73,27 @@ else
     echo -e "${GREEN}  ✓ 唤醒词模型已就绪（仓库自带）${NC}"
 fi
 
+# 4b. 本地 STT 模型（SenseVoice，可选；约 230MB，太大不入仓库，按需下载）
+#     只有 config.stt.provider = local_sherpa 时才需要。这里默认下载方便切换；
+#     不想要可注释掉这段。
+SV_DIR="models/sense-voice"
+if [ ! -f "$SV_DIR/tokens.txt" ]; then
+    echo -e "${YELLOW}  下载本地 STT 模型 SenseVoice（约 230MB，较慢）...${NC}"
+    mkdir -p models
+    SV_TARBALL="sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2"
+    SV_INNER="sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
+    SV_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/$SV_TARBALL"
+    if curl -fL --retry 2 -o "models/$SV_TARBALL" "$SV_URL"; then
+        ( cd models && tar xjf "$SV_TARBALL" && rm -rf sense-voice && mv "$SV_INNER" sense-voice && rm "$SV_TARBALL" )
+        echo -e "${GREEN}  ✓ 本地 STT 模型已就绪：$SV_DIR${NC}"
+    else
+        echo -e "${RED}  ✗ 本地 STT 模型下载失败（不影响云端 STT）${NC}"
+        rm -f "models/$SV_TARBALL"
+    fi
+else
+    echo -e "${GREEN}  ✓ 本地 STT 模型已就绪${NC}"
+fi
+
 # 5. 创建 config.json（不在 git 里，从模板复制；保留用户已有的）
 if [ ! -f config.json ]; then
     cp config.default.json config.json

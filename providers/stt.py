@@ -1,6 +1,15 @@
-"""STT provider —— 默认硅基流动 SenseVoice，OpenAI 兼容的 /audio/transcriptions 接口。"""
+"""STT provider —— 云端（硅基流动 SenseVoice）或本地（Sherpa-ONNX + SenseVoice）。"""
 import os
 import requests
+
+
+def create_stt(config: dict, env_endpoints: dict):
+    """按 config.provider 选择：local_sherpa = 本地离线，其它 = 云端 API。"""
+    provider = (config.get("provider") or "siliconflow").lower()
+    if provider in ("local_sherpa", "local", "sherpa", "sherpa_onnx"):
+        from providers.stt_sherpa import SherpaSTTProvider
+        return SherpaSTTProvider(config)
+    return STTProvider(config, env_endpoints)
 
 
 class STTProvider:

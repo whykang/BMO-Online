@@ -505,7 +505,8 @@ PRESETS = {
         {"provider": "openrouter", "model": "google/gemini-2.5-flash", "desc": "Gemini 2.5 Flash（OpenRouter）"},
     ],
     "stt": [
-        {"provider": "siliconflow", "model": "FunAudioLLM/SenseVoiceSmall", "desc": "SenseVoice（多语种、便宜）"},
+        {"provider": "siliconflow", "model": "FunAudioLLM/SenseVoiceSmall", "desc": "SenseVoice 云端（多语种、便宜）"},
+        {"provider": "local_sherpa", "model": "models/sense-voice", "desc": "SenseVoice 本地（Sherpa-ONNX，离线免费）"},
     ],
     "tts_fallback": [
         {"provider": "siliconflow", "model": "FunAudioLLM/CosyVoice2-0.5B",

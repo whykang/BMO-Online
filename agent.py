@@ -39,7 +39,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 # --- Providers ---
 from providers.llm import LLMProvider
-from providers.stt import STTProvider
+from providers.stt import STTProvider, create_stt
 from providers.vision import VisionProvider
 from providers.image_gen import ImageGenProvider
 from providers.tts_edge import EdgeTTSProvider
@@ -224,7 +224,7 @@ class BotGUI:
         # Providers
         endpoints = self.config["providers_endpoints"]
         self.llm = LLMProvider(self.config["llm"], endpoints)
-        self.stt = STTProvider(self.config["stt"], endpoints)
+        self.stt = create_stt(self.config["stt"], endpoints)
         self.vision = VisionProvider(self.config["vision"], endpoints)
         self.image_gen = ImageGenProvider(
             self.config["image_gen"], endpoints,
@@ -1581,6 +1581,10 @@ class BotGUI:
                 # 重建相关 provider
                 endpoints = self.config["providers_endpoints"]
                 self.llm = LLMProvider(self.config["llm"], endpoints)
+                try:
+                    self.stt = create_stt(self.config["stt"], endpoints)
+                except Exception as e:
+                    log(f"[CMD] STT 重建失败（沿用旧的）: {e}")
                 self.tts_edge = EdgeTTSProvider(self.config["tts"])
                 self.tts_sf = SiliconFlowTTSProvider(
                     self.config["tts"], endpoints,

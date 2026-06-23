@@ -34,3 +34,6 @@ wakewords/uploaded/
 
 # Auth
 auth.json
+
+# 本地 STT 模型（太大，按需下载）
+models/
