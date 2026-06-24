@@ -104,7 +104,10 @@ TOOLS_PROMPT = (
     "1. 查时间：{\"action\": \"get_time\"}\n"
     "2. 拍照看：{\"action\": \"capture_image\"}\n"
     "3. 画图：{\"action\": \"generate_image\", \"prompt\": \"图片描述\"}\n"
-    "4. 查看系统状态/温度/CPU/内存/磁盘：{\"action\": \"get_system_status\"}\n\n"
+    "4. 查看系统状态/温度/CPU/内存/磁盘：{\"action\": \"get_system_status\"}\n"
+    "5. 调音量：{\"action\": \"set_volume\", \"value\": 数字}\n"
+    "   value 是目标音量百分比(0~200，100=原始)；说'大一点/小一点'用相对值"
+    "\"+20\"/\"-20\"；'最大'用\"max\"，'静音'用\"mute\"。\n\n"
     "不需要工具时，正常聊天即可。聊天回复尽量短，1~3 句话。"
 )
 
@@ -1226,6 +1229,8 @@ class BotGUI:
             "check_time": "get_time", "draw": "generate_image", "paint": "generate_image",
             "status": "get_system_status", "system_status": "get_system_status",
             "system": "get_system_status", "health": "get_system_status",
+            "volume": "set_volume", "adjust_volume": "set_volume",
+            "set_vol": "set_volume", "change_volume": "set_volume",
         }
         action = ALIASES.get(raw, raw)
         log(f"[ACTION] {raw} -> {action}")
@@ -1238,6 +1243,9 @@ class BotGUI:
 
         if action == "get_system_status":
             return self.get_system_status()
+
+        if action == "set_volume":
+            return self._set_volume_action(action_data)
 
         if action == "search_web":
             return f"SEARCH_DISABLED::{value or ''}"
@@ -1254,6 +1262,59 @@ class BotGUI:
             return f"IMAGE_GEN_TRIGGERED::{value}"
 
         return "INVALID_ACTION"
+
+    def _set_volume_action(self, data: dict) -> str:
+        """语音调音量。支持：绝对值(value/percent/level=数字)、相对("+20"/"-20"/delta/
+        direction)、关键词(max/mute/大一点/小一点)。改 config.volume_percent(软件增益)。"""
+        cur = int(float(self.config.get("volume_percent", 100)))
+        step = 20
+        target = None
+
+        def kw(s: str):
+            low = s.strip().lower()
+            if any(w in low for w in ("max", "最大", "最响", "最高")):
+                return 200
+            if any(w in low for w in ("mute", "静音", "最小", "关掉", "别出声")):
+                return 0
+            if any(w in low for w in ("+", "up", "louder", "increase", "大", "高", "响")):
+                return cur + step
+            if any(w in low for w in ("-", "down", "quieter", "decrease", "小", "低", "轻")):
+                return cur - step
+            return None
+
+        # 1) value / percent / level / volume：可能是数字、"50"、"+20"、"max"、"大一点"
+        for k in ("percent", "level", "value", "volume"):
+            v = data.get(k)
+            if isinstance(v, bool):
+                continue
+            if isinstance(v, (int, float)):
+                target = int(v)
+                break
+            if isinstance(v, str) and v.strip():
+                s = v.strip().replace("%", "").replace("％", "")
+                if s.lstrip("+-").isdigit():
+                    target = cur + int(s) if s[0] in "+-" else int(s)
+                else:
+                    target = kw(v)
+                if target is not None:
+                    break
+        # 2) delta 相对增量
+        if target is None and isinstance(data.get("delta"), (int, float)):
+            target = cur + int(data["delta"])
+        # 3) direction 方向词
+        if target is None and data.get("direction"):
+            target = kw(str(data["direction"]))
+
+        if target is None:
+            return "VOLUME_SET::你想把音量调到多大呀？比如说“大一点”，或者“音量调到 50”。"
+
+        target = max(0, min(200, int(target)))
+        self.config["volume_percent"] = target
+        save_config(self.config)
+        log(f"[VOLUME] {cur}% -> {target}%")
+        if target == 0:
+            return "VOLUME_SET::好的，我小声点啦。"
+        return f"VOLUME_SET::好的，音量调到 {target}% 啦。"
 
     # -------------------------------------------------------------------
     # 主对话
@@ -1383,6 +1444,11 @@ class BotGUI:
 
     def handle_action_result(self, result, original_text, img_path):
         """工具执行结果处理。"""
+        if isinstance(result, str) and result.startswith("VOLUME_SET::"):
+            # 音量已在 execute_action 里改好，这里直接念确认（新音量立即生效）
+            self._say(result.split("::", 1)[1], remember=original_text)
+            return
+
         if result == "IMAGE_CAPTURE_TRIGGERED":
             new_img = self.capture_image()
             if new_img:
