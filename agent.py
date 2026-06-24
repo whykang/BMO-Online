@@ -106,8 +106,8 @@ TOOLS_PROMPT = (
     "3. 画图：{\"action\": \"generate_image\", \"prompt\": \"图片描述\"}\n"
     "4. 查看系统状态/温度/CPU/内存/磁盘：{\"action\": \"get_system_status\"}\n"
     "5. 调音量：{\"action\": \"set_volume\", \"value\": 数字}\n"
-    "   value 是目标音量百分比(0~200，100=原始)；说'大一点/小一点'用相对值"
-    "\"+20\"/\"-20\"；'最大'用\"max\"，'静音'用\"mute\"。\n\n"
+    "   value 是目标音量百分比(10~200，100=原始)；说'大一点/小一点'用相对值"
+    "\"+20\"/\"-20\"；'最大'用\"max\"。不支持静音。\n\n"
     "不需要工具时，正常聊天即可。聊天回复尽量短，1~3 句话。"
 )
 
@@ -1263,9 +1263,12 @@ class BotGUI:
 
         return "INVALID_ACTION"
 
+    MIN_VOLUME = 10   # 语音调音量的下限：不支持静音
+
     def _set_volume_action(self, data: dict) -> str:
         """语音调音量。支持：绝对值(value/percent/level=数字)、相对("+20"/"-20"/delta/
-        direction)、关键词(max/mute/大一点/小一点)。改 config.volume_percent(软件增益)。"""
+        direction)、关键词(max/大一点/小一点)。改 config.volume_percent(软件增益)。
+        不支持静音，最低 MIN_VOLUME%。"""
         cur = int(float(self.config.get("volume_percent", 100)))
         step = 20
         target = None
@@ -1274,8 +1277,6 @@ class BotGUI:
             low = s.strip().lower()
             if any(w in low for w in ("max", "最大", "最响", "最高")):
                 return 200
-            if any(w in low for w in ("mute", "静音", "最小", "关掉", "别出声")):
-                return 0
             if any(w in low for w in ("+", "up", "louder", "increase", "大", "高", "响")):
                 return cur + step
             if any(w in low for w in ("-", "down", "quieter", "decrease", "小", "低", "轻")):
@@ -1308,12 +1309,10 @@ class BotGUI:
         if target is None:
             return "VOLUME_SET::你想把音量调到多大呀？比如说“大一点”，或者“音量调到 50”。"
 
-        target = max(0, min(200, int(target)))
+        target = max(self.MIN_VOLUME, min(200, int(target)))
         self.config["volume_percent"] = target
         save_config(self.config)
         log(f"[VOLUME] {cur}% -> {target}%")
-        if target == 0:
-            return "VOLUME_SET::好的，我小声点啦。"
         return f"VOLUME_SET::好的，音量调到 {target}% 啦。"
 
     # -------------------------------------------------------------------
