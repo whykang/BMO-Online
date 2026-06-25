@@ -23,6 +23,9 @@ edge-tts
 # 豆包/火山引擎 TTS 2.0 流式 WebSocket（可选，切到豆包引擎时才用到）
 websockets
 
+# 热敏打印机（GPIO UART / ESC-POS，可选）
+pyserial
+
 # Web control panel
 fastapi
 uvicorn[standard]

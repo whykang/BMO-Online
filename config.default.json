@@ -92,5 +92,13 @@
     "thinking": "让我想想",
     "error": "哎呀，我出错了"
   },
-  "volume_percent": 100
+  "volume_percent": 100,
+  "printer": {
+    "enabled": true,
+    "device": "/dev/ttyAMA0",
+    "baudrate": 9600,
+    "encoding": "gb2312",
+    "width": 384,
+    "history_turns": 10
+  }
 }

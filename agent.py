@@ -107,7 +107,11 @@ TOOLS_PROMPT = (
     "4. 查看系统状态/温度/CPU/内存/磁盘：{\"action\": \"get_system_status\"}\n"
     "5. 调音量：{\"action\": \"set_volume\", \"value\": 数字}\n"
     "   value 是目标音量百分比(10~200，100=原始)；说'大一点/小一点'用相对值"
-    "\"+20\"/\"-20\"；'最大'用\"max\"。不支持静音。\n\n"
+    "\"+20\"/\"-20\"；'最大'用\"max\"。不支持静音。\n"
+    "6. 打印（热敏打印机）：\n"
+    "   打印照片：{\"action\": \"print\", \"target\": \"photo\"}（拍一张照片并打印）\n"
+    "   打印最近对话：{\"action\": \"print\", \"target\": \"history\"}\n"
+    "   打印指定文字：{\"action\": \"print\", \"content\": \"要打印的内容\"}\n\n"
     "重要：只要用户的话涉及上面这些能力（尤其是调音量，例如'声音大一点'、'调大声'、"
     "'太吵了小声点'、'音量调到50'），就必须直接输出对应工具的纯 JSON，"
     "绝对不能用文字说'我做不到'、'我没法调音量'之类的话。\n"
@@ -245,6 +249,7 @@ class BotGUI:
         )
         self.tts_piper = None   # 本地 Piper TTS，懒加载（用到才加载模型）
         self.tts_doubao = None  # 豆包/火山引擎 TTS，懒加载（用到才校验凭证）
+        self.printer = None     # 热敏打印机，懒加载（用到才开串口）
         self._resolved_output = None   # 自动检测的音响输出设备缓存
 
         # 唤醒词
@@ -1235,6 +1240,8 @@ class BotGUI:
             "system": "get_system_status", "health": "get_system_status",
             "volume": "set_volume", "adjust_volume": "set_volume",
             "set_vol": "set_volume", "change_volume": "set_volume",
+            "print_photo": "print", "print_text": "print", "print_history": "print",
+            "打印": "print",
         }
         action = ALIASES.get(raw, raw)
         log(f"[ACTION] {raw} -> {action}")
@@ -1250,6 +1257,22 @@ class BotGUI:
 
         if action == "set_volume":
             return self._set_volume_action(action_data)
+
+        if action == "print":
+            content = action_data.get("content") or action_data.get("text")
+            target = (action_data.get("target") or action_data.get("what")
+                      or action_data.get("type") or "")
+            target = str(target).lower()
+            if content:
+                return f"PRINT_TEXT::{content}"
+            if any(w in target for w in ("photo", "image", "照", "图", "相")):
+                return "PRINT_PHOTO"
+            if any(w in target for w in ("history", "chat", "对话", "历史", "记录", "聊天")):
+                return "PRINT_HISTORY"
+            val = action_data.get("value")
+            if val:
+                return f"PRINT_TEXT::{val}"
+            return "PRINT_EMPTY"
 
         if action == "search_web":
             return f"SEARCH_DISABLED::{value or ''}"
@@ -1318,6 +1341,51 @@ class BotGUI:
         save_config(self.config)
         log(f"[VOLUME] {cur}% -> {target}%")
         return f"VOLUME_SET::好的，音量调到 {target}% 啦。"
+
+    # -------------------------------------------------------------------
+    # 打印（热敏打印机）
+    # -------------------------------------------------------------------
+    def _get_printer(self):
+        if self.printer is None:
+            from providers.printer import ThermalPrinter
+            self.printer = ThermalPrinter(self.config.get("printer", {}))
+        return self.printer
+
+    def _print_text(self, text: str) -> bool:
+        try:
+            p = self._get_printer()
+            p.text(text)
+            p.feed(3)
+            log(f"[PRINT] 文字 {len(text)} 字")
+            return True
+        except Exception as e:
+            log(f"[PRINT ERROR] {e}")
+            return False
+
+    def _print_image(self, path: str) -> bool:
+        try:
+            p = self._get_printer()
+            p.image(path)
+            p.feed(3)
+            log(f"[PRINT] 图片 {path}")
+            return True
+        except Exception as e:
+            log(f"[PRINT ERROR] {e}")
+            return False
+
+    def _print_history(self) -> bool:
+        n = int(self.config.get("printer", {}).get("history_turns", 10))
+        msgs = [m for m in self.session_memory
+                if m.get("role") in ("user", "assistant") and m.get("content")]
+        msgs = msgs[-n * 2:]
+        if not msgs:
+            return self._print_text("（还没有对话记录）")
+        lines = ["==== BMO 对话记录 ====",
+                 datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), ""]
+        for m in msgs:
+            who = "你" if m["role"] == "user" else "BMO"
+            lines.append(f"{who}: {m['content']}")
+        return self._print_text("\n".join(lines))
 
     # -------------------------------------------------------------------
     # 主对话
@@ -1450,6 +1518,33 @@ class BotGUI:
         if isinstance(result, str) and result.startswith("VOLUME_SET::"):
             # 音量已在 execute_action 里改好，这里直接念确认（新音量立即生效）
             self._say(result.split("::", 1)[1], remember=original_text)
+            return
+
+        if result == "PRINT_PHOTO":
+            self.set_state(BotStates.CAPTURING, "拍照打印中...")
+            img = self.capture_image()
+            ok = bool(img) and self._print_image(img)
+            self._say("照片打印好啦！" if ok else "打印照片没成功，检查下打印机连接哦。",
+                      remember=original_text)
+            return
+
+        if result == "PRINT_HISTORY":
+            self.set_state(BotStates.THINKING, "打印对话中...")
+            ok = self._print_history()
+            self._say("对话记录打印好啦！" if ok else "打印对话没成功，检查下打印机哦。",
+                      remember=original_text)
+            return
+
+        if isinstance(result, str) and result.startswith("PRINT_TEXT::"):
+            content = result.split("::", 1)[1]
+            self.set_state(BotStates.THINKING, "打印中...")
+            ok = self._print_text(content)
+            self._say("打印好啦！" if ok else "打印没成功，检查下打印机连接哦。",
+                      remember=original_text)
+            return
+
+        if result == "PRINT_EMPTY":
+            self._say("你要打印什么呀？照片、对话记录，还是一段文字？", remember=original_text)
             return
 
         if result == "IMAGE_CAPTURE_TRIGGERED":
@@ -1990,6 +2085,12 @@ class BotGUI:
                 )
                 self.tts_piper = None  # 懒加载，按新 config 下次用时重建
                 self.tts_doubao = None  # 同上，换音色/凭证后下次用时重建
+                if self.printer:
+                    try:
+                        self.printer.close()
+                    except Exception:
+                        pass
+                self.printer = None  # 打印机配置可能变（设备/波特率），下次用时重建
                 self._resolved_output = None  # 重新检测输出设备
                 self.vision = VisionProvider(self.config["vision"], endpoints)
                 self.image_gen = ImageGenProvider(
