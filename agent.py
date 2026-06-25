@@ -701,6 +701,27 @@ class BotGUI:
             self._set_cursor_visible(False)
         self._safe_after(0, _update)
 
+    def _keep_game_pause_display(self):
+        """游戏被 BMO 唤醒暂停时，不把 BMO 全屏盖上来，保留模拟器暂停画面。"""
+        def _update():
+            try:
+                self.exit_button.place_forget()
+            except Exception:
+                pass
+            try:
+                self.master.attributes('-fullscreen', False)
+            except Exception:
+                pass
+            try:
+                if self._game_cfg().get("hide_bmo_while_playing", True):
+                    self.master.withdraw()
+                else:
+                    self.master.lower()
+            except Exception:
+                pass
+            self._set_cursor_visible(False)
+        self._safe_after(0, _update)
+
     def _activate_game_window_later(self):
         xdotool = shutil.which("xdotool")
         proc = self.game_proc
@@ -776,19 +797,24 @@ class BotGUI:
         self.abort_to_wake.set()
         return True, f"开始游戏：{rom_name}"
 
-    def pause_game(self, for_bmo=False):
+    def pause_game(self, for_bmo=False, show_bmo=False):
         if not self._game_is_running():
             return False, "现在没有正在运行的游戏。"
         if self.game_paused:
-            if for_bmo:
+            if show_bmo:
                 self._restore_bmo_display_mode()
+            elif for_bmo:
+                self._keep_game_pause_display()
             return True, "游戏已经暂停了。"
         ok = self._signal_game(signal.SIGSTOP)
         if not ok:
             return False, "暂停游戏失败。"
         self.game_paused = True
         log(f"[GAME] 已暂停: {self.game_rom}")
-        self._restore_bmo_display_mode()
+        if show_bmo:
+            self._restore_bmo_display_mode()
+        else:
+            self._keep_game_pause_display()
         return True, "游戏已暂停。"
 
     def resume_game(self):
@@ -1043,7 +1069,7 @@ class BotGUI:
                     self.set_state(BotStates.IDLE, "重置")
                     continue
                 if self._game_is_running() and not self.game_paused:
-                    self.pause_game(for_bmo=True)
+                    self.pause_game(for_bmo=True, show_bmo=False)
                 # 先把动画切到"在听"，立刻给视觉反馈；否则要等应答音(TTS ~2s)念完动画才变
                 self.set_state(BotStates.LISTENING, "在听...")
                 # 被唤醒/触发 → 读出应答词（等播完再录，避免录进自己的提示音）
@@ -1988,7 +2014,7 @@ class BotGUI:
             return
 
         if result == "GAME_PAUSE":
-            _, msg = self.pause_game(for_bmo=True)
+            _, msg = self.pause_game(for_bmo=True, show_bmo=False)
             self._say(msg, remember=original_text)
             return
 
@@ -2664,7 +2690,7 @@ class BotGUI:
             ok, msg = self.start_game(cmd.get("game") or cmd.get("rom") or "")
             log(f"[WEBUI GAME] start -> {'成功' if ok else '失败'}: {msg}")
         elif action == "pause_game":
-            ok, msg = self.pause_game(for_bmo=True)
+            ok, msg = self.pause_game(for_bmo=True, show_bmo=False)
             log(f"[WEBUI GAME] pause -> {'成功' if ok else '失败'}: {msg}")
         elif action == "resume_game":
             ok, msg = self.resume_game()
