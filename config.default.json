@@ -84,7 +84,7 @@
     "deepseek": "https://api.deepseek.com/v1"
   },
   "audio_latency": "high",
-  "audio_output_device": "auto",
+  "audio_output_device": "default",
   "enable_sounds": true,
   "status_speech": {
     "greeting": "你好，我叫 BMO",

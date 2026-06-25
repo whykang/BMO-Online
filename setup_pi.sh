@@ -17,6 +17,8 @@ sudo apt install -y \
     portaudio19-dev libasound2-dev \
     mpg123 ffmpeg \
     unclutter xdotool \
+    pipewire-alsa pulseaudio-utils grim \
+    fceux \
     git
 
 # 2. Python venv

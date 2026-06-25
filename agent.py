@@ -1364,6 +1364,8 @@ class BotGUI:
     def safe_main_execution(self):
         try:
             self.set_state(BotStates.WARMUP, "暖机中...")
+            # 走 PipeWire 输出时，先把默认 sink 指到 USB 音箱（免得跑到 HDMI）
+            threading.Thread(target=self._ensure_pipewire_usb_sink, daemon=True).start()
             # 启动 TTS 后台线程
             self.tts_active.set()
             threading.Thread(target=self._tts_worker, daemon=True).start()
@@ -2684,6 +2686,34 @@ class BotGUI:
             if not is_hdmi and not non_hdmi:
                 non_hdmi = f"plughw:{card},0"
         return non_hdmi
+
+    def _ensure_pipewire_usb_sink(self):
+        """走 PipeWire(default) 输出时，把 PipeWire 默认 sink 设成 USB 音箱，
+        免得默认跑到 HDMI 没声。best-effort，没 pactl 就跳过。"""
+        raw = (self.config.get("audio_output_device") or "default").strip().lower()
+        if raw not in ("", "default", "pipewire", "pulse", "system"):
+            return   # 用户指定了具体设备，不动
+        pactl = shutil.which("pactl")
+        if not pactl:
+            return
+        try:
+            out = subprocess.check_output([pactl, "list", "short", "sinks"],
+                                          text=True, timeout=5, stderr=subprocess.DEVNULL)
+        except Exception:
+            return
+        usb = None
+        for line in out.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 2 and "usb" in parts[1].lower():
+                usb = parts[1]
+                break
+        if usb:
+            try:
+                subprocess.run([pactl, "set-default-sink", usb],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+                log(f"[AUDIO] PipeWire 默认输出已设为 USB 音箱: {usb}")
+            except Exception:
+                pass
 
     def _resolve_output_device(self):
         """default/空/pipewire → 走系统默认(PipeWire)，不加 -D，能和游戏共用音箱；
