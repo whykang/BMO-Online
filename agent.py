@@ -110,6 +110,7 @@ TOOLS_PROMPT = (
     "\"+20\"/\"-20\"；'最大'用\"max\"。不支持静音。\n"
     "6. 打印（热敏打印机）：\n"
     "   打印照片：{\"action\": \"print\", \"target\": \"photo\"}（拍一张照片并打印）\n"
+    "   打印刚画的图：{\"action\": \"print\", \"target\": \"generated\"}\n"
     "   打印最近对话：{\"action\": \"print\", \"target\": \"history\"}\n"
     "   打印指定文字：{\"action\": \"print\", \"content\": \"要打印的内容\"}\n\n"
     "重要：只要用户的话涉及上面这些能力（尤其是调音量，例如'声音大一点'、'调大声'、"
@@ -250,6 +251,8 @@ class BotGUI:
         self.tts_piper = None   # 本地 Piper TTS，懒加载（用到才加载模型）
         self.tts_doubao = None  # 豆包/火山引擎 TTS，懒加载（用到才校验凭证）
         self.printer = None     # 热敏打印机，懒加载（用到才开串口）
+        self.last_image_for_print = None  # 最近生成的图片路径（供"打印刚画的图"用）
+        self.pending_print = None          # 刚画完图、正等用户回答"要不要打印"
         self._resolved_output = None   # 自动检测的音响输出设备缓存
 
         # 唤醒词
@@ -722,6 +725,7 @@ class BotGUI:
     # -------------------------------------------------------------------
     def detect_wake_word_or_ptt(self):
         self.set_state(BotStates.IDLE, "等待唤醒...")
+        self.pending_print = None   # 回到等唤醒就清掉"要不要打印"，避免下次唤醒被误当成回答
         self.ptt_event.clear()
 
         # 配置变更后在本线程安全重载唤醒词（避免和监听循环跨线程竞争）
@@ -1265,7 +1269,9 @@ class BotGUI:
             target = str(target).lower()
             if content:
                 return f"PRINT_TEXT::{content}"
-            if any(w in target for w in ("photo", "image", "照", "图", "相")):
+            if any(w in target for w in ("generated", "last", "刚", "画", "生成", "上一", "图")):
+                return "PRINT_LAST_IMAGE"
+            if any(w in target for w in ("photo", "camera", "照", "拍", "相")):
                 return "PRINT_PHOTO"
             if any(w in target for w in ("history", "chat", "对话", "历史", "记录", "聊天")):
                 return "PRINT_HISTORY"
@@ -1391,6 +1397,22 @@ class BotGUI:
     # 主对话
     # -------------------------------------------------------------------
     def chat_and_respond(self, text, img_path=None):
+        # 刚画完图问过"要不要打印"，这一句优先当作回答处理（一次性）
+        if self.pending_print and not img_path:
+            img = self.pending_print
+            self.pending_print = None
+            low = text.strip().lower()
+            if any(k in low for k in ("不", "别", "算了", "no", "先不", "暂时")):
+                self._say("好的，那就先不打印啦～")
+                return
+            if any(k in low for k in ("要", "好", "打印", "是", "嗯", "可以", "行",
+                                      "print", "yes", "ok", "打")):
+                self.set_state(BotStates.THINKING, "打印图片中...")
+                ok = bool(img) and os.path.exists(img) and self._print_image(img)
+                self._say("图片打印好啦！" if ok else "打印图片没成功，检查下打印机哦。")
+                return
+            # 既不像"要"也不像"不要" → 当普通对话继续（图仍可之后让它打印）
+
         # 清空记忆指令
         if any(kw in text for kw in ["忘记一切", "清空记忆", "forget everything", "reset memory"]):
             self.session_memory = []
@@ -1528,6 +1550,17 @@ class BotGUI:
                       remember=original_text)
             return
 
+        if result == "PRINT_LAST_IMAGE":
+            img = self.last_image_for_print
+            if not img or not os.path.exists(img):
+                self._say("我还没有刚画好的图片呢，先让我画一个吧～", remember=original_text)
+                return
+            self.set_state(BotStates.THINKING, "打印图片中...")
+            ok = self._print_image(img)
+            self._say("图片打印好啦！" if ok else "打印图片没成功，检查下打印机哦。",
+                      remember=original_text)
+            return
+
         if result == "PRINT_HISTORY":
             self.set_state(BotStates.THINKING, "打印对话中...")
             ok = self._print_history()
@@ -1563,11 +1596,17 @@ class BotGUI:
                 path = self.image_gen.generate(prompt)
                 if path:
                     log(f"[IMAGE GEN] 保存到 {path}")
+                    self.last_image_for_print = path   # 记住，供"打印刚画的图"用
                     self.set_state(BotStates.SPEAKING, "看我画的~", overlay_path=path)
-                    self.speak_text("画好啦！")
-                    self.wait_for_tts()
-                    # 保持显示一会儿
-                    time.sleep(self.config.get("image_display_seconds", 10))
+                    # 打印机开着就问要不要打印；用户下一句"要/不要"由 chat_and_respond 处理
+                    if self.config.get("printer", {}).get("enabled", True):
+                        self.pending_print = path
+                        self.speak_text("画好啦！要不要我打印出来呀？")
+                        self.wait_for_tts()
+                    else:
+                        self.speak_text("画好啦！")
+                        self.wait_for_tts()
+                        time.sleep(self.config.get("image_display_seconds", 10))
                 else:
                     self._say("画图失败了。")
                     return
