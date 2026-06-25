@@ -2686,9 +2686,13 @@ class BotGUI:
         return non_hdmi
 
     def _resolve_output_device(self):
-        """auto/空 → 自动检测 USB 音响；显式值 → 直接用。结果缓存。"""
-        dev = (self.config.get("audio_output_device") or "auto").strip()
-        if dev and dev.lower() != "auto":
+        """default/空/pipewire → 走系统默认(PipeWire)，不加 -D，能和游戏共用音箱；
+        auto → 自动检测 USB plughw；显式值 → 直接用。结果缓存。"""
+        raw = self.config.get("audio_output_device")
+        dev = (raw if raw is not None else "auto").strip()
+        if dev.lower() in ("", "default", "pipewire", "pulse", "system"):
+            return ""   # aplay/mpg123 不带 -D，交给系统默认（PipeWire 混音，不抢设备）
+        if dev.lower() != "auto":
             return dev
         if getattr(self, "_resolved_output", None) is None:
             self._resolved_output = self._detect_usb_playback()
