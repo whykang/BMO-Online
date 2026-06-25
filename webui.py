@@ -31,6 +31,7 @@ AUTH_FILE = "auth.json"
 LOG_DIR = "logs"
 GENERATED_DIR = "generated"
 WAKEWORDS_DIR = "wakewords"
+ROMS_DIR = "roms"
 ENV_FILE = ".env"
 
 app = FastAPI(title="BMO Web Control")
@@ -38,6 +39,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/generated", StaticFiles(directory=GENERATED_DIR), name="generated")
 os.makedirs(WAKEWORDS_DIR, exist_ok=True)
 os.makedirs(GENERATED_DIR, exist_ok=True)
+os.makedirs(ROMS_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 app.mount("/wakewords", StaticFiles(directory=WAKEWORDS_DIR), name="wakewords")
 
@@ -422,6 +424,50 @@ async def delete_wakeword(filename: str):
     if "/" in filename or ".." in filename:
         raise HTTPException(400, "非法文件名")
     path = os.path.join(WAKEWORDS_DIR, filename)
+    if os.path.exists(path):
+        os.remove(path)
+        return {"ok": True}
+    raise HTTPException(404, "文件不存在")
+
+
+# =========================================================================
+# 路由：游戏 ROM 管理（.nes / .zip）
+# =========================================================================
+ROM_EXTS = (".nes", ".zip", ".fds", ".unf")
+
+
+@app.get("/api/roms")
+async def list_roms():
+    """列出 roms/ 里的 ROM 文件。"""
+    items = []
+    if os.path.isdir(ROMS_DIR):
+        for f in sorted(os.listdir(ROMS_DIR)):
+            if f.lower().endswith(ROM_EXTS):
+                p = os.path.join(ROMS_DIR, f)
+                items.append({
+                    "filename": f,
+                    "size_kb": round(os.path.getsize(p) / 1024, 1),
+                })
+    return {"roms": items}
+
+
+@app.post("/api/roms/upload")
+async def upload_rom(file: UploadFile = File(...)):
+    if not file.filename.lower().endswith(ROM_EXTS):
+        raise HTTPException(400, "只接受 .nes / .zip / .fds / .unf 文件")
+    if "/" in file.filename or ".." in file.filename:
+        raise HTTPException(400, "非法文件名")
+    dest = os.path.join(ROMS_DIR, file.filename)
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    return {"ok": True, "filename": file.filename}
+
+
+@app.delete("/api/roms/{filename}")
+async def delete_rom(filename: str):
+    if "/" in filename or ".." in filename:
+        raise HTTPException(400, "非法文件名")
+    path = os.path.join(ROMS_DIR, filename)
     if os.path.exists(path):
         os.remove(path)
         return {"ok": True}

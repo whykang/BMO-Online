@@ -146,6 +146,7 @@
   <button data-tab="wake" onclick="showTab('wake')">唤醒词</button>
   <button data-tab="history" onclick="showTab('history')">对话历史</button>
   <button data-tab="images" onclick="showTab('images')">图片生成</button>
+  <button data-tab="games" onclick="showTab('games')">游戏</button>
   <button data-tab="logs" onclick="showTab('logs')">日志</button>
   <button data-tab="security" onclick="showTab('security')">安全</button>
 </nav>
@@ -580,6 +581,20 @@
   </div>
 </section>
 
+<!-- 游戏 ROM -->
+<section id="tab-games" class="tab hide">
+  <div class="panel">
+    <h2>游戏 ROM</h2>
+    <div class="row">
+      <input type="file" id="rom-file" accept=".nes,.zip,.fds,.unf">
+      <button class="btn" onclick="uploadRom()">上传 ROM</button>
+      <button class="btn secondary" onclick="loadRoms()">刷新</button>
+    </div>
+    <div class="help">上传 NES 游戏（.nes / .zip）。文件存到树莓派 roms/ 目录，后面"语音开游戏"会用它。</div>
+    <div id="rom-list" style="margin-top: 12px;"></div>
+  </div>
+</section>
+
 <!-- 日志 -->
 <section id="tab-logs" class="tab hide">
   <div class="panel">
@@ -687,6 +702,43 @@ function showTab(name) {
 function refreshTab(name) {
   if (name === 'history') loadHistory();
   if (name === 'images') loadImages();
+  if (name === 'games') loadRoms();
+}
+
+// ============ 游戏 ROM ============
+async function loadRoms() {
+  const box = document.getElementById('rom-list');
+  let roms = [];
+  try { roms = (await fetchJSON('/api/roms')).roms || []; } catch (e) {}
+  box.innerHTML = '';
+  if (!roms.length) { box.innerHTML = '<div class="help">还没有 ROM，上传一个 .nes 文件试试。</div>'; return; }
+  for (const r of roms) {
+    const div = document.createElement('div');
+    div.className = 'row';
+    div.innerHTML = `<span style="flex:1">${r.filename} <span class="help">(${r.size_kb} KB)</span></span>`;
+    const del = document.createElement('button');
+    del.className = 'btn danger';
+    del.textContent = '删除';
+    del.onclick = () => deleteRom(r.filename);
+    div.appendChild(del);
+    box.appendChild(div);
+  }
+}
+async function uploadRom() {
+  const inp = document.getElementById('rom-file');
+  if (!inp.files.length) return alert('先选一个 ROM 文件');
+  const fd = new FormData();
+  fd.append('file', inp.files[0]);
+  const r = await fetch('/api/roms/upload', { method: 'POST', body: fd });
+  if (!r.ok) { alert('上传失败：' + (await r.text())); return; }
+  inp.value = '';
+  await loadRoms();
+  alert('上传成功');
+}
+async function deleteRom(name) {
+  if (!confirm('删除 ' + name + ' ？')) return;
+  await deleteJSON('/api/roms/' + encodeURIComponent(name));
+  await loadRoms();
 }
 
 // ============ 状态轮询 ============
