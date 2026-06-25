@@ -717,7 +717,7 @@ class BotGUI:
             return False
         if "config:0" not in text:
             return False
-        required = ("A:", "B:", "Select:", "Start:", "Up:", "Down:", "Left:", "Right:")
+        required = ("a:", "b:", "back:", "start:", "dpup:", "dpdown:", "dpleft:", "dpright:")
         for line in text.splitlines():
             if "config:0" not in line:
                 continue
@@ -735,11 +735,11 @@ class BotGUI:
     def _write_fceux_default_keyboard_profile(self, default_path):
         os.makedirs(os.path.dirname(default_path), exist_ok=True)
         default_map = (
-            "keyboard,default,config:0,A:kF,B:kD,Select:kS,Start:kReturn,"
-            "Up:kUp,Down:kDown,Left:kLeft,Right:kRight,TurboA:,TurboB:,\n"
-            "keyboard,default,config:1,A:,B:,Select:,Start:,Up:,Down:,Left:,Right:,TurboA:,TurboB:,\n"
-            "keyboard,default,config:2,A:,B:,Select:,Start:,Up:,Down:,Left:,Right:,TurboA:,TurboB:,\n"
-            "keyboard,default,config:3,A:,B:,Select:,Start:,Up:,Down:,Left:,Right:,TurboA:,TurboB:,\n"
+            "keyboard,default,config:0,a:kF,b:kD,back:kS,start:kReturn,"
+            "dpup:kUp,dpdown:kDown,dpleft:kLeft,dpright:kRight,turboA:,turboB:,\n"
+            "keyboard,default,config:1,a:,b:,back:,start:,dpup:,dpdown:,dpleft:,dpright:,turboA:,turboB:,\n"
+            "keyboard,default,config:2,a:,b:,back:,start:,dpup:,dpdown:,dpleft:,dpright:,turboA:,turboB:,\n"
+            "keyboard,default,config:3,a:,b:,back:,start:,dpup:,dpdown:,dpleft:,dpright:,turboA:,turboB:,\n"
         )
         with open(default_path, "w", encoding="utf-8") as f:
             f.write(default_map)
