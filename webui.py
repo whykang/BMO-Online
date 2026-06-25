@@ -234,6 +234,29 @@ async def audio_outputs():
     return {"devices": items}
 
 
+@app.get("/api/audio/inputs")
+async def audio_inputs():
+    """列出可用的录音设备（供网页下拉选麦克风）。device 用设备名子串，agent 端模糊匹配。"""
+    items = [{"device": "auto", "label": "自动检测（推荐）", "kind": "AUTO"}]
+    try:
+        out = subprocess.run(["arecord", "-l"], capture_output=True, text=True, timeout=8).stdout
+        for line in out.splitlines():
+            m = re.match(r"\s*card (\d+): (\S+) \[(.*?)\].*device (\d+):", line)
+            if not m:
+                continue
+            card, cid, name, dev = m.group(1), m.group(2), m.group(3), m.group(4)
+            tag = f"{cid} {name}".lower()
+            kind = "USB" if "usb" in tag else ("HDMI" if "hdmi" in tag else "其它")
+            items.append({
+                "device": name,   # 如 "USB PnP Sound Device"，agent 按子串匹配
+                "label": f"[{kind}] card {card}: {name}",
+                "kind": kind,
+            })
+    except Exception as e:
+        return {"devices": items, "error": str(e)}
+    return {"devices": items}
+
+
 @app.get("/api/volume")
 async def get_volume():
     # 软件音量为准（不被 PipeWire 重置）

@@ -55,7 +55,7 @@
   "chat_memory": true,
   "memory_max_turns": 30,
   "camera_rotation": 0,
-  "input_device": null,
+  "input_device": "auto",
   "input_sample_rate": 44100,
   "recording": {
     "silence_duration": 1.0,

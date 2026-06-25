@@ -236,6 +236,12 @@
       <button class="btn secondary" onclick="loadAudioOutputs()">刷新设备</button>
     </div>
     <div class="row">
+      <label>麦克风输入设备：</label>
+      <select id="audio-input" style="min-width: 320px;"></select>
+      <button class="btn secondary" onclick="loadAudioInputs()">刷新设备</button>
+      <span class="help">默认自动检测；换了麦点"刷新设备"再选。</span>
+    </div>
+    <div class="row">
       <label>音量：</label>
       <input type="range" id="volume-slider" min="0" max="200" step="5" value="100"
              style="flex:1; min-width:200px;" oninput="onVolumeInput()" onchange="setVolume()">
@@ -805,6 +811,17 @@ async function loadAudioOutputs() {
   // 当前值不在列表里也保留显示
   if (cur && cur !== 'auto' && cur !== '' && !devs.some(d => d.device === cur)) add(cur, cur + '（当前）');
 }
+async function loadAudioInputs() {
+  const sel = document.getElementById('audio-input');
+  const cur = CONFIG.input_device || 'auto';
+  let devs = [];
+  try { devs = (await fetchJSON('/api/audio/inputs')).devices || []; } catch (e) {}
+  sel.innerHTML = '';
+  const add = (val, txt) => { const o = document.createElement('option'); o.value = val; o.textContent = txt; if (val === cur) o.selected = true; sel.appendChild(o); };
+  for (const d of devs) add(d.device, d.kind === 'AUTO' ? d.label : `${d.label}  (${d.device})`);
+  // 当前值不在列表里也保留显示
+  if (cur && cur !== 'auto' && !devs.some(d => d.device === cur)) add(cur, cur + '（当前）');
+}
 async function loadVolume() {
   const hint = document.getElementById('volume-hint');
   try {
@@ -898,6 +915,7 @@ function fillVoiceTab() {
   document.getElementById('ss-thinking').value = statusValue('thinking');
   document.getElementById('ss-error').value = statusValue('error');
   loadAudioOutputs();
+  loadAudioInputs();
   loadVolume();
   document.getElementById('voice-rate').value = CONFIG.tts?.rate || '+0%';
   document.getElementById('voice-volume').value = CONFIG.tts?.volume || '+0%';
@@ -918,8 +936,10 @@ async function saveTTSEngine() {
   const num = parseFloat(rate);
   if (!isNaN(num) && !rate.includes('%')) CONFIG.tts.piper_speed = num;
   CONFIG.audio_output_device = document.getElementById('audio-output').value;
+  CONFIG.input_device = document.getElementById('audio-input').value;
   await putJSON('/api/config', CONFIG);
-  alert('已保存。引擎=' + CONFIG.tts.provider + '，输出=' + (CONFIG.audio_output_device || '系统默认'));
+  alert('已保存。引擎=' + CONFIG.tts.provider + '，输出=' + (CONFIG.audio_output_device || '系统默认')
+        + '，麦克风=' + (CONFIG.input_device || 'auto'));
 }
 async function saveStatusSpeech() {
   CONFIG.status_speech = {

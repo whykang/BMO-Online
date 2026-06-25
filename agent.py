@@ -139,24 +139,42 @@ class BotStates:
 # 音频工具
 # =========================================================================
 
+def _auto_pick_input(devices):
+    """自动挑一个像样的麦输入设备，避开坏掉的 ALSA 默认（capture slave 未定义那种）。"""
+    prefer = ("usb", "pnp", "mic", "microphone", "webcam", "camera")
+    for idx, dev in enumerate(devices):
+        name = dev.get("name", "").lower()
+        if dev.get("max_input_channels", 0) > 0 and any(k in name for k in prefer):
+            return idx
+    # 兜底：第一个有输入通道、且不是 default/sysdefault 的设备
+    for idx, dev in enumerate(devices):
+        name = dev.get("name", "").lower()
+        if dev.get("max_input_channels", 0) > 0 and "default" not in name:
+            return idx
+    return None
+
+
 def resolve_input_device(requested):
-    if requested in (None, "", "default"):
-        return None
+    """requested 可为：None/""/"auto"（自动检测）、序号、或设备名子串。匹配不到也回落到自动。"""
     try:
         devices = sd.query_devices()
     except Exception as e:
         log(f"[AUDIO] 设备查询失败: {e}")
         return None
-    if isinstance(requested, int) or (isinstance(requested, str) and str(requested).isdigit()):
+    # 显式序号
+    if isinstance(requested, int) or (isinstance(requested, str) and str(requested).strip().isdigit()):
         idx = int(requested)
-        if 0 <= idx < len(devices):
+        if 0 <= idx < len(devices) and devices[idx].get("max_input_channels", 0) > 0:
             return idx
-        return None
-    req_low = str(requested).lower()
-    for idx, dev in enumerate(devices):
-        if dev.get("max_input_channels", 0) > 0 and req_low in dev.get("name", "").lower():
-            return idx
-    return None
+        return _auto_pick_input(devices)
+    # 显式名字（非空、非 auto/default）→ 模糊匹配
+    req = str(requested).strip().lower() if requested is not None else ""
+    if req and req not in ("auto", "default"):
+        for idx, dev in enumerate(devices):
+            if dev.get("max_input_channels", 0) > 0 and req in dev.get("name", "").lower():
+                return idx
+    # auto / 空 / 匹配不到 → 自动检测
+    return _auto_pick_input(devices)
 
 
 def choose_input_samplerate(device, preferred=None) -> int:
@@ -208,6 +226,7 @@ class BotGUI:
 
         self.config = load_config()
         self.input_device = resolve_input_device(self.config.get("input_device"))
+        self._log_input_device()
 
         # 状态
         self.current_state = BotStates.WARMUP
@@ -795,6 +814,16 @@ class BotGUI:
                 return self.detect_wake_word_or_ptt()  # 配置变更，按新后端重算音频参数
             return result          # "WAKE"
         return "PTT"
+
+    def _log_input_device(self):
+        try:
+            if self.input_device is not None:
+                name = sd.query_devices(self.input_device).get("name", "?")
+                log(f"[AUDIO] 麦克风输入设备: [{self.input_device}] {name}")
+            else:
+                log("[AUDIO] 麦克风输入设备: 系统默认（未自动选到 USB 麦）")
+        except Exception:
+            pass
 
     def _reset_portaudio(self):
         """彻底重启 PortAudio，强制重新枚举音频设备（清掉卡死的 ALSA 句柄）。"""
@@ -2152,6 +2181,10 @@ class BotGUI:
                 # 重新读 .env，让网页新填的 key/凭证（如火山 appid/token）立即生效，无需重启
                 load_dotenv(override=True)
                 self.config = load_config()
+                # 网页可能改了麦克风输入设备 → 重新解析（唤醒监听下一轮重开流时生效）
+                self.input_device = resolve_input_device(self.config.get("input_device"))
+                self._log_input_device()
+                self.wake_reload_pending = True
                 # 重建相关 provider
                 endpoints = self.config["providers_endpoints"]
                 self.llm = LLMProvider(self.config["llm"], endpoints)
