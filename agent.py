@@ -586,7 +586,7 @@ class BotGUI:
         return self.config.get("game", {})
 
     def _game_rom_dir(self):
-        return self._game_cfg().get("rom_dir") or ROMS_DIR
+        return os.path.abspath(self._game_cfg().get("rom_dir") or ROMS_DIR)
 
     def _list_rom_files(self):
         rom_dir = self._game_rom_dir()
@@ -651,6 +651,39 @@ class BotGUI:
             args = [arg.replace("{rom}", rom_path) for arg in args]
             return [emulator, *args], ""
         return [emulator, *args, rom_path], ""
+
+    def _game_env(self):
+        """固定 FCEUX 的用户配置目录，避免从 autostart/nohup 启动时读到另一套空映射。"""
+        env = os.environ.copy()
+        configured_home = (self._game_cfg().get("home") or "").strip()
+        sudo_user = os.getenv("SUDO_USER", "")
+        if configured_home:
+            home = configured_home
+        elif hasattr(os, "geteuid") and os.geteuid() == 0 and sudo_user and sudo_user != "root":
+            home = os.path.expanduser(f"~{sudo_user}")
+        else:
+            home = os.path.expanduser("~")
+        if home:
+            home = os.path.abspath(os.path.expanduser(home))
+            env["HOME"] = home
+            env.setdefault("USER", os.path.basename(home))
+            env.setdefault("LOGNAME", os.path.basename(home))
+            env.setdefault("XDG_CONFIG_HOME", os.path.join(home, ".config"))
+            env.setdefault("XDG_DATA_HOME", os.path.join(home, ".local", "share"))
+            env.setdefault("XDG_CACHE_HOME", os.path.join(home, ".cache"))
+        return env
+
+    def _log_game_config_paths(self, env):
+        home = env.get("HOME", "")
+        xdg_config = env.get("XDG_CONFIG_HOME", "")
+        candidates = [
+            os.path.join(xdg_config, "fceux"),
+            os.path.join(home, ".fceux"),
+            os.path.join(home, ".config", "fceux"),
+        ]
+        existing = [p for p in candidates if p and os.path.exists(p)]
+        log(f"[GAME] FCEUX HOME={home} XDG_CONFIG_HOME={xdg_config}")
+        log("[GAME] FCEUX 配置目录: " + ("; ".join(existing) if existing else "未发现，FCEUX 会新建"))
 
     def _game_is_running(self):
         proc = self.game_proc
@@ -817,10 +850,14 @@ class BotGUI:
         rom_name = os.path.basename(rom_path)
         try:
             log(f"[GAME] 启动: {' '.join(cmd)}")
+            env = self._game_env()
+            self._log_game_config_paths(env)
             proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                env=env,
+                cwd=env.get("HOME") or None,
                 start_new_session=True,
             )
         except Exception as e:
