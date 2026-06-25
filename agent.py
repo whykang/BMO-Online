@@ -24,6 +24,7 @@ import subprocess
 import shutil
 import signal
 import shlex
+import glob
 import tkinter as tk
 from tkinter import ttk
 
@@ -656,6 +657,7 @@ class BotGUI:
         """固定 FCEUX 的用户配置目录，避免从 autostart/nohup 启动时读到另一套空映射。"""
         env = os.environ.copy()
         configured_home = (self._game_cfg().get("home") or "").strip()
+        configured_config_dir = (self._game_cfg().get("config_dir") or "").strip()
         sudo_user = os.getenv("SUDO_USER", "")
         if configured_home:
             home = configured_home
@@ -671,19 +673,90 @@ class BotGUI:
             env.setdefault("XDG_CONFIG_HOME", os.path.join(home, ".config"))
             env.setdefault("XDG_DATA_HOME", os.path.join(home, ".local", "share"))
             env.setdefault("XDG_CACHE_HOME", os.path.join(home, ".cache"))
+            config_dir = configured_config_dir or os.path.join(home, ".fceux")
+            config_dir = os.path.abspath(os.path.expanduser(config_dir))
+            env["FCEUX_CONFIG_DIR"] = config_dir
+            self._ensure_fceux_input_profiles(config_dir, home)
         return env
+
+    def _candidate_fceux_config_dirs(self, home, target):
+        candidates = [
+            os.getenv("FCEUX_CONFIG_DIR", ""),
+            target,
+            os.path.join(home, ".fceux"),
+            os.path.join(home, ".config", "fceux"),
+            os.path.join(home, ".config", "FCEUX"),
+            os.path.join(home, ".local", "share", "fceux"),
+            os.path.join(home, ".local", "share", "FCEUX"),
+            os.path.join(home, ".var", "app", "org.fceux.FCEUX", "config", "fceux"),
+            os.path.join(home, ".var", "app", "org.fceux.FCEUX", "data", "fceux"),
+            os.path.join(home, ".var", "app", "net.sourceforge.fceux", "config", "fceux"),
+            os.path.join(home, ".var", "app", "net.sourceforge.fceux", "data", "fceux"),
+        ]
+        seen = set()
+        out = []
+        for path in candidates:
+            if not path:
+                continue
+            path = os.path.abspath(os.path.expanduser(path))
+            if path in seen:
+                continue
+            seen.add(path)
+            out.append(path)
+        return out
+
+    def _keyboard_profile_files(self, config_dir):
+        return glob.glob(os.path.join(config_dir, "input", "keyboard", "*.txt"))
+
+    def _ensure_fceux_input_profiles(self, target_dir, home):
+        """FCEUX 只看 FCEUX_CONFIG_DIR/input/keyboard/*.txt；缺失时尝试从旧位置迁移。"""
+        os.makedirs(target_dir, exist_ok=True)
+        target_profiles = self._keyboard_profile_files(target_dir)
+        if target_profiles:
+            return
+        for src_dir in self._candidate_fceux_config_dirs(home, target_dir):
+            if src_dir == target_dir:
+                continue
+            src_profiles = self._keyboard_profile_files(src_dir)
+            if not src_profiles:
+                continue
+            src_input = os.path.join(src_dir, "input")
+            dst_input = os.path.join(target_dir, "input")
+            try:
+                shutil.copytree(src_input, dst_input, dirs_exist_ok=True)
+                cfg_src = os.path.join(src_dir, "fceux.cfg")
+                cfg_dst = os.path.join(target_dir, "fceux.cfg")
+                if os.path.exists(cfg_src) and not os.path.exists(cfg_dst):
+                    shutil.copy2(cfg_src, cfg_dst)
+                log(f"[GAME] 已迁移 FCEUX 输入映射: {src_dir} -> {target_dir}")
+                return
+            except Exception as e:
+                log(f"[GAME] 迁移 FCEUX 输入映射失败: {e}")
+        default_path = os.path.join(target_dir, "input", "keyboard", "default.txt")
+        if not os.path.exists(default_path):
+            try:
+                os.makedirs(os.path.dirname(default_path), exist_ok=True)
+                default_map = (
+                    "keyboard,default,config:0,A:kF,B:kD,Select:kS,Start:kReturn,"
+                    "Up:kUp,Down:kDown,Left:kLeft,Right:kRight,TurboA:,TurboB:,\n"
+                    "keyboard,default,config:1,A:,B:,Select:,Start:,Up:,Down:,Left:,Right:,TurboA:,TurboB:,\n"
+                    "keyboard,default,config:2,A:,B:,Select:,Start:,Up:,Down:,Left:,Right:,TurboA:,TurboB:,\n"
+                    "keyboard,default,config:3,A:,B:,Select:,Start:,Up:,Down:,Left:,Right:,TurboA:,TurboB:,\n"
+                )
+                with open(default_path, "w", encoding="utf-8") as f:
+                    f.write(default_map)
+                log(f"[GAME] 已创建 FCEUX 默认键盘映射: {default_path}")
+            except Exception as e:
+                log(f"[GAME] 创建 FCEUX 默认键盘映射失败: {e}")
 
     def _log_game_config_paths(self, env):
         home = env.get("HOME", "")
-        xdg_config = env.get("XDG_CONFIG_HOME", "")
-        candidates = [
-            os.path.join(xdg_config, "fceux"),
-            os.path.join(home, ".fceux"),
-            os.path.join(home, ".config", "fceux"),
-        ]
-        existing = [p for p in candidates if p and os.path.exists(p)]
-        log(f"[GAME] FCEUX HOME={home} XDG_CONFIG_HOME={xdg_config}")
-        log("[GAME] FCEUX 配置目录: " + ("; ".join(existing) if existing else "未发现，FCEUX 会新建"))
+        config_dir = env.get("FCEUX_CONFIG_DIR", "")
+        existing = [p for p in self._candidate_fceux_config_dirs(home, config_dir) if os.path.exists(p)]
+        profiles = self._keyboard_profile_files(config_dir) if config_dir else []
+        log(f"[GAME] FCEUX HOME={home} FCEUX_CONFIG_DIR={config_dir}")
+        log("[GAME] FCEUX 候选配置目录: " + ("; ".join(existing) if existing else "未发现"))
+        log("[GAME] FCEUX 键盘映射: " + ("; ".join(profiles) if profiles else "未发现 input/keyboard/*.txt"))
 
     def _game_is_running(self):
         proc = self.game_proc
