@@ -1270,6 +1270,10 @@ class BotGUI:
             target = str(target).lower()
             if content:
                 return f"PRINT_TEXT::{content}"
+            if any(w in target for w in ("time", "时间", "几点", "日期", "date")):
+                return "PRINT_TIME"
+            if any(w in target for w in ("status", "状态", "系统", "温度", "cpu")):
+                return "PRINT_STATUS"
             if any(w in target for w in ("generated", "last", "刚", "画", "生成", "上一", "图")):
                 return "PRINT_LAST_IMAGE"
             if any(w in target for w in ("photo", "camera", "照", "拍", "相")):
@@ -1560,6 +1564,15 @@ class BotGUI:
                       remember=original_text)
             return
 
+        if result in ("PRINT_TIME", "PRINT_STATUS"):
+            txt = (self.execute_action({"action": "get_time"})
+                   if result == "PRINT_TIME" else self.get_system_status())
+            self.set_state(BotStates.THINKING, "打印中...")
+            ok = self._print_text(txt)
+            self._say("好的，打印好啦！" if ok else "打印没成功，检查下打印机哦。",
+                      remember=original_text)
+            return
+
         if result == "PRINT_LAST_IMAGE":
             img = self.last_image_for_print
             if not img or not os.path.exists(img):
@@ -1658,7 +1671,17 @@ class BotGUI:
             self._say(final_text, remember=original_text)
             return
 
-        # get_time / get_system_status 返回了字符串：让 LLM 再总结一遍
+        # get_time / get_system_status 返回了字符串：
+        # 若用户本意是"把它打印出来"，就直接打印（支持"把时间打印出来"这类一句里连用两个能力）
+        if isinstance(result, str) and result and any(
+                k in original_text for k in ("打印", "打出来", "打一份", "打出", "print")):
+            self.set_state(BotStates.THINKING, "打印中...")
+            ok = self._print_text(result)
+            self._say("好的，打印好啦！" if ok else "打印没成功，检查下打印机哦。",
+                      remember=original_text)
+            return
+
+        # 否则让 LLM 把工具结果总结成一句话念出来
         if isinstance(result, str) and result:
             # 用干净的 system prompt，避免又触发工具调用
             summary_messages = [
