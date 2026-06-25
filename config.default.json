@@ -109,6 +109,8 @@
     "fullscreen_args": ["--fullscreen", "1"],
     "extra_args": [],
     "hide_bmo_while_playing": true,
-    "focus_delay_seconds": 1.2
+    "focus_delay_seconds": 1.2,
+    "focus_attempts": 10,
+    "focus_retry_seconds": 0.5
   }
 }

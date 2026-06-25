@@ -728,22 +728,60 @@ class BotGUI:
         if not xdotool or not proc:
             return
 
-        def _focus():
-            time.sleep(float(self._game_cfg().get("focus_delay_seconds", 1.2)))
-            if not self._game_is_running() or self.game_paused:
-                return
+        def _xdotool_search(*args):
             try:
                 out = subprocess.check_output(
-                    [xdotool, "search", "--pid", str(proc.pid)],
+                    [xdotool, "search", *args],
                     text=True, stderr=subprocess.DEVNULL, timeout=2,
                 ).strip().splitlines()
-                if out:
-                    subprocess.run(
-                        [xdotool, "windowactivate", out[-1]],
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2,
-                    )
+                return [w for w in out if w.strip()]
             except Exception:
-                pass
+                return []
+
+        def _find_windows():
+            windows = []
+            seen = set()
+            searches = [
+                ("--pid", str(proc.pid)),
+                ("--onlyvisible", "--class", "fceux"),
+                ("--onlyvisible", "--class", "FCEUX"),
+                ("--onlyvisible", "--name", "fceux"),
+                ("--onlyvisible", "--name", "FCEUX"),
+            ]
+            for args in searches:
+                for win in _xdotool_search(*args):
+                    if win not in seen:
+                        seen.add(win)
+                        windows.append(win)
+            return windows
+
+        def _activate(win):
+            for cmd in (
+                [xdotool, "windowraise", win],
+                [xdotool, "windowactivate", "--sync", win],
+                [xdotool, "windowfocus", win],
+            ):
+                try:
+                    subprocess.run(cmd, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, timeout=2)
+                except Exception:
+                    pass
+
+        def _focus():
+            cfg = self._game_cfg()
+            time.sleep(float(cfg.get("focus_delay_seconds", 1.2)))
+            attempts = int(cfg.get("focus_attempts", 10))
+            interval = float(cfg.get("focus_retry_seconds", 0.5))
+            for _ in range(max(1, attempts)):
+                if not self._game_is_running() or self.game_paused:
+                    return
+                wins = _find_windows()
+                if wins:
+                    _activate(wins[-1])
+                    log(f"[GAME] 已切换键盘焦点到 FCEUX 窗口: {wins[-1]}")
+                    return
+                time.sleep(interval)
+            log("[GAME] 未找到 FCEUX 窗口，键盘焦点可能没切过去")
 
         threading.Thread(target=_focus, daemon=True).start()
 
