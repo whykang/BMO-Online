@@ -537,18 +537,14 @@ class BotGUI:
             pass
 
     def handle_ptt_toggle(self, event=None):
+        # 按一次 = 唤醒（和语音唤醒一致）：应答 + 自适应录音 + 连续对话，不用再按第二次
         now = time.time()
         if now - self.last_ptt_time < 0.5:
             return
         self.last_ptt_time = now
-        if self.recording_active.is_set():
-            log("[PTT] 停止")
-            self.recording_active.clear()
-        else:
-            if self.current_state == BotStates.IDLE or "等" in self.current_status or "Wait" in self.current_status:
-                log("[PTT] 开始")
-                self.recording_active.set()
-                self.ptt_event.set()
+        if self.current_state == BotStates.IDLE or "等" in self.current_status or "Wait" in self.current_status:
+            log("[BTN] 按钮唤醒")
+            self.ptt_event.set()
 
     def handle_speaking_interrupt(self, event=None):
         if self.current_state in (BotStates.SPEAKING, BotStates.THINKING):
@@ -684,17 +680,14 @@ class BotGUI:
                 followup_secs = float(conv_cfg.get("follow_up_seconds", 15))
                 post_delay = float(conv_cfg.get("post_response_delay", 1.0))
 
-                # 一轮唤醒后，可连续对话（无需重新唤醒），直到超时没人说话
+                # 一轮唤醒（语音 or 按钮）后，统一走自适应录音 + 连续对话
                 first = True
                 while not self.exiting:
                     self.set_state(BotStates.LISTENING, "在听..." if first else "请说...")
 
-                    if trigger == "PTT":
-                        audio_file = self.record_voice_ptt()
-                    else:
-                        # 第一句用"维持唤醒时间"，后续追问用"连续对话时间"
-                        onset = awake_secs if first else followup_secs
-                        audio_file = self.record_voice_adaptive(onset_timeout=onset)
+                    # 第一句用"维持唤醒时间"，后续追问用"连续对话时间"
+                    onset = awake_secs if first else followup_secs
+                    audio_file = self.record_voice_adaptive(onset_timeout=onset)
 
                     if not audio_file:
                         self.set_state(BotStates.IDLE, "没听到")
@@ -711,8 +704,7 @@ class BotGUI:
                     self.chat_and_respond(user_text, img_path=None)
 
                     first = False
-                    # PTT 模式不做自动追问；唤醒模式才连续对话
-                    if not follow_up or trigger == "PTT":
+                    if not follow_up:
                         break
                     # 等回声散掉再录，避免把喇叭余音当成噪音地板（导致听不清）
                     time.sleep(post_delay)
@@ -2141,8 +2133,8 @@ class BotGUI:
         action = cmd.get("action")
         log(f"[CMD] 收到: {action}")
         if action == "ptt_start":
-            if self.current_state in (BotStates.IDLE,):
-                self.recording_active.set()
+            # 网页"开始录音" = 唤醒（和按钮/语音一致）：按一次即应答+自适应录音
+            if self.current_state == BotStates.IDLE or "等" in self.current_status:
                 self.ptt_event.set()
         elif action == "ptt_stop":
             self.recording_active.clear()
