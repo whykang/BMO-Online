@@ -82,7 +82,13 @@ def load_state() -> dict:
                 return json.load(f)
         except Exception:
             pass
-    return {"state": "unknown", "status": "agent 未运行", "tts_queue_len": 0, "memory_turns": 0}
+    return {
+        "state": "unknown",
+        "status": "agent 未运行",
+        "tts_queue_len": 0,
+        "memory_turns": 0,
+        "game": {"running": False, "paused": False, "rom": None},
+    }
 
 
 def hash_password(pw: str) -> str:
@@ -472,6 +478,36 @@ async def delete_rom(filename: str):
         os.remove(path)
         return {"ok": True}
     raise HTTPException(404, "文件不存在")
+
+
+class GameReq(BaseModel):
+    action: str
+    filename: str | None = None
+
+
+@app.post("/api/game")
+async def control_game(req: GameReq):
+    action = (req.action or "").lower().strip()
+    if action not in ("start", "pause", "resume", "stop"):
+        raise HTTPException(400, "action 必须是 start/pause/resume/stop")
+    if action == "start":
+        filename = (req.filename or "").strip()
+        if not filename:
+            raise HTTPException(400, "请选择 ROM")
+        if "/" in filename or ".." in filename:
+            raise HTTPException(400, "非法文件名")
+        if not filename.lower().endswith(ROM_EXTS):
+            raise HTTPException(400, "只接受 .nes / .zip / .fds / .unf 文件")
+        if not os.path.exists(os.path.join(ROMS_DIR, filename)):
+            raise HTTPException(404, "ROM 不存在")
+        queue_command({"action": "start_game", "game": filename})
+    elif action == "pause":
+        queue_command({"action": "pause_game"})
+    elif action == "resume":
+        queue_command({"action": "resume_game"})
+    elif action == "stop":
+        queue_command({"action": "stop_game"})
+    return {"ok": True, "note": "已发送游戏控制命令"}
 
 
 # =========================================================================

@@ -22,6 +22,8 @@ import warnings
 import atexit
 import subprocess
 import shutil
+import signal
+import shlex
 import tkinter as tk
 from tkinter import ttk
 
@@ -63,8 +65,11 @@ STATE_FILE = "state.json"            # agent → webui 状态
 COMMANDS_FILE = "commands.json"      # webui → agent 命令
 BMO_IMAGE_FILE = "current_image.jpg"
 LOG_DIR = "logs"
+ROMS_DIR = "roms"
+ROM_EXTS = (".nes", ".zip", ".fds", ".unf")
 
 os.makedirs(LOG_DIR, exist_ok=True)
+os.makedirs(ROMS_DIR, exist_ok=True)
 
 
 def log(msg: str):
@@ -114,6 +119,12 @@ TOOLS_PROMPT = (
     "   打印最近对话：{\"action\": \"print\", \"target\": \"history\", \"count\": 轮数}"
     "（用户说'打印6轮/6条对话'就填 count=6，一轮=一问一答；不说数量就省略 count）\n"
     "   打印指定文字：{\"action\": \"print\", \"content\": \"要打印的内容\"}\n\n"
+    "7. 游戏（FCEUX/NES）：\n"
+    "   打开指定游戏：{\"action\": \"start_game\", \"game\": \"ROM 文件名或游戏名\"}\n"
+    "   列出游戏：{\"action\": \"list_games\"}\n"
+    "   暂停游戏：{\"action\": \"pause_game\"}\n"
+    "   继续游戏：{\"action\": \"resume_game\"}\n"
+    "   退出游戏：{\"action\": \"stop_game\"}\n\n"
     "重要：只要用户的话涉及上面这些能力（尤其是调音量，例如'声音大一点'、'调大声'、"
     "'太吵了小声点'、'音量调到50'），就必须直接输出对应工具的纯 JSON，"
     "绝对不能用文字说'我做不到'、'我没法调音量'之类的话。\n"
@@ -279,6 +290,10 @@ class BotGUI:
         self.last_image_for_print = None  # 最近生成的图片路径（供"打印刚画的图"用）
         self.pending_print = None          # 刚画完图、正等用户回答"要不要打印"
         self._resolved_output = None   # 自动检测的音响输出设备缓存
+        self.game_proc = None
+        self.game_rom = None
+        self.game_paused = False
+        self.game_lock = threading.Lock()
 
         # 唤醒词
         self.oww_model = None
@@ -405,6 +420,10 @@ class BotGUI:
         try:
             if self._cursor_hider_proc and self._cursor_hider_proc.poll() is None:
                 self._cursor_hider_proc.terminate()
+        except Exception:
+            pass
+        try:
+            self.stop_game(restore_bmo=False)
         except Exception:
             pass
         self.recording_active.clear()
@@ -559,6 +578,284 @@ class BotGUI:
             self._exit_btn_timer = None
         except tk.TclError:
             pass
+
+    # -------------------------------------------------------------------
+    # 游戏控制（FCEUX）
+    # -------------------------------------------------------------------
+    def _game_cfg(self):
+        return self.config.get("game", {})
+
+    def _game_rom_dir(self):
+        return self._game_cfg().get("rom_dir") or ROMS_DIR
+
+    def _list_rom_files(self):
+        rom_dir = self._game_rom_dir()
+        if not os.path.isdir(rom_dir):
+            return []
+        return sorted(
+            f for f in os.listdir(rom_dir)
+            if f.lower().endswith(ROM_EXTS) and "/" not in f
+        )
+
+    def _norm_game_name(self, name: str) -> str:
+        base = os.path.splitext(name or "")[0].lower()
+        return re.sub(r"[\s_\-()\[\]【】（）]+", "", base)
+
+    def _find_rom(self, query=None):
+        roms = self._list_rom_files()
+        if not roms:
+            return None, "还没有 ROM。先在后台“游戏”页上传一个 .nes 文件吧。"
+        q = (query or "").strip()
+        if not q:
+            if len(roms) == 1:
+                return os.path.join(self._game_rom_dir(), roms[0]), ""
+            return None, "你想打开哪个游戏呀？现在有：" + "、".join(roms[:8])
+        q_norm = self._norm_game_name(q)
+        for name in roms:
+            if q == name or q.lower() == name.lower():
+                return os.path.join(self._game_rom_dir(), name), ""
+        for name in roms:
+            n_norm = self._norm_game_name(name)
+            if q_norm and (q_norm in n_norm or n_norm in q_norm):
+                return os.path.join(self._game_rom_dir(), name), ""
+        return None, f"没找到“{q}”这个游戏。现在有：" + "、".join(roms[:8])
+
+    def _split_game_args(self, value):
+        if not value:
+            return []
+        if isinstance(value, list):
+            return [str(x) for x in value if str(x).strip()]
+        if isinstance(value, str):
+            try:
+                return shlex.split(value)
+            except ValueError:
+                return value.split()
+        return []
+
+    def _game_emulator(self):
+        emulator = self._game_cfg().get("emulator", "fceux")
+        if os.path.sep in emulator:
+            return emulator if os.path.exists(emulator) else ""
+        return shutil.which(emulator) or ""
+
+    def _build_game_command(self, rom_path):
+        cfg = self._game_cfg()
+        emulator = self._game_emulator()
+        if not emulator:
+            return None, "没找到 FCEUX。请先安装 fceux，或在 config.json 的 game.emulator 里写完整路径。"
+        args = []
+        if cfg.get("fullscreen", True):
+            args.extend(self._split_game_args(cfg.get("fullscreen_args", ["--fullscreen", "1"])))
+        args.extend(self._split_game_args(cfg.get("extra_args", [])))
+        if any("{rom}" in arg for arg in args):
+            args = [arg.replace("{rom}", rom_path) for arg in args]
+            return [emulator, *args], ""
+        return [emulator, *args, rom_path], ""
+
+    def _game_is_running(self):
+        proc = self.game_proc
+        return bool(proc and proc.poll() is None)
+
+    def _signal_game(self, sig):
+        proc = self.game_proc
+        if not proc or proc.poll() is not None:
+            return False
+        try:
+            os.killpg(os.getpgid(proc.pid), sig)
+        except Exception:
+            try:
+                proc.send_signal(sig)
+            except Exception:
+                return False
+        return True
+
+    def _enter_game_display_mode(self):
+        def _update():
+            try:
+                self.exit_button.place_forget()
+            except Exception:
+                pass
+            try:
+                self.master.attributes('-fullscreen', False)
+            except Exception:
+                pass
+            try:
+                if self._game_cfg().get("hide_bmo_while_playing", True):
+                    self.master.withdraw()
+                else:
+                    self.master.lower()
+            except Exception:
+                pass
+            self._set_cursor_visible(False)
+        self._safe_after(0, _update)
+
+    def _restore_bmo_display_mode(self):
+        def _update():
+            try:
+                self.master.deiconify()
+                self.master.attributes('-fullscreen', True)
+                self.master.lift()
+                self.master.focus_force()
+            except Exception:
+                pass
+            self._set_cursor_visible(False)
+        self._safe_after(0, _update)
+
+    def _activate_game_window_later(self):
+        xdotool = shutil.which("xdotool")
+        proc = self.game_proc
+        if not xdotool or not proc:
+            return
+
+        def _focus():
+            time.sleep(float(self._game_cfg().get("focus_delay_seconds", 1.2)))
+            if not self._game_is_running() or self.game_paused:
+                return
+            try:
+                out = subprocess.check_output(
+                    [xdotool, "search", "--pid", str(proc.pid)],
+                    text=True, stderr=subprocess.DEVNULL, timeout=2,
+                ).strip().splitlines()
+                if out:
+                    subprocess.run(
+                        [xdotool, "windowactivate", out[-1]],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2,
+                    )
+            except Exception:
+                pass
+
+        threading.Thread(target=_focus, daemon=True).start()
+
+    def _monitor_game_proc(self, proc, rom_name):
+        rc = proc.wait()
+        with self.game_lock:
+            if self.game_proc is not proc:
+                return
+            self.game_proc = None
+            self.game_rom = None
+            self.game_paused = False
+        log(f"[GAME] 已退出: {rom_name} rc={rc}")
+        self._restore_bmo_display_mode()
+        self.set_state(BotStates.IDLE, "游戏已退出")
+
+    def list_games_text(self):
+        roms = self._list_rom_files()
+        if not roms:
+            return "还没有游戏 ROM。"
+        return "现在有：" + "、".join(roms[:12])
+
+    def start_game(self, query=None):
+        if not self._game_cfg().get("enabled", True):
+            return False, "游戏功能现在是关闭的。"
+        rom_path, err = self._find_rom(query)
+        if err:
+            return False, err
+        cmd, err = self._build_game_command(rom_path)
+        if err:
+            return False, err
+        if self._game_is_running():
+            self.stop_game(restore_bmo=False)
+        rom_name = os.path.basename(rom_path)
+        try:
+            log(f"[GAME] 启动: {' '.join(cmd)}")
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except Exception as e:
+            return False, f"游戏启动失败：{e}"
+        with self.game_lock:
+            self.game_proc = proc
+            self.game_rom = rom_name
+            self.game_paused = False
+        self._enter_game_display_mode()
+        self._activate_game_window_later()
+        threading.Thread(target=self._monitor_game_proc, args=(proc, rom_name), daemon=True).start()
+        self.abort_to_wake.set()
+        return True, f"开始游戏：{rom_name}"
+
+    def pause_game(self, for_bmo=False):
+        if not self._game_is_running():
+            return False, "现在没有正在运行的游戏。"
+        if self.game_paused:
+            if for_bmo:
+                self._restore_bmo_display_mode()
+            return True, "游戏已经暂停了。"
+        ok = self._signal_game(signal.SIGSTOP)
+        if not ok:
+            return False, "暂停游戏失败。"
+        self.game_paused = True
+        log(f"[GAME] 已暂停: {self.game_rom}")
+        self._restore_bmo_display_mode()
+        return True, "游戏已暂停。"
+
+    def resume_game(self):
+        if not self._game_is_running():
+            return False, "现在没有正在运行的游戏。"
+        if not self.game_paused:
+            self._enter_game_display_mode()
+            self._activate_game_window_later()
+            self.abort_to_wake.set()
+            return True, "游戏已经在运行。"
+        ok = self._signal_game(signal.SIGCONT)
+        if not ok:
+            return False, "继续游戏失败。"
+        self.game_paused = False
+        log(f"[GAME] 继续: {self.game_rom}")
+        self._enter_game_display_mode()
+        self._activate_game_window_later()
+        self.abort_to_wake.set()
+        return True, "继续游戏。"
+
+    def stop_game(self, restore_bmo=True):
+        proc = self.game_proc
+        if not proc or proc.poll() is not None:
+            self.game_proc = None
+            self.game_rom = None
+            self.game_paused = False
+            if restore_bmo:
+                self._restore_bmo_display_mode()
+            return False, "现在没有正在运行的游戏。"
+        rom_name = self.game_rom or "游戏"
+        try:
+            if self.game_paused:
+                self._signal_game(signal.SIGCONT)
+                time.sleep(0.1)
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except Exception:
+                proc.terminate()
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except Exception:
+                    proc.kill()
+        except Exception as e:
+            log(f"[GAME] 退出失败: {e}")
+            return False, "退出游戏失败。"
+        finally:
+            with self.game_lock:
+                if self.game_proc is proc:
+                    self.game_proc = None
+                    self.game_rom = None
+                    self.game_paused = False
+            if restore_bmo:
+                self._restore_bmo_display_mode()
+        log(f"[GAME] 已关闭: {rom_name}")
+        return True, f"已退出 {rom_name}。"
+
+    def _game_state(self):
+        if not self._game_is_running():
+            return {"running": False, "paused": False, "rom": None}
+        return {
+            "running": True,
+            "paused": bool(self.game_paused),
+            "rom": self.game_rom,
+        }
 
     LONG_PRESS_SECONDS = 0.6   # 回车长按阈值
 
@@ -745,6 +1042,8 @@ class BotGUI:
                     self.interrupted.clear()
                     self.set_state(BotStates.IDLE, "重置")
                     continue
+                if self._game_is_running() and not self.game_paused:
+                    self.pause_game(for_bmo=True)
                 # 先把动画切到"在听"，立刻给视觉反馈；否则要等应答音(TTS ~2s)念完动画才变
                 self.set_state(BotStates.LISTENING, "在听...")
                 # 被唤醒/触发 → 读出应答词（等播完再录，避免录进自己的提示音）
@@ -1335,6 +1634,12 @@ class BotGUI:
             "volume": "set_volume", "adjust_volume": "set_volume",
             "set_vol": "set_volume", "change_volume": "set_volume",
             "print_photo": "print", "print_text": "print", "print_history": "print",
+            "open_game": "start_game", "play_game": "start_game", "launch_game": "start_game",
+            "game_start": "start_game", "list_roms": "list_games", "games": "list_games",
+            "game_list": "list_games", "pause": "pause_game", "game_pause": "pause_game",
+            "resume": "resume_game", "continue_game": "resume_game", "game_resume": "resume_game",
+            "quit_game": "stop_game", "exit_game": "stop_game", "close_game": "stop_game",
+            "game_stop": "stop_game",
             "打印": "print",
         }
         action = ALIASES.get(raw, raw)
@@ -1351,6 +1656,23 @@ class BotGUI:
 
         if action == "set_volume":
             return self._set_volume_action(action_data)
+
+        if action == "list_games":
+            return "GAME_LIST"
+
+        if action == "start_game":
+            game = (action_data.get("game") or action_data.get("name")
+                    or action_data.get("rom") or value or "")
+            return f"GAME_START::{game}"
+
+        if action == "pause_game":
+            return "GAME_PAUSE"
+
+        if action == "resume_game":
+            return "GAME_RESUME"
+
+        if action == "stop_game":
+            return "GAME_STOP"
 
         if action == "print":
             content = action_data.get("content") or action_data.get("text")
@@ -1643,6 +1965,46 @@ class BotGUI:
         if isinstance(result, str) and result.startswith("VOLUME_SET::"):
             # 音量已在 execute_action 里改好，这里直接念确认（新音量立即生效）
             self._say(result.split("::", 1)[1], remember=original_text)
+            return
+
+        if result == "GAME_LIST":
+            self._say(self.list_games_text(), remember=original_text)
+            return
+
+        if isinstance(result, str) and result.startswith("GAME_START::"):
+            game = result.split("::", 1)[1].strip()
+            rom_path, err = self._find_rom(game)
+            if err:
+                self._say(err, remember=original_text)
+                return
+            _, err = self._build_game_command(rom_path)
+            if err:
+                self._say(err, remember=original_text)
+                return
+            self._say(f"好的，打开 {os.path.basename(rom_path)}。", remember=original_text)
+            ok, msg = self.start_game(game)
+            if not ok:
+                self._say(msg)
+            return
+
+        if result == "GAME_PAUSE":
+            _, msg = self.pause_game(for_bmo=True)
+            self._say(msg, remember=original_text)
+            return
+
+        if result == "GAME_RESUME":
+            if not self._game_is_running():
+                self._say("现在没有正在运行的游戏。", remember=original_text)
+                return
+            self._say("好的，继续游戏。", remember=original_text)
+            ok, msg = self.resume_game()
+            if not ok:
+                self._say(msg)
+            return
+
+        if result == "GAME_STOP":
+            _, msg = self.stop_game(restore_bmo=True)
+            self._say(msg, remember=original_text)
             return
 
         if result == "PRINT_PHOTO":
@@ -2298,6 +2660,18 @@ class BotGUI:
         elif action == "print":
             # 打印可能很慢（9600 波特），放后台线程，别卡住命令轮询（GUI 线程）
             threading.Thread(target=self._webui_print, args=(cmd,), daemon=True).start()
+        elif action == "start_game":
+            ok, msg = self.start_game(cmd.get("game") or cmd.get("rom") or "")
+            log(f"[WEBUI GAME] start -> {'成功' if ok else '失败'}: {msg}")
+        elif action == "pause_game":
+            ok, msg = self.pause_game(for_bmo=True)
+            log(f"[WEBUI GAME] pause -> {'成功' if ok else '失败'}: {msg}")
+        elif action == "resume_game":
+            ok, msg = self.resume_game()
+            log(f"[WEBUI GAME] resume -> {'成功' if ok else '失败'}: {msg}")
+        elif action == "stop_game":
+            ok, msg = self.stop_game(restore_bmo=True)
+            log(f"[WEBUI GAME] stop -> {'成功' if ok else '失败'}: {msg}")
         elif action == "restart_webui":
             self._restart_webui()
 
@@ -2353,6 +2727,7 @@ class BotGUI:
                     "status": self.current_status,
                     "tts_queue_len": len(self.tts_queue),
                     "memory_turns": len(self.session_memory) // 2,
+                    "game": self._game_state(),
                     "timestamp": time.time(),
                 }, f, ensure_ascii=False)
         except Exception:

@@ -100,5 +100,15 @@
     "encoding": "gb2312",
     "width": 384,
     "history_turns": 10
+  },
+  "game": {
+    "enabled": true,
+    "rom_dir": "roms",
+    "emulator": "fceux",
+    "fullscreen": true,
+    "fullscreen_args": ["--fullscreen", "1"],
+    "extra_args": [],
+    "hide_bmo_while_playing": true,
+    "focus_delay_seconds": 1.2
   }
 }

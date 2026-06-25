@@ -123,6 +123,7 @@
     border-radius: 5px; background: #eef0ec; border: 1px solid #dde1db;
   }
   .model-empty { color: var(--muted); font-size: 13px; padding: 12px; text-align: center; }
+  .rom-name { flex: 1; min-width: 220px; overflow-wrap: anywhere; }
 </style>
 </head>
 <body>
@@ -584,13 +585,24 @@
 <!-- 游戏 ROM -->
 <section id="tab-games" class="tab hide">
   <div class="panel">
-    <h2>游戏 ROM</h2>
+    <h2>游戏</h2>
+    <div class="row">
+      <label>当前：</label>
+      <span id="game-state" class="pill">未运行</span>
+      <span id="game-rom" class="help"></span>
+    </div>
+    <div class="row">
+      <button class="btn secondary" onclick="gameControl('pause')">暂停</button>
+      <button class="btn" onclick="gameControl('resume')">继续</button>
+      <button class="btn danger" onclick="gameControl('stop')">退出游戏</button>
+      <span class="help" id="game-hint"></span>
+    </div>
     <div class="row">
       <input type="file" id="rom-file" accept=".nes,.zip,.fds,.unf">
       <button class="btn" onclick="uploadRom()">上传 ROM</button>
       <button class="btn secondary" onclick="loadRoms()">刷新</button>
     </div>
-    <div class="help">上传 NES 游戏（.nes / .zip）。文件存到树莓派 roms/ 目录，后面"语音开游戏"会用它。</div>
+    <div class="help">上传 NES 游戏（.nes / .zip），也可以语音说“打开某某游戏”。运行游戏时 BMO 会退到后台；唤醒 BMO 会自动暂停游戏。</div>
     <div id="rom-list" style="margin-top: 12px;"></div>
   </div>
 </section>
@@ -706,6 +718,11 @@ function refreshTab(name) {
 }
 
 // ============ 游戏 ROM ============
+function setGameHint(t) {
+  const e = document.getElementById('game-hint');
+  if (e) e.textContent = t || '';
+}
+
 async function loadRoms() {
   const box = document.getElementById('rom-list');
   let roms = [];
@@ -715,11 +732,19 @@ async function loadRoms() {
   for (const r of roms) {
     const div = document.createElement('div');
     div.className = 'row';
-    div.innerHTML = `<span style="flex:1">${r.filename} <span class="help">(${r.size_kb} KB)</span></span>`;
+    const name = document.createElement('span');
+    name.className = 'rom-name';
+    name.textContent = `${r.filename} (${r.size_kb} KB)`;
+    const play = document.createElement('button');
+    play.className = 'btn';
+    play.textContent = '启动';
+    play.onclick = () => startGame(r.filename);
     const del = document.createElement('button');
     del.className = 'btn danger';
     del.textContent = '删除';
     del.onclick = () => deleteRom(r.filename);
+    div.appendChild(name);
+    div.appendChild(play);
     div.appendChild(del);
     box.appendChild(div);
   }
@@ -741,6 +766,24 @@ async function deleteRom(name) {
   await loadRoms();
 }
 
+async function startGame(filename) {
+  try {
+    await postJSON('/api/game', {action: 'start', filename});
+    setGameHint('已发送启动命令');
+  } catch (e) {
+    setGameHint('启动失败：' + e.message);
+  }
+}
+
+async function gameControl(action) {
+  try {
+    await postJSON('/api/game', {action});
+    setGameHint('已发送命令');
+  } catch (e) {
+    setGameHint('失败：' + e.message);
+  }
+}
+
 // ============ 状态轮询 ============
 async function pollState() {
   try {
@@ -752,9 +795,25 @@ async function pollState() {
     document.getElementById('db-status').textContent = s.status;
     document.getElementById('db-queue').textContent = s.tts_queue_len;
     document.getElementById('db-mem').textContent = s.memory_turns;
+    updateGameState(s.game || {});
   } catch (e) {
     document.getElementById('agent-status').textContent = '连接不上 agent';
   }
+}
+
+function updateGameState(game) {
+  const state = document.getElementById('game-state');
+  const rom = document.getElementById('game-rom');
+  if (!state || !rom) return;
+  if (!game.running) {
+    state.textContent = '未运行';
+    state.className = 'pill';
+    rom.textContent = '';
+    return;
+  }
+  state.textContent = game.paused ? '已暂停' : '运行中';
+  state.className = 'pill ' + (game.paused ? 'err' : 'ok');
+  rom.textContent = game.rom || '';
 }
 setInterval(pollState, 1500);
 pollState();
