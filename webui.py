@@ -219,6 +219,118 @@ async def get_config():
     return load_config()
 
 
+# =========================================================================
+# 路由：系统硬件信息（仪表盘用）
+# =========================================================================
+
+def _read_cpu_times():
+    try:
+        with open("/proc/stat", "r") as f:
+            parts = f.readline().split()[1:]
+        v = [int(x) for x in parts[:8]]
+        return v[3] + v[4], sum(v)   # idle, total
+    except Exception:
+        return None
+
+
+def _cpu_temp_c():
+    for p in ("/sys/class/thermal/thermal_zone0/temp", "/sys/class/hwmon/hwmon0/temp1_input"):
+        try:
+            with open(p) as f:
+                raw = f.read().strip()
+            if raw:
+                v = float(raw)
+                return round(v / 1000.0 if v > 200 else v, 1)
+        except Exception:
+            pass
+    try:
+        out = subprocess.run(["vcgencmd", "measure_temp"], capture_output=True, text=True, timeout=2).stdout
+        m = re.search(r"temp=([\d.]+)", out)
+        if m:
+            return round(float(m.group(1)), 1)
+    except Exception:
+        pass
+    return None
+
+
+def _meminfo():
+    try:
+        data = {}
+        with open("/proc/meminfo") as f:
+            for line in f:
+                k, v = line.split(":", 1)
+                data[k] = int(v.strip().split()[0]) * 1024
+        total = data.get("MemTotal", 0)
+        avail = data.get("MemAvailable", 0)
+        used = max(0, total - avail)
+        return {"total": total, "used": used,
+                "percent": round(used / total * 100, 1) if total else None}
+    except Exception:
+        return None
+
+
+def _pi_model():
+    try:
+        with open("/proc/device-tree/model") as f:
+            return f.read().strip("\x00").strip()
+    except Exception:
+        return ""
+
+
+def _uptime_text():
+    try:
+        with open("/proc/uptime") as f:
+            sec = int(float(f.read().split()[0]))
+        d, r = divmod(sec, 86400)
+        h, r = divmod(r, 3600)
+        m = r // 60
+        return (f"{d}天" if d else "") + (f"{h}小时" if h else "") + f"{m}分钟"
+    except Exception:
+        return "未知"
+
+
+@app.get("/api/sysinfo")
+async def sysinfo():
+    cpu = None
+    a = _read_cpu_times()
+    if a:
+        await asyncio.sleep(0.15)
+        b = _read_cpu_times()
+        if b and b[1] - a[1] > 0:
+            cpu = round(max(0.0, min(100.0, (1.0 - (b[0] - a[0]) / (b[1] - a[1])) * 100.0)), 1)
+    try:
+        du = shutil.disk_usage("/")
+        disk = {"total": du.total, "used": du.used,
+                "percent": round(du.used / du.total * 100, 1)}
+    except Exception:
+        disk = None
+    try:
+        load = [round(x, 2) for x in os.getloadavg()]
+    except Exception:
+        load = None
+    throttled = None
+    try:
+        out = subprocess.run(["vcgencmd", "get_throttled"], capture_output=True, text=True, timeout=2).stdout
+        m = re.search(r"throttled=(0x[0-9a-fA-F]+)", out)
+        if m:
+            t = int(m.group(1), 16)
+            throttled = {"under_voltage": bool(t & 0x1), "throttled": bool(t & 0x4),
+                         "raw": m.group(1)}
+    except Exception:
+        pass
+    return {
+        "model": _pi_model(),
+        "cpu_percent": cpu,
+        "temp_c": _cpu_temp_c(),
+        "mem": _meminfo(),
+        "disk": disk,
+        "load": load,
+        "cpu_count": os.cpu_count(),
+        "uptime": _uptime_text(),
+        "throttled": throttled,
+    }
+
+
 @app.get("/api/audio/outputs")
 async def audio_outputs():
     """列出可用的播放设备（供网页下拉选音响）。"""

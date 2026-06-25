@@ -164,6 +164,17 @@
     <div class="row"><label>记忆轮数：</label><span id="db-mem">0</span></div>
   </div>
   <div class="panel">
+    <h2>系统信息</h2>
+    <div class="row"><label>设备：</label><span id="sys-model">-</span></div>
+    <div class="row"><label>CPU 使用率：</label><span id="sys-cpu">-</span></div>
+    <div class="row"><label>温度：</label><span id="sys-temp">-</span></div>
+    <div class="row"><label>内存：</label><span id="sys-mem">-</span></div>
+    <div class="row"><label>存储：</label><span id="sys-disk">-</span></div>
+    <div class="row"><label>负载：</label><span id="sys-load">-</span></div>
+    <div class="row"><label>已运行：</label><span id="sys-uptime">-</span></div>
+    <div class="row"><span class="help" id="sys-warn"></span></div>
+  </div>
+  <div class="panel">
     <h2>快捷操作</h2>
     <div class="row">
       <button class="btn" onclick="trigger('record')">开始录音</button>
@@ -875,6 +886,32 @@ function updateGameState(game) {
 }
 setInterval(pollState, 1500);
 pollState();
+
+// ============ 系统信息轮询 ============
+function fmtGB(b) { return (b / (1024 ** 3)).toFixed(1) + 'GB'; }
+async function pollSysinfo() {
+  try {
+    const s = await fetchJSON('/api/sysinfo');
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    set('sys-model', s.model || '-');
+    set('sys-cpu', s.cpu_percent != null ? `${s.cpu_percent}%` + (s.cpu_count ? ` (${s.cpu_count} 核)` : '') : '-');
+    set('sys-temp', s.temp_c != null ? `${s.temp_c} ℃` : '-');
+    set('sys-mem', s.mem ? `${fmtGB(s.mem.used)} / ${fmtGB(s.mem.total)} (${s.mem.percent}%)` : '-');
+    set('sys-disk', s.disk ? `${fmtGB(s.disk.used)} / ${fmtGB(s.disk.total)} (${s.disk.percent}%)` : '-');
+    set('sys-load', s.load ? s.load.join(', ') : '-');
+    set('sys-uptime', s.uptime || '-');
+    const warn = document.getElementById('sys-warn');
+    if (warn) {
+      const msgs = [];
+      if (s.throttled && s.throttled.under_voltage) msgs.push('⚠️ 供电不足（欠压）');
+      if (s.throttled && s.throttled.throttled) msgs.push('⚠️ 已降频');
+      if (s.temp_c != null && s.temp_c >= 80) msgs.push('🔥 温度偏高');
+      warn.textContent = msgs.join('　');
+    }
+  } catch (e) { /* ignore */ }
+}
+setInterval(pollSysinfo, 4000);
+pollSysinfo();
 
 // ============ 初始加载 ============
 async function loadConfig() {
