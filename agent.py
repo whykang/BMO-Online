@@ -111,7 +111,8 @@ TOOLS_PROMPT = (
     "6. 打印（热敏打印机）：\n"
     "   打印照片：{\"action\": \"print\", \"target\": \"photo\"}（拍一张照片并打印）\n"
     "   打印刚画的图：{\"action\": \"print\", \"target\": \"generated\"}\n"
-    "   打印最近对话：{\"action\": \"print\", \"target\": \"history\"}\n"
+    "   打印最近对话：{\"action\": \"print\", \"target\": \"history\", \"count\": 条数}"
+    "（用户说'打印6条对话'就填 count=6，一条算一行；不说数量就省略 count）\n"
     "   打印指定文字：{\"action\": \"print\", \"content\": \"要打印的内容\"}\n\n"
     "重要：只要用户的话涉及上面这些能力（尤其是调音量，例如'声音大一点'、'调大声'、"
     "'太吵了小声点'、'音量调到50'），就必须直接输出对应工具的纯 JSON，"
@@ -1274,7 +1275,14 @@ class BotGUI:
             if any(w in target for w in ("photo", "camera", "照", "拍", "相")):
                 return "PRINT_PHOTO"
             if any(w in target for w in ("history", "chat", "对话", "历史", "记录", "聊天")):
-                return "PRINT_HISTORY"
+                cnt = (action_data.get("count") or action_data.get("n")
+                       or action_data.get("num") or action_data.get("lines")
+                       or action_data.get("turns") or action_data.get("value"))
+                try:
+                    cnt = int(cnt)
+                except (TypeError, ValueError):
+                    cnt = 0
+                return f"PRINT_HISTORY::{cnt}"
             val = action_data.get("value")
             if val:
                 return f"PRINT_TEXT::{val}"
@@ -1379,11 +1387,15 @@ class BotGUI:
             log(f"[PRINT ERROR] {e}")
             return False
 
-    def _print_history(self) -> bool:
-        n = int(self.config.get("printer", {}).get("history_turns", 10))
+    def _print_history(self, count=None) -> bool:
+        """count = 要打印的"条数"（每条 = 一行 你:/BMO:）。省略则按 config.history_turns。"""
         msgs = [m for m in self.session_memory
                 if m.get("role") in ("user", "assistant") and m.get("content")]
-        msgs = msgs[-n * 2:]
+        if count and count > 0:
+            msgs = msgs[-count:]                       # 按语音指定的条数
+        else:
+            n = int(self.config.get("printer", {}).get("history_turns", 10))
+            msgs = msgs[-n * 2:]
         if not msgs:
             return self._print_text("（还没有对话记录）")
         lines = ["==== BMO 对话记录 ====",
@@ -1561,9 +1573,15 @@ class BotGUI:
                       remember=original_text)
             return
 
-        if result == "PRINT_HISTORY":
+        if isinstance(result, str) and result.startswith("PRINT_HISTORY"):
+            cnt = 0
+            if "::" in result:
+                try:
+                    cnt = int(result.split("::", 1)[1])
+                except ValueError:
+                    cnt = 0
             self.set_state(BotStates.THINKING, "打印对话中...")
-            ok = self._print_history()
+            ok = self._print_history(cnt if cnt > 0 else None)
             self._say("对话记录打印好啦！" if ok else "打印对话没成功，检查下打印机哦。",
                       remember=original_text)
             return
