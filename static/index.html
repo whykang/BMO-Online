@@ -808,12 +808,17 @@ async function loadRoms() {
     play.className = 'btn';
     play.textContent = '启动';
     play.onclick = () => startGame(r.filename);
+    const ren = document.createElement('button');
+    ren.className = 'btn secondary';
+    ren.textContent = '重命名';
+    ren.onclick = () => renameRom(r.filename);
     const del = document.createElement('button');
     del.className = 'btn danger';
     del.textContent = '删除';
     del.onclick = () => deleteRom(r.filename);
     div.appendChild(name);
     div.appendChild(play);
+    div.appendChild(ren);
     div.appendChild(del);
     box.appendChild(div);
   }
@@ -833,6 +838,14 @@ async function deleteRom(name) {
   if (!confirm('删除 ' + name + ' ？')) return;
   await deleteJSON('/api/roms/' + encodeURIComponent(name));
   await loadRoms();
+}
+async function renameRom(name) {
+  const nn = prompt('新文件名（不写后缀会自动保留 ' + (name.match(/\.[^.]+$/) || ['.nes'])[0] + '）', name);
+  if (!nn || nn.trim() === name) return;
+  try {
+    await postJSON('/api/roms/rename', { old: name, new: nn.trim() });
+    await loadRoms();
+  } catch (e) { alert('重命名失败：' + e.message); }
 }
 
 async function startGame(filename) {

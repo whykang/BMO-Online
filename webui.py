@@ -592,6 +592,32 @@ async def delete_rom(filename: str):
     raise HTTPException(404, "文件不存在")
 
 
+class RenameRomReq(BaseModel):
+    old: str
+    new: str
+
+
+@app.post("/api/roms/rename")
+async def rename_rom(req: RenameRomReq):
+    old, new = req.old.strip(), req.new.strip()
+    if not old or not new:
+        raise HTTPException(400, "文件名不能为空")
+    for x in (old, new):
+        if "/" in x or "\\" in x or ".." in x:
+            raise HTTPException(400, "非法文件名")
+    src = os.path.join(ROMS_DIR, old)
+    if not os.path.exists(src):
+        raise HTTPException(404, "原文件不存在")
+    # 新名没带 ROM 后缀就沿用原后缀
+    if not new.lower().endswith(ROM_EXTS):
+        new = new + os.path.splitext(old)[1]
+    dst = os.path.join(ROMS_DIR, new)
+    if os.path.abspath(dst) != os.path.abspath(src) and os.path.exists(dst):
+        raise HTTPException(409, "已存在同名文件")
+    os.rename(src, dst)
+    return {"ok": True, "filename": new}
+
+
 class GameReq(BaseModel):
     action: str
     filename: str | None = None

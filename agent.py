@@ -607,6 +607,14 @@ class BotGUI:
         base = os.path.splitext(name or "")[0].lower()
         return re.sub(r"[\s_\-()\[\]【】（）]+", "", base)
 
+    def _speakable_game_name(self, filename: str) -> str:
+        """念给用户听的游戏名：去掉后缀、去掉括号里的区域/版本标记、把 _-—. 换成空格。"""
+        name = os.path.splitext(filename or "")[0]
+        name = re.sub(r"[\(\[（【].*?[\)\]）】]", "", name)      # 去掉 (JP)[!]【…】这类
+        name = re.sub(r"[_\-—–·.]+", " ", name)                # 分隔符 → 空格
+        name = re.sub(r"\s+", " ", name).strip()
+        return name or os.path.splitext(filename or "")[0]
+
     def _find_rom(self, query=None):
         roms = self._list_rom_files()
         if not roms:
@@ -615,7 +623,7 @@ class BotGUI:
         if not q:
             if len(roms) == 1:
                 return os.path.join(self._game_rom_dir(), roms[0]), ""
-            return None, "你想打开哪个游戏呀？现在有：" + "、".join(roms[:8])
+            return None, "你想打开哪个游戏呀？现在有：" + "、".join(self._speakable_game_name(r) for r in roms[:8])
         q_norm = self._norm_game_name(q)
         for name in roms:
             if q == name or q.lower() == name.lower():
@@ -624,7 +632,7 @@ class BotGUI:
             n_norm = self._norm_game_name(name)
             if q_norm and (q_norm in n_norm or n_norm in q_norm):
                 return os.path.join(self._game_rom_dir(), name), ""
-        return None, f"没找到“{q}”这个游戏。现在有：" + "、".join(roms[:8])
+        return None, f"没找到“{q}”这个游戏。现在有：" + "、".join(self._speakable_game_name(r) for r in roms[:8])
 
     def _split_game_args(self, value):
         if not value:
@@ -985,7 +993,7 @@ class BotGUI:
         roms = self._list_rom_files()
         if not roms:
             return "还没有游戏 ROM。"
-        return "现在有：" + "、".join(roms[:12])
+        return "现在有：" + "、".join(self._speakable_game_name(r) for r in roms[:12])
 
     def start_game(self, query=None):
         if not self._game_cfg().get("enabled", True):
@@ -2347,7 +2355,7 @@ class BotGUI:
             if err:
                 self._say(err, remember=original_text)
                 return
-            self._say(f"好的，打开 {os.path.basename(rom_path)}。", remember=original_text)
+            self._say(f"好的，打开 {self._speakable_game_name(os.path.basename(rom_path))}。", remember=original_text)
             ok, msg = self.start_game(game)
             if not ok:
                 self._say(msg)
