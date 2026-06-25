@@ -605,6 +605,19 @@
     <div class="help">上传 NES 游戏（.nes / .zip），也可以语音说“打开某某游戏”。运行游戏时 BMO 会退到后台；唤醒 BMO 会自动暂停游戏。</div>
     <div id="rom-list" style="margin-top: 12px;"></div>
   </div>
+  <div class="panel">
+    <h2>游戏键位（FCEUX）</h2>
+    <div class="help">每个 NES 按键对应的键盘键（你那七键固件：A=空格、B=左Shift、Start=回车、方向=方向键）。改完保存，<b>下次开游戏生效</b>。</div>
+    <div class="row"><label>A（跳/开炮）</label><select id="km-a"></select></div>
+    <div class="row"><label>B（加速/副键）</label><select id="km-b"></select></div>
+    <div class="row"><label>Select</label><select id="km-select"></select></div>
+    <div class="row"><label>Start（开始）</label><select id="km-start"></select></div>
+    <div class="row"><label>↑ 上</label><select id="km-up"></select></div>
+    <div class="row"><label>↓ 下</label><select id="km-down"></select></div>
+    <div class="row"><label>← 左</label><select id="km-left"></select></div>
+    <div class="row"><label>→ 右</label><select id="km-right"></select></div>
+    <div class="row"><button class="btn" onclick="saveKeymap()">保存键位</button></div>
+  </div>
 </section>
 
 <!-- 日志 -->
@@ -714,7 +727,52 @@ function showTab(name) {
 function refreshTab(name) {
   if (name === 'history') loadHistory();
   if (name === 'images') loadImages();
-  if (name === 'games') loadRoms();
+  if (name === 'games') { loadRoms(); loadKeymap(); }
+}
+
+// ============ 游戏键位 ============
+const KEY_OPTIONS = [
+  ['↑ 上', 'kUp'], ['↓ 下', 'kDown'], ['← 左', 'kLeft'], ['→ 右', 'kRight'],
+  ['空格', 'kSpace'], ['左Shift', 'kShift'], ['回车', 'kReturn'],
+  ['Tab', 'kTab'], ['退格', 'kBackspace'], ['Esc', 'kEscape'],
+  ['Ctrl', 'kControl'], ['Alt', 'kAlt'],
+  ['A', 'kA'], ['B', 'kB'], ['C', 'kC'], ['D', 'kD'], ['F', 'kF'], ['G', 'kG'],
+  ['H', 'kH'], ['J', 'kJ'], ['K', 'kK'], ['S', 'kS'], ['X', 'kX'], ['Z', 'kZ'],
+  ['0', 'k0'], ['1', 'k1'], ['2', 'k2'], ['3', 'k3'],
+];
+const KM_DEFAULTS = { a: 'kSpace', b: 'kShift', select: 'kS', start: 'kReturn',
+  up: 'kUp', down: 'kDown', left: 'kLeft', right: 'kRight' };
+const KM_KEYS = ['a', 'b', 'select', 'start', 'up', 'down', 'left', 'right'];
+
+function fillKeySelect(sel, cur) {
+  sel.innerHTML = '';
+  let found = false;
+  for (const [label, tok] of KEY_OPTIONS) {
+    const o = document.createElement('option');
+    o.value = tok; o.textContent = `${label} (${tok})`;
+    if (tok === cur) { o.selected = true; found = true; }
+    sel.appendChild(o);
+  }
+  if (cur && !found) {
+    const o = document.createElement('option');
+    o.value = cur; o.textContent = cur + '（当前）'; o.selected = true;
+    sel.appendChild(o);
+  }
+}
+function loadKeymap() {
+  const km = (CONFIG.game && CONFIG.game.keymap) || {};
+  for (const k of KM_KEYS) {
+    const el = document.getElementById('km-' + k);
+    if (el) fillKeySelect(el, km[k] != null ? km[k] : KM_DEFAULTS[k]);
+  }
+}
+async function saveKeymap() {
+  CONFIG.game = CONFIG.game || {};
+  const km = {};
+  for (const k of KM_KEYS) km[k] = document.getElementById('km-' + k).value;
+  CONFIG.game.keymap = km;
+  await putJSON('/api/config', CONFIG);
+  alert('键位已保存，下次开游戏生效。');
 }
 
 // ============ 游戏 ROM ============

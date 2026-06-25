@@ -125,7 +125,10 @@ TOOLS_PROMPT = (
     "   列出游戏：{\"action\": \"list_games\"}\n"
     "   暂停游戏：{\"action\": \"pause_game\"}\n"
     "   继续游戏：{\"action\": \"resume_game\"}\n"
-    "   退出游戏：{\"action\": \"stop_game\"}\n\n"
+    "   退出游戏：{\"action\": \"stop_game\"}\n"
+    "8. 识别屏幕（截屏看屏幕上有什么）：{\"action\": \"read_screen\"}\n"
+    "9. 隐身（最小化自己但继续运行）：{\"action\": \"hide\"}\n"
+    "   取消隐身（恢复显示）：{\"action\": \"unhide\"}\n\n"
     "重要：只要用户的话涉及上面这些能力（尤其是调音量，例如'声音大一点'、'调大声'、"
     "'太吵了小声点'、'音量调到50'），就必须直接输出对应工具的纯 JSON，"
     "绝对不能用文字说'我做不到'、'我没法调音量'之类的话。\n"
@@ -295,6 +298,8 @@ class BotGUI:
         self.game_rom = None
         self.game_paused = False
         self.game_lock = threading.Lock()
+        self.hidden = False              # 隐身：窗口最小化但程序继续运行
+        self.screen_shot = "/tmp/bmo_screen.png"   # 识别屏幕的截图路径
 
         # 唤醒词
         self.oww_model = None
@@ -753,10 +758,37 @@ class BotGUI:
         except Exception:
             pass
 
+    def _write_keymap_profile(self, default_path, km):
+        """按 config.game.keymap 写 FCEUX 主键盘 profile（config:0）。键值是 FCEUX token，
+        如 kSpace/kShift/kReturn/kUp。其它三套(config:1/2/3)留空。"""
+        def g(k):
+            return (km.get(k) or "").strip()
+        line0 = ("keyboard,default,config:0,"
+                 f"a:{g('a')},b:{g('b')},back:{g('select')},start:{g('start')},"
+                 f"dpup:{g('up')},dpdown:{g('down')},dpleft:{g('left')},dpright:{g('right')},"
+                 "turboA:,turboB:,\n")
+        empty = "keyboard,default,config:{n},a:,b:,back:,start:,dpup:,dpdown:,dpleft:,dpright:,turboA:,turboB:,\n"
+        os.makedirs(os.path.dirname(default_path), exist_ok=True)
+        self._backup_file(default_path)
+        with open(default_path, "w", encoding="utf-8") as f:
+            f.write(line0)
+            for n in (1, 2, 3):
+                f.write(empty.format(n=n))
+        log(f"[GAME] 已按后台键位写入 FCEUX: {default_path}")
+
     def _ensure_fceux_input_profiles(self, target_dir, home):
         """FCEUX 只看 FCEUX_CONFIG_DIR/input/keyboard/*.txt；缺失时尝试从旧位置迁移。"""
         os.makedirs(target_dir, exist_ok=True)
         default_path = os.path.join(target_dir, "input", "keyboard", "default.txt")
+        # 后台设了键位 → 以它为准，每次开游戏都按它重写
+        km = self._game_cfg().get("keymap")
+        if km and any((km.get(k) or "").strip() for k in
+                      ("a", "b", "select", "start", "up", "down", "left", "right")):
+            try:
+                self._write_keymap_profile(default_path, km)
+                return
+            except Exception as e:
+                log(f"[GAME] 写入后台键位失败，回退默认: {e}")
         if self._keyboard_profile_is_valid(default_path):
             return
         if os.path.exists(default_path):
@@ -840,6 +872,8 @@ class BotGUI:
         self._safe_after(0, _update)
 
     def _restore_bmo_display_mode(self):
+        if self.hidden:
+            return   # 隐身中：不恢复显示，保持最小化直到“取消隐身”
         def _update():
             try:
                 self.master.deiconify()
@@ -1074,6 +1108,92 @@ class BotGUI:
             "paused": bool(self.game_paused),
             "rom": self.game_rom,
         }
+
+    # -------------------------------------------------------------------
+    # 识别屏幕（截屏 + 视觉模型描述）
+    # -------------------------------------------------------------------
+    def _capture_screen(self):
+        """grim 截当前屏幕到 screen_shot，返回路径或 None。"""
+        tool = shutil.which("grim")
+        if not tool:
+            log("[SCREEN] 未安装 grim（sudo apt install grim）")
+            return None
+        try:
+            subprocess.run([tool, self.screen_shot], env=os.environ.copy(),
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
+        except Exception as e:
+            log(f"[SCREEN] 截屏失败: {e}")
+            return None
+        return self.screen_shot if os.path.exists(self.screen_shot) else None
+
+    def _read_screen_flow(self, original_text):
+        self.set_state(BotStates.CAPTURING, "看一下屏幕...")
+        shot = self._capture_screen()
+        if not shot:
+            self._say("我截不到屏幕，得先装 grim 截屏工具哦。", remember=original_text)
+            return
+        try:
+            desc = self.vision.describe(shot, original_text or "请描述这张屏幕截图上的内容。")
+        except Exception as e:
+            log(f"[SCREEN] 视觉识别失败: {e}")
+            self._say("我看到屏幕了，但看不太懂呢。", remember=original_text)
+            return
+        if not desc or len(desc.strip()) < 2:
+            self._say("屏幕上好像没什么能认出来的东西。", remember=original_text)
+            return
+        log(f"[SCREEN] {desc}")
+        try:
+            final = self.llm.chat_once([
+                {"role": "system", "content":
+                    "你是 BMO，可爱的小机器人。根据屏幕截图的描述，用一两句活泼的话告诉用户屏幕上有什么。"
+                    "绝不要输出 JSON、不要调用工具。"},
+                {"role": "user", "content": f"屏幕内容：{desc}"},
+            ])
+        except Exception:
+            final = f"屏幕上是：{desc}"
+        self._say(final, remember=original_text)
+
+    # -------------------------------------------------------------------
+    # 隐身（最小化但继续运行；只有取消隐身才恢复）
+    # -------------------------------------------------------------------
+    def _hide_bmo(self):
+        if self.hidden:
+            self._say("我已经躲起来啦，叫我“取消隐身”就回来。")
+            return
+        self.hidden = True
+        self._say("好的，我先躲起来啦，叫我“取消隐身”再回来！")
+        self.wait_for_tts()
+
+        def _do():
+            try:
+                self.exit_button.place_forget()
+            except Exception:
+                pass
+            try:
+                self.master.withdraw()
+            except Exception:
+                pass
+        self._safe_after(0, _do)
+        log("[HIDE] 已隐身（窗口最小化，程序继续运行）")
+
+    def _unhide_bmo(self):
+        if not self.hidden:
+            self._say("我没有隐身呀，我一直都在。")
+            return
+        self.hidden = False
+
+        def _do():
+            try:
+                self.master.deiconify()
+                self.master.attributes('-fullscreen', True)
+                self.master.lift()
+                self.master.focus_force()
+            except Exception:
+                pass
+            self._set_cursor_visible(False)
+        self._safe_after(0, _do)
+        log("[HIDE] 已取消隐身")
+        self._say("我回来啦！")
 
     LONG_PRESS_SECONDS = 0.6   # 回车长按阈值
 
@@ -1859,6 +1979,11 @@ class BotGUI:
             "quit_game": "stop_game", "exit_game": "stop_game", "close_game": "stop_game",
             "game_stop": "stop_game",
             "打印": "print",
+            "read_screen": "read_screen", "screen": "read_screen", "screenshot": "read_screen",
+            "recognize_screen": "read_screen", "看屏幕": "read_screen", "识别屏幕": "read_screen",
+            "hide": "hide", "minimize": "hide", "隐身": "hide",
+            "unhide": "unhide", "show": "unhide", "restore": "unhide",
+            "取消隐身": "unhide", "现身": "unhide",
         }
         action = ALIASES.get(raw, raw)
         log(f"[ACTION] {raw} -> {action}")
@@ -1891,6 +2016,15 @@ class BotGUI:
 
         if action == "stop_game":
             return "GAME_STOP"
+
+        if action == "read_screen":
+            return "READ_SCREEN"
+
+        if action == "hide":
+            return "HIDE_BMO"
+
+        if action == "unhide":
+            return "UNHIDE_BMO"
 
         if action == "print":
             content = action_data.get("content") or action_data.get("text")
@@ -2183,6 +2317,18 @@ class BotGUI:
         if isinstance(result, str) and result.startswith("VOLUME_SET::"):
             # 音量已在 execute_action 里改好，这里直接念确认（新音量立即生效）
             self._say(result.split("::", 1)[1], remember=original_text)
+            return
+
+        if result == "READ_SCREEN":
+            self._read_screen_flow(original_text)
+            return
+
+        if result == "HIDE_BMO":
+            self._hide_bmo()
+            return
+
+        if result == "UNHIDE_BMO":
+            self._unhide_bmo()
             return
 
         if result == "GAME_LIST":

@@ -113,6 +113,16 @@
     "hide_bmo_while_playing": true,
     "focus_delay_seconds": 1.2,
     "focus_attempts": 10,
-    "focus_retry_seconds": 0.5
+    "focus_retry_seconds": 0.5,
+    "keymap": {
+      "a": "kSpace",
+      "b": "kShift",
+      "select": "kS",
+      "start": "kReturn",
+      "up": "kUp",
+      "down": "kDown",
+      "left": "kLeft",
+      "right": "kRight"
+    }
   }
 }
