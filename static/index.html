@@ -171,6 +171,24 @@
     </div>
   </div>
   <div class="panel">
+    <h2>打印控制（热敏打印机）</h2>
+    <div class="row">
+      <button class="btn" onclick="doPrint('photo')">拍照打印</button>
+      <button class="btn" onclick="doPrint('generated')">打印刚画的图</button>
+    </div>
+    <div class="row">
+      <label>打印对话：</label>
+      <input type="number" id="print-turns" min="1" max="50" value="6" style="width:70px;"> 轮
+      <button class="btn" onclick="printHistory()">打印</button>
+    </div>
+    <div class="row">
+      <label>打印文字：</label>
+      <input type="text" id="print-text" placeholder="要打印的内容" style="flex:1; min-width:240px;">
+      <button class="btn" onclick="printText()">打印</button>
+    </div>
+    <span class="help" id="print-hint">打印任务发给 BMO 执行；9600 波特，图片较慢，请耐心。</span>
+  </div>
+  <div class="panel">
     <h2>启动设置</h2>
     <div class="row">
       <label>开机自启 BMO：</label>
@@ -1378,6 +1396,30 @@ async function deleteImage(name) {
 // ============ 快捷操作 ============
 async function trigger(action) {
   await postJSON(`/api/trigger/${action}`);
+}
+
+// ============ 打印控制 ============
+function setPrintHint(t) {
+  const e = document.getElementById('print-hint');
+  if (e) e.textContent = t;
+}
+async function doPrint(type) {
+  try { await postJSON('/api/print', { type }); setPrintHint('已发送打印任务'); }
+  catch (e) { setPrintHint('失败：' + e.message); }
+}
+async function printHistory() {
+  const count = parseInt(document.getElementById('print-turns').value) || 0;
+  try { await postJSON('/api/print', { type: 'history', count }); setPrintHint(`已发送：打印 ${count} 轮对话`); }
+  catch (e) { setPrintHint('失败：' + e.message); }
+}
+async function printText() {
+  const content = document.getElementById('print-text').value.trim();
+  if (!content) return setPrintHint('请输入要打印的文字');
+  try {
+    await postJSON('/api/print', { type: 'text', content });
+    document.getElementById('print-text').value = '';
+    setPrintHint('已发送打印任务');
+  } catch (e) { setPrintHint('失败：' + e.message); }
 }
 
 // ============ 日志 ============

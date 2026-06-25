@@ -111,8 +111,8 @@ TOOLS_PROMPT = (
     "6. 打印（热敏打印机）：\n"
     "   打印照片：{\"action\": \"print\", \"target\": \"photo\"}（拍一张照片并打印）\n"
     "   打印刚画的图：{\"action\": \"print\", \"target\": \"generated\"}\n"
-    "   打印最近对话：{\"action\": \"print\", \"target\": \"history\", \"count\": 条数}"
-    "（用户说'打印6条对话'就填 count=6，一条算一行；不说数量就省略 count）\n"
+    "   打印最近对话：{\"action\": \"print\", \"target\": \"history\", \"count\": 轮数}"
+    "（用户说'打印6轮/6条对话'就填 count=6，一轮=一问一答；不说数量就省略 count）\n"
     "   打印指定文字：{\"action\": \"print\", \"content\": \"要打印的内容\"}\n\n"
     "重要：只要用户的话涉及上面这些能力（尤其是调音量，例如'声音大一点'、'调大声'、"
     "'太吵了小声点'、'音量调到50'），就必须直接输出对应工具的纯 JSON，"
@@ -1388,14 +1388,12 @@ class BotGUI:
             return False
 
     def _print_history(self, count=None) -> bool:
-        """count = 要打印的"条数"（每条 = 一行 你:/BMO:）。省略则按 config.history_turns。"""
+        """count = 要打印的轮数（一轮 = 一问一答 = 2 行）。省略则按 config.history_turns。"""
         msgs = [m for m in self.session_memory
                 if m.get("role") in ("user", "assistant") and m.get("content")]
-        if count and count > 0:
-            msgs = msgs[-count:]                       # 按语音指定的条数
-        else:
-            n = int(self.config.get("printer", {}).get("history_turns", 10))
-            msgs = msgs[-n * 2:]
+        turns = count if (count and count > 0) else int(
+            self.config.get("printer", {}).get("history_turns", 10))
+        msgs = msgs[-turns * 2:]                        # 按轮数取（每轮 2 条消息）
         if not msgs:
             return self._print_text("（还没有对话记录）")
         lines = ["==== BMO 对话记录 ====",
@@ -2170,8 +2168,32 @@ class BotGUI:
             text = cmd.get("text") or ""
             if text:
                 self.speak_text(text)
+        elif action == "print":
+            # 打印可能很慢（9600 波特），放后台线程，别卡住命令轮询（GUI 线程）
+            threading.Thread(target=self._webui_print, args=(cmd,), daemon=True).start()
         elif action == "restart_webui":
             self._restart_webui()
+
+    def _webui_print(self, cmd: dict):
+        """网页打印控制：type ∈ {text, history, photo, generated}。"""
+        pt = (cmd.get("print_type") or cmd.get("type") or "").lower()
+        ok = False
+        try:
+            if pt == "text":
+                ok = self._print_text(cmd.get("content") or "（空内容）")
+            elif pt == "history":
+                cnt = cmd.get("count")
+                ok = self._print_history(int(cnt) if cnt else None)
+            elif pt == "photo":
+                img = self.capture_image()
+                ok = bool(img) and self._print_image(img)
+            elif pt == "generated":
+                img = self.last_image_for_print
+                ok = bool(img) and os.path.exists(img) and self._print_image(img)
+        except Exception as e:
+            log(f"[WEBUI PRINT ERROR] {e}")
+            ok = False
+        log(f"[WEBUI PRINT] {pt} -> {'成功' if ok else '失败'}")
 
     def _restart_webui(self):
         """Kill 当前 webui 子进程并重新 spawn（读最新 config）。"""

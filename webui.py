@@ -497,6 +497,28 @@ async def trigger_speak(req: SpeakReq):
     return {"ok": True}
 
 
+class PrintReq(BaseModel):
+    type: str                 # text | history | photo | generated
+    content: str | None = None
+    count: int | None = None
+
+
+@app.post("/api/print")
+async def trigger_print(req: PrintReq):
+    t = (req.type or "").lower()
+    if t not in ("text", "history", "photo", "generated"):
+        raise HTTPException(400, "type 必须是 text/history/photo/generated")
+    cmd = {"action": "print", "print_type": t}
+    if t == "text":
+        if not (req.content and req.content.strip()):
+            raise HTTPException(400, "打印文字不能为空")
+        cmd["content"] = req.content
+    if t == "history" and req.count:
+        cmd["count"] = int(req.count)
+    queue_command(cmd)
+    return {"ok": True, "note": "已发送打印任务"}
+
+
 # =========================================================================
 # 路由：日志流（SSE）
 # =========================================================================
