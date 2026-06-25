@@ -220,8 +220,12 @@ class BotGUI:
             pass
         self._exit_btn_timer = None
         master.bind('<Escape>', self.exit_fullscreen)
-        master.bind('<Return>', self.handle_ptt_toggle)
+        # 回车：短按=唤醒，长按(≥0.6s)=回到待唤醒。靠 press/release 计时区分。
+        master.bind('<KeyPress-Return>', self.handle_return_press)
+        master.bind('<KeyRelease-Return>', self.handle_return_release)
         master.bind('<space>', self.handle_speaking_interrupt)
+        self._return_pressed_at = None
+        self._return_release_timer = None
         atexit.register(self.safe_exit)
 
         self.config = load_config()
@@ -245,6 +249,7 @@ class BotGUI:
         self.ptt_event = threading.Event()
         self.recording_active = threading.Event()
         self.interrupted = threading.Event()
+        self.abort_to_wake = threading.Event()   # 长按回车：中止当前对话，回到待唤醒
 
         # TTS 队列
         self.tts_queue = []
@@ -555,8 +560,43 @@ class BotGUI:
         except tk.TclError:
             pass
 
+    LONG_PRESS_SECONDS = 0.6   # 回车长按阈值
+
+    def handle_return_press(self, event=None):
+        # 系统按键自动重复会连发 press：刚才若有"待定的松开"，取消它（说明还按着）
+        if self._return_release_timer is not None:
+            try:
+                self.master.after_cancel(self._return_release_timer)
+            except Exception:
+                pass
+            self._return_release_timer = None
+        if self._return_pressed_at is None:
+            self._return_pressed_at = time.time()
+
+    def handle_return_release(self, event=None):
+        # 延后一点确认是不是真松开（自动重复会立刻又来一个 press 把它取消）
+        if self._return_release_timer is not None:
+            try:
+                self.master.after_cancel(self._return_release_timer)
+            except Exception:
+                pass
+        # 80ms > 系统按键自动重复间隔(~40ms)：长按时后续重复 press 会取消它，只有真松开才会落定
+        self._return_release_timer = self.master.after(80, self._finalize_return)
+
+    def _finalize_return(self):
+        self._return_release_timer = None
+        if self._return_pressed_at is None:
+            return
+        dur = time.time() - self._return_pressed_at
+        self._return_pressed_at = None
+        if dur >= self.LONG_PRESS_SECONDS:
+            log(f"[BTN] 回车长按 {dur:.1f}s → 回到待唤醒")
+            self.go_to_wait_wake()
+        else:
+            self.handle_ptt_toggle()
+
     def handle_ptt_toggle(self, event=None):
-        # 按一次 = 唤醒（和语音唤醒一致）：应答 + 自适应录音 + 连续对话，不用再按第二次
+        # 短按 = 唤醒（和语音唤醒一致）：应答 + 自适应录音 + 连续对话
         now = time.time()
         if now - self.last_ptt_time < 0.5:
             return
@@ -564,6 +604,24 @@ class BotGUI:
         if self.current_state == BotStates.IDLE or "等" in self.current_status or "Wait" in self.current_status:
             log("[BTN] 按钮唤醒")
             self.ptt_event.set()
+
+    def go_to_wait_wake(self, event=None):
+        """中止当前对话/录音/说话，强制回到"等待唤醒"状态。已空闲则忽略。"""
+        if self.current_state in (BotStates.IDLE, BotStates.WARMUP):
+            return
+        self.abort_to_wake.set()
+        self.interrupted.set()
+        self.recording_active.clear()
+        self.ptt_event.clear()
+        self.pending_print = None
+        with self.tts_queue_lock:
+            self.tts_queue.clear()
+        if self.current_tts_proc:
+            try:
+                self.current_tts_proc.terminate()
+            except Exception:
+                pass
+        self.set_state(BotStates.IDLE, "等待唤醒...")
 
     def handle_speaking_interrupt(self, event=None):
         if self.current_state in (BotStates.SPEAKING, BotStates.THINKING):
@@ -701,13 +759,15 @@ class BotGUI:
 
                 # 一轮唤醒（语音 or 按钮）后，统一走自适应录音 + 连续对话
                 first = True
-                while not self.exiting:
+                while not self.exiting and not self.abort_to_wake.is_set():
                     self.set_state(BotStates.LISTENING, "在听..." if first else "请说...")
 
                     # 第一句用"维持唤醒时间"，后续追问用"连续对话时间"
                     onset = awake_secs if first else followup_secs
                     audio_file = self.record_voice_adaptive(onset_timeout=onset)
 
+                    if self.abort_to_wake.is_set():
+                        break
                     if not audio_file:
                         self.set_state(BotStates.IDLE, "没听到")
                         break
@@ -738,6 +798,8 @@ class BotGUI:
     def detect_wake_word_or_ptt(self):
         self.set_state(BotStates.IDLE, "等待唤醒...")
         self.pending_print = None   # 回到等唤醒就清掉"要不要打印"，避免下次唤醒被误当成回答
+        self.abort_to_wake.clear()  # 已经回到待唤醒，清掉长按中止标志
+        self.interrupted.clear()
         self.ptt_event.clear()
 
         # 配置变更后在本线程安全重载唤醒词（避免和监听循环跨线程竞争）
@@ -984,6 +1046,12 @@ class BotGUI:
                                 latency=self.config.get("audio_latency", "high"),
                                 callback=_cb) as stream:
                 while not self.exiting:
+                    if self.abort_to_wake.is_set():   # 长按回车：立刻停止录音
+                        try:
+                            stream.abort(ignore_errors=True)
+                        except Exception:
+                            pass
+                        return None
                     try:
                         indata = audio_q.get(timeout=0.5)
                         last_audio = time.time()
