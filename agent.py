@@ -1627,8 +1627,19 @@ class BotGUI:
                     log(f"[IMAGE GEN] 保存到 {path}")
                     self.last_image_for_print = path   # 记住，供"打印刚画的图"用
                     self.set_state(BotStates.SPEAKING, "看我画的~", overlay_path=path)
-                    # 打印机开着就问要不要打印；用户下一句"要/不要"由 chat_and_respond 处理
-                    if self.config.get("printer", {}).get("enabled", True):
+                    printer_on = self.config.get("printer", {}).get("enabled", True)
+                    wants_print = any(k in original_text for k in
+                                      ("打印", "打出来", "打一份", "打出", "print"))
+                    if printer_on and wants_print:
+                        # 原话已经说了"画完打印" → 不问，直接打
+                        self.speak_text("画好啦，这就打印出来！")
+                        self.wait_for_tts()
+                        self.set_state(BotStates.THINKING, "打印图片中...")
+                        ok = self._print_image(path)
+                        self._say("打印好啦！" if ok else "打印没成功，检查下打印机哦。")
+                        return
+                    if printer_on:
+                        # 没明说要打印 → 问一句，下一句"要/不要"由 chat_and_respond 处理
                         self.pending_print = path
                         self.speak_text("画好啦！要不要我打印出来呀？")
                         self.wait_for_tts()
