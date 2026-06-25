@@ -708,46 +708,90 @@ class BotGUI:
     def _keyboard_profile_files(self, config_dir):
         return glob.glob(os.path.join(config_dir, "input", "keyboard", "*.txt"))
 
+    def _keyboard_profile_is_valid(self, path):
+        """FCEUX profile 存在但可能全空；至少主配置要有几个核心按键才算有效。"""
+        try:
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                text = f.read()
+        except Exception:
+            return False
+        if "config:0" not in text:
+            return False
+        required = ("A:", "B:", "Select:", "Start:", "Up:", "Down:", "Left:", "Right:")
+        for line in text.splitlines():
+            if "config:0" not in line:
+                continue
+            if not all(k in line for k in required):
+                continue
+            values = {}
+            for part in line.split(","):
+                if ":" not in part:
+                    continue
+                key, value = part.split(":", 1)
+                values[key.strip()] = value.strip()
+            return all(values.get(k[:-1]) for k in required)
+        return False
+
+    def _write_fceux_default_keyboard_profile(self, default_path):
+        os.makedirs(os.path.dirname(default_path), exist_ok=True)
+        default_map = (
+            "keyboard,default,config:0,A:kF,B:kD,Select:kS,Start:kReturn,"
+            "Up:kUp,Down:kDown,Left:kLeft,Right:kRight,TurboA:,TurboB:,\n"
+            "keyboard,default,config:1,A:,B:,Select:,Start:,Up:,Down:,Left:,Right:,TurboA:,TurboB:,\n"
+            "keyboard,default,config:2,A:,B:,Select:,Start:,Up:,Down:,Left:,Right:,TurboA:,TurboB:,\n"
+            "keyboard,default,config:3,A:,B:,Select:,Start:,Up:,Down:,Left:,Right:,TurboA:,TurboB:,\n"
+        )
+        with open(default_path, "w", encoding="utf-8") as f:
+            f.write(default_map)
+
+    def _backup_file(self, path):
+        if not os.path.exists(path):
+            return
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        try:
+            shutil.copy2(path, f"{path}.bak-{stamp}")
+        except Exception:
+            pass
+
     def _ensure_fceux_input_profiles(self, target_dir, home):
         """FCEUX 只看 FCEUX_CONFIG_DIR/input/keyboard/*.txt；缺失时尝试从旧位置迁移。"""
         os.makedirs(target_dir, exist_ok=True)
-        target_profiles = self._keyboard_profile_files(target_dir)
-        if target_profiles:
+        default_path = os.path.join(target_dir, "input", "keyboard", "default.txt")
+        if self._keyboard_profile_is_valid(default_path):
             return
+        if os.path.exists(default_path):
+            log(f"[GAME] FCEUX default.txt 存在但无有效主按键，准备修复: {default_path}")
         for src_dir in self._candidate_fceux_config_dirs(home, target_dir):
             if src_dir == target_dir:
                 continue
-            src_profiles = self._keyboard_profile_files(src_dir)
+            src_profiles = [p for p in self._keyboard_profile_files(src_dir)
+                            if self._keyboard_profile_is_valid(p)]
             if not src_profiles:
                 continue
             src_input = os.path.join(src_dir, "input")
             dst_input = os.path.join(target_dir, "input")
             try:
+                self._backup_file(default_path)
                 shutil.copytree(src_input, dst_input, dirs_exist_ok=True)
                 cfg_src = os.path.join(src_dir, "fceux.cfg")
                 cfg_dst = os.path.join(target_dir, "fceux.cfg")
                 if os.path.exists(cfg_src) and not os.path.exists(cfg_dst):
                     shutil.copy2(cfg_src, cfg_dst)
                 log(f"[GAME] 已迁移 FCEUX 输入映射: {src_dir} -> {target_dir}")
-                return
+                if self._keyboard_profile_is_valid(default_path):
+                    return
+                shutil.copy2(src_profiles[0], default_path)
+                log(f"[GAME] 已将有效 profile 设为 default: {src_profiles[0]}")
+                if self._keyboard_profile_is_valid(default_path):
+                    return
             except Exception as e:
                 log(f"[GAME] 迁移 FCEUX 输入映射失败: {e}")
-        default_path = os.path.join(target_dir, "input", "keyboard", "default.txt")
-        if not os.path.exists(default_path):
-            try:
-                os.makedirs(os.path.dirname(default_path), exist_ok=True)
-                default_map = (
-                    "keyboard,default,config:0,A:kF,B:kD,Select:kS,Start:kReturn,"
-                    "Up:kUp,Down:kDown,Left:kLeft,Right:kRight,TurboA:,TurboB:,\n"
-                    "keyboard,default,config:1,A:,B:,Select:,Start:,Up:,Down:,Left:,Right:,TurboA:,TurboB:,\n"
-                    "keyboard,default,config:2,A:,B:,Select:,Start:,Up:,Down:,Left:,Right:,TurboA:,TurboB:,\n"
-                    "keyboard,default,config:3,A:,B:,Select:,Start:,Up:,Down:,Left:,Right:,TurboA:,TurboB:,\n"
-                )
-                with open(default_path, "w", encoding="utf-8") as f:
-                    f.write(default_map)
-                log(f"[GAME] 已创建 FCEUX 默认键盘映射: {default_path}")
-            except Exception as e:
-                log(f"[GAME] 创建 FCEUX 默认键盘映射失败: {e}")
+        try:
+            self._backup_file(default_path)
+            self._write_fceux_default_keyboard_profile(default_path)
+            log(f"[GAME] 已重建 FCEUX 默认键盘映射: {default_path}")
+        except Exception as e:
+            log(f"[GAME] 创建 FCEUX 默认键盘映射失败: {e}")
 
     def _log_game_config_paths(self, env):
         home = env.get("HOME", "")
