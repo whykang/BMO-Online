@@ -317,6 +317,7 @@ class BotGUI:
         self.media_proc = None
         self.media_kind = None
         self.media_name = None
+        self.media_paused_for_bmo = False
         self.media_lock = threading.Lock()
         self.hidden = False              # 隐身：窗口最小化但程序继续运行
         self.screen_shot = "/tmp/bmo_screen.png"   # 识别屏幕的截图路径
@@ -1209,6 +1210,19 @@ class BotGUI:
         proc = self.media_proc
         return bool(proc and proc.poll() is None)
 
+    def _signal_media(self, sig):
+        proc = self.media_proc
+        if not proc or proc.poll() is not None:
+            return False
+        try:
+            os.killpg(os.getpgid(proc.pid), sig)
+        except Exception:
+            try:
+                proc.send_signal(sig)
+            except Exception:
+                return False
+        return True
+
     def _configured_player(self, key):
         value = (self._media_cfg().get(key) or "").strip()
         if not value:
@@ -1268,6 +1282,7 @@ class BotGUI:
             self.media_proc = None
             self.media_kind = None
             self.media_name = None
+            self.media_paused_for_bmo = False
         log(f"[MEDIA] 已退出: {name} rc={rc}")
         if kind == "video":
             self._restore_bmo_display_mode()
@@ -1303,6 +1318,7 @@ class BotGUI:
                     self.media_proc = proc
                     self.media_kind = kind
                     self.media_name = name
+                    self.media_paused_for_bmo = False
                 threading.Thread(target=self._monitor_media_proc, args=(proc, kind, name), daemon=True).start()
                 self.abort_to_wake.set()
                 label = "视频" if kind == "video" else "音乐"
@@ -1314,6 +1330,35 @@ class BotGUI:
             self._restore_bmo_display_mode()
         return False, f"播放失败：{last_err or '没有可用播放器'}"
 
+    def pause_media_for_bmo(self):
+        if not self._media_is_running():
+            return False, "现在没有正在播放的媒体。"
+        if self.media_paused_for_bmo:
+            return True, "媒体已经暂停了。"
+        ok = self._signal_media(signal.SIGSTOP)
+        if not ok:
+            return False, "暂停媒体失败。"
+        self.media_paused_for_bmo = True
+        log(f"[MEDIA] 已暂停: {self.media_name}")
+        if self.media_kind == "video":
+            self._keep_game_pause_display()
+        return True, f"已暂停播放 {self._speakable_media_name(self.media_name or '媒体')}。"
+
+    def resume_media_for_bmo(self):
+        if not self._media_is_running():
+            self.media_paused_for_bmo = False
+            return False, "现在没有正在播放的媒体。"
+        if not self.media_paused_for_bmo:
+            return True, "媒体已经在播放。"
+        ok = self._signal_media(signal.SIGCONT)
+        if not ok:
+            return False, "继续媒体失败。"
+        self.media_paused_for_bmo = False
+        log(f"[MEDIA] 继续: {self.media_name}（自动）")
+        if self.media_kind == "video":
+            self._enter_game_display_mode()
+        return True, f"继续播放 {self._speakable_media_name(self.media_name or '媒体')}。"
+
     def stop_media(self, restore_bmo=True):
         proc = self.media_proc
         kind = self.media_kind
@@ -1323,10 +1368,13 @@ class BotGUI:
                 self.media_proc = None
                 self.media_kind = None
                 self.media_name = None
+                self.media_paused_for_bmo = False
             if restore_bmo and kind == "video":
                 self._restore_bmo_display_mode()
             return False, "现在没有正在播放的媒体。"
         try:
+            if self.media_paused_for_bmo:
+                self._signal_media(signal.SIGCONT)
             try:
                 os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
             except Exception:
@@ -1347,6 +1395,7 @@ class BotGUI:
                     self.media_proc = None
                     self.media_kind = None
                     self.media_name = None
+                    self.media_paused_for_bmo = False
             if restore_bmo and kind == "video":
                 self._restore_bmo_display_mode()
         log(f"[MEDIA] 已停止: {name}")
@@ -1354,8 +1403,13 @@ class BotGUI:
 
     def _media_state(self):
         if not self._media_is_running():
-            return {"running": False, "kind": None, "name": None}
-        return {"running": True, "kind": self.media_kind, "name": self.media_name}
+            return {"running": False, "kind": None, "name": None, "paused": False}
+        return {
+            "running": True,
+            "kind": self.media_kind,
+            "name": self.media_name,
+            "paused": self.media_paused_for_bmo,
+        }
 
     # -------------------------------------------------------------------
     # 识别屏幕（截屏 + 视觉模型描述）
@@ -1630,9 +1684,9 @@ class BotGUI:
                     self.interrupted.clear()
                     self.set_state(BotStates.IDLE, "重置")
                     continue
-                if self._media_is_running():
-                    ok, msg = self.stop_media(restore_bmo=True)
-                    log(f"[MEDIA] 唤醒停止 -> {'成功' if ok else '失败'}: {msg}")
+                if self._media_is_running() and not self.media_paused_for_bmo:
+                    ok, msg = self.pause_media_for_bmo()
+                    log(f"[MEDIA] 唤醒暂停 -> {'成功' if ok else '失败'}: {msg}")
                 if self._game_is_running() and not self.game_paused:
                     self.pause_game(for_bmo=True, show_bmo=False)
                 # 先把动画切到"在听"，立刻给视觉反馈；否则要等应答音(TTS ~2s)念完动画才变
@@ -1695,6 +1749,8 @@ class BotGUI:
         # 回到待唤醒：之前为了跟你说话把游戏暂停了的话，现在自动继续游戏（别一直暂停）
         if self._game_is_running() and self.game_paused:
             self.resume_game(auto=True)
+        if self._media_is_running() and self.media_paused_for_bmo:
+            self.resume_media_for_bmo()
 
         # 配置变更后在本线程安全重载唤醒词（避免和监听循环跨线程竞争）
         self._reload_wake_word_if_needed()
