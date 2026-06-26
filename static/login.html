@@ -42,6 +42,27 @@
     <div class="err" id="err"></div>
   </div>
 <script>
+const LANG = localStorage.getItem('bmo_lang')
+  || ((navigator.language || 'zh').toLowerCase().startsWith('zh') ? 'zh' : 'en');
+const I18N_EN = {
+  "BMO 登录": "BMO Login",
+  "BMO 控制台": "BMO Console",
+  "请输入访问密码": "Enter access password",
+  "登录": "Login",
+  "密码错误": "Incorrect password",
+};
+function tr(s) {
+  if (LANG !== 'en' || s == null) return s;
+  return I18N_EN[s] || s;
+}
+function applyLang() {
+  if (LANG !== 'en') return;
+  document.documentElement.lang = 'en';
+  document.title = tr('BMO 登录');
+  document.querySelector('h1').textContent = tr('BMO 控制台');
+  document.getElementById('pw').placeholder = tr('请输入访问密码');
+  document.querySelector('button').textContent = tr('登录');
+}
 async function login() {
   const pw = document.getElementById('pw').value;
   const err = document.getElementById('err');
@@ -53,12 +74,13 @@ async function login() {
       body: JSON.stringify({password: pw}),
     });
     if (r.ok) { location.replace('/?_=' + Date.now()); }
-    else { err.textContent = '密码错误'; }
+    else { err.textContent = tr('密码错误'); }
   } catch (e) { err.textContent = e.message; }
 }
 document.getElementById('pw').addEventListener('keydown', e => {
   if (e.key === 'Enter') login();
 });
+applyLang();
 </script>
 </body>
 </html>
