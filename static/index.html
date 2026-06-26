@@ -711,7 +711,7 @@ const I18N_EN = {
   "开始录音": "Start recording", "停止录音": "Stop recording", "打断说话": "Interrupt",
   "拍照": "Take photo", "打印控制（热敏打印机）": "Print (thermal printer)",
   "拍照打印": "Photo + print", "打印刚画的图": "Print last image", "打印对话：": "Print chat:",
-  "打印": "Print", "打印文字：": "Print text:",
+  "打印": "Print", "打印文字：": "Print text:", "轮": "turns", "0 轮": "0 turns",
   "打印任务发给 BMO 执行；9600 波特，图片较慢，请耐心。": "Print jobs run on BMO; 9600 baud, images are slow, please wait.",
   "启动设置": "Startup", "开机自启 BMO：": "Auto-start BMO on boot:", "Web 控制台端口：": "Web console port:",
   "立即重启 webui": "Restart webui now",
@@ -727,32 +727,60 @@ const I18N_EN = {
   "音量：": "Volume:", "保存引擎/输出": "Save engine/output",
   "默认“自动检测 USB 音响”。多个设备时在这里选。": "Default auto-detects USB speaker; pick here if multiple.",
   "默认自动检测；换了麦点\"刷新设备\"再选。": "Auto-detect by default; after changing mic click \"Refresh devices\".",
+  "填火山控制台已开通的音色代号。": "Enter the voice ID enabled in the Volcengine console.",
   "Edge-TTS 音色（免费）": "Edge-TTS Voice (free)", "语言：": "Language:", "中文": "Chinese",
   "英文": "English", "日文": "Japanese", "音色：": "Voice:", "语速：": "Speed:",
   "试听文字：": "Preview text:", "试听": "Preview", "保存为默认": "Save as default",
+  "你好，我是 BMO，很高兴见到你。": "Hi, I am BMO. Nice to meet you.",
   "TTS 兜底（Edge 失效时用）": "TTS fallback (when Edge fails)", "兜底模型：": "Fallback model:",
   "状态语音提示": "Status voice cues", "开机问候：": "Greeting:", "唤醒应答：": "Wake reply:",
   "思考中：": "Thinking:", "出错提示：": "Error:", "保存语音设置": "Save voice settings",
+  "留空则静默": "Leave empty for silence", "某条留空 = 该状态静默。": "Empty cue = silent for that state.",
   // models
   "LLM 大脑": "LLM Brain", "视觉模型": "Vision Model", "STT 语音转文字": "STT (speech-to-text)",
   "文生图": "Image Generation", "硅基流动": "SiliconFlow", "刷新模型列表": "Refresh model list",
   "当前模型：": "Current model:", "保存所有设置": "Save all settings", "尺寸：": "Size:",
+  "搜索：": "Search:", "模型：": "Model:", "最大 tokens：": "Max tokens:",
+  "未填写硅基流动 Key，点此去添加": "SiliconFlow key missing. Click to add.",
+  "未填写 OpenRouter Key，点此去添加": "OpenRouter key missing. Click to add.",
+  "未填写 DeepSeek Key，点此去添加": "DeepSeek key missing. Click to add.",
+  "搜索 deepseek / qwen / glm…": "Search deepseek / qwen / glm...",
+  "搜索 claude / gpt / gemini…": "Search claude / gpt / gemini...",
+  "搜索 deepseek…": "Search deepseek...",
+  "搜索 qwen-vl / internvl…": "Search qwen-vl / internvl...",
+  "搜索 gpt-4o / claude / gemini…": "Search gpt-4o / claude / gemini...",
+  "搜索 kolors / flux / stable-diffusion…": "Search kolors / flux / stable-diffusion...",
+  "搜索 gemini image / recraft / flux…": "Search gemini image / recraft / flux...",
+  "如 sensevoice / whisper": "e.g. sensevoice / whisper",
   // personality
   "System Prompt（BMO 性格设定）": "System Prompt (BMO personality)",
   "只需写性格/说话风格。工具调用说明（查时间/拍照/画图/系统状态等）已内置在程序里，不用也无法在这里写，改性格不会影响工具。改完点保存，agent 自动重载，新对话立刻生效。":
     "Only write personality / speaking style. Tool instructions (time, photo, drawing, system status, etc.) are built in and can't be set here. Save and the agent reloads; new chats apply immediately.",
   "附加说明（可选）": "Extra notes (optional)", "恢复默认": "Reset to default",
+  "只写性格/说话风格，比如：你是可爱的小机器人 BMO，说话活泼简短...": "Only personality / speaking style, e.g. You are a cute robot BMO and speak briefly and brightly...",
+  "额外的设定，比如「你的主人叫小明」": "Extra notes, e.g. \"Your owner's name is Xiaoming\"",
   // wake word
   "唤醒词总开关": "Wake word master switch", "启用：": "Enabled:",
   "关掉就是纯 PTT 模式（按钮触发）": "Off = pure PTT mode (button trigger)",
   "Sherpa-ONNX（中文，推荐）": "Sherpa-ONNX (Chinese, recommended)",
   "OpenWakeWord（英文，需 .onnx 模型）": "OpenWakeWord (English, needs .onnx model)",
   "关键词（中文/英文都可以）": "Keywords (Chinese or English)",
+  "每行一个关键词，BMO 听到任何一个都会被唤醒。改完点保存。": "One keyword per line. BMO wakes when it hears any of them. Save after editing.",
+  "你好小明\n嗨小明\n嘿哔莫": "hello bmo\nhi bmo\nhey bmo",
   "识别阈值：": "Threshold:", "越低越容易触发，越高越严格": "Lower = easier to trigger, higher = stricter",
   "关键词得分：": "Keyword score:", "越高越偏向词典里的词（误唤醒少，但漏唤醒多）": "Higher favors dictionary words (fewer false triggers, more misses)",
   "OpenWakeWord 模型（英文）": "OpenWakeWord model (English)", "上传 .onnx 模型": "Upload .onnx model",
-  "上传": "Upload", "使用提示": "Tips",
+  "上传": "Upload", "使用提示": "Tips", "本地模型库": "Local model library", "检查中...": "Checking...",
+  "Sherpa-ONNX 默认中文 KWS 模型支持任意中文关键词，3~4 字最稳。例：「你好小明」「嗨小明」「嘿哔莫哔莫」":
+    "The default Sherpa-ONNX Chinese KWS model supports arbitrary Chinese keywords; 3-4 characters is most stable. Examples: \"你好小明\", \"嗨小明\", \"嘿哔莫哔莫\"",
+  "默认中文 KWS 模型支持任意中文关键词，3~4 字最稳。例：「你好小明」「嗨小明」「嘿哔莫哔莫」":
+    " default Chinese KWS model supports arbitrary Chinese keywords; 3-4 characters is most stable. Examples: \"你好小明\", \"嗨小明\", \"嘿哔莫哔莫\"",
+  "关键词越短越容易误唤醒（\"你好\"会被日常对话触发）；建议至少 3 个字":
+    "Shorter keywords false-trigger more easily (\"你好\" can trigger in normal conversation); use at least 3 characters.",
   "调阈值：误唤醒多时调高（0.30~0.40）；唤不醒时调低（0.15~0.20）": "Tune threshold: raise (0.30–0.40) if too many false triggers; lower (0.15–0.20) if it won't wake.",
+  "OpenWakeWord 后端：英文专用，要先在 Colab 训出 .onnx 才能用":
+    "OpenWakeWord backend: English-only; train an .onnx model in Colab first.",
+  "后端：英文专用，要先在 Colab 训出 .onnx 才能用": " backend: English-only; train an .onnx model in Colab first.",
   // conversation
   "对话设置": "Conversation", "连续对话：": "Continuous chat:",
   "勾上后，答完直接接着说，不用重新唤醒": "When on, keep talking after a reply without re-waking.",
@@ -769,14 +797,21 @@ const I18N_EN = {
   "上传 NES 游戏（.nes / .zip），也可以语音说“打开某某游戏”。运行游戏时 BMO 会退到后台；唤醒 BMO 会自动暂停游戏。":
     "Upload NES games (.nes / .zip), or say \"open <game>\". BMO steps aside while a game runs; waking BMO auto-pauses it.",
   "游戏键位（FCEUX）": "Game keys (FCEUX)",
+  "每个 NES 按键对应的键盘键（你那七键固件：A=空格、B=左Shift、Start=回车、方向=方向键）。改完保存，":
+    "Keyboard key for each NES button (your seven-key firmware: A=Space, B=Left Shift, Start=Enter, directions=arrow keys). Save changes; ",
   "A（跳/开炮）": "A (jump/fire)", "B（加速/副键）": "B (run/secondary)", "Start（开始）": "Start",
   "↑ 上": "↑ Up", "↓ 下": "↓ Down", "← 左": "← Left", "→ 右": "→ Right",
   "保存键位": "Save keys", "下次开游戏生效": "applies next time a game starts",
+  "还没有 ROM，上传一个 .nes 文件试试。": "No ROMs yet. Try uploading a .nes file.",
+  "空格": "Space", "左Shift": "Left Shift", "回车": "Enter", "退格": "Backspace",
   // keys
   "API Key 状态": "API Key Status", "更新 API Key": "Update API Key", "API 花费": "API Cost",
   "新 Key：": "New key:", "保存到 .env": "Save to .env",
+  "豆包TTS API Key（火山 seed-tts-2.0）": "Doubao TTS API Key (Volcengine seed-tts-2.0)",
+  "硅基流动暂未开放公开余额查询 API，请到官方控制台查看：": "SiliconFlow does not provide a public balance API yet. Check the official console:",
+  "硅基流动控制台": "SiliconFlow console",
   // security
-  "访问密码": "Access password", "设置 / 修改": "Set / change", "原密码：": "Old password:",
+  "访问密码": "Access password", "当前：": "Current:", "设置 / 修改": "Set / change", "原密码：": "Old password:",
   "新密码：": "New password:", "取消密码": "Remove password",
   // logs
   "实时日志": "Live Log", "自动滚动": "Auto-scroll",
@@ -785,14 +820,29 @@ const I18N_EN = {
   "上传失败：": "Upload failed: ", "保存失败：": "Save failed: ", "加载失败：": "Load failed: ",
   "设置失败：": "Failed: ", "重启失败：": "Restart failed: ", "查询失败": "Query failed",
   "获取默认失败：": "Failed to get default: ", "重命名失败：": "Rename failed: ",
-  "请输入 key": "Enter a key", "请输入新密码": "Enter a new password",
+  "请输入 key": "Enter a key", "请输入新密码": "Enter a new password", "要打印的内容": "Text to print",
   "先选一个 ROM 文件": "Pick a ROM file first", "请先选择文件": "Pick a file first",
   "请先在左/右栏选一个模型": "Pick a model in the left/right column first",
+  "请先在「API Key」标签填写 ": "Please fill the key for ",
+  " 的 key": " in the API Key tab",
+  "请先在 API Key 中填写": "Fill this in API Key first: ",
+  "请先在「API Key」中填写": "Fill this in API Key first: ",
   "密码已设置（当前已自动登录，下次访问需输入密码）": "Password set (logged in now; password required next time)",
   "密码已取消": "Password removed", "键位已保存，下次开游戏生效。": "Keys saved; applies next game.",
   "已保存，下一轮对话生效": "Saved; applies next chat", "已保存，正在重载唤醒词": "Saved; reloading wake word",
   "已填入默认性格，确认后点“保存”生效": "Default personality filled in; click Save to apply",
   "已保存。留空的状态不会播放。": "Saved. Empty cues won't play.",
+  "已发送启动命令": "Start command sent", "启动失败：": "Start failed: ", "已发送命令": "Command sent",
+  "失败：": "Failed: ",
+  "已发送打印任务": "Print job sent", "已发送：打印 ": "Sent: print ", " 轮对话": " chat turns",
+  "请输入要打印的文字": "Enter text to print",
+  "新文件名（不写后缀会自动保留 ": "New filename (leave extension off to keep ",
+  "）": ")", " ？": "?", "？": "?", "、": ", ", "确定删除 ": "Delete ", "确定清空所有对话记忆？": "Clear all chat memory?",
+  "已清空": "Cleared", "恢复出厂默认性格？当前编辑会被覆盖（点保存后才真正生效）":
+    "Restore factory default personality? Current edits will be replaced (only saved after you click Save).",
+  "确定删除这个 API Key？": "Delete this API Key?", "确定取消密码？任何人都能访问控制台": "Remove the password? Anyone will be able to access the console.",
+  "确认重启 webui？连接会短暂断开，几秒后请刷新页面": "Restart webui? The connection will drop briefly; refresh after a few seconds.",
+  "已通知 agent 重启 webui。\n几秒后访问：\n": "Told the agent to restart webui.\nVisit after a few seconds:\n",
   "未运行": "Not running", "运行中": "Running", "已暂停": "Paused", "已就绪 ": "Ready ",
   "连接不上 agent": "Can't reach agent", "未配置": "Not set", "已配置": "Set",
   "已启用": "Enabled", "已禁用": "Disabled", "已设置": "Set", "未设置": "Not set",
@@ -801,8 +851,16 @@ const I18N_EN = {
   "正在从 OpenRouter / 硅基流动 拉取全量模型...": "Fetching all models from OpenRouter / SiliconFlow...",
   "拉取失败（使用内置列表）：": "Fetch failed (using built-in list): ", "无法读取音量": "Can't read volume",
   "模型未下载（运行 setup_pi.sh）": "Model not downloaded (run setup_pi.sh)", "端口范围 1024~65535": "Port range 1024–65535",
-  "（暂无对话）": "(no chat yet)", "（还没画过图）": "(no images yet)", "（当前）": "(current)",
+  "（暂无对话）": "(no chat yet)", "（还没画过图）": "(no images yet)", "（当前）": "(current)", "（未选择）": "(none selected)",
   "硅基流动 API Key": "SiliconFlow API Key", "豆包TTS API Key": "Doubao TTS API Key",
+  "自动检测 USB 音响（推荐）": "Auto-detect USB speaker (recommended)", "系统默认输出": "System default output",
+  " 未配置，相关选项不可选": " not configured; related options are disabled",
+  "已保存。引擎=": "Saved. Engine=", "，输出=": ", output=", "，麦克风=": ", microphone=",
+  "核": "cores", "⚠️ 供电不足（欠压）": "⚠️ Undervoltage", "⚠️ 已降频": "⚠️ Throttled",
+  "🔥 温度偏高": "🔥 High temperature",
+  "还有 ": "More: ", " 个，输入关键词缩小范围": " more; type a keyword to narrow the list",
+  "已加载：LLM ": "Loaded: LLM ", " · 视觉 ": " · vision ", " · 文生图 ": " · image ", " · STT ": " · STT ",
+  "（10分钟缓存）": " (10 min cache)",
   "软件音量：100%=原始，>100% 放大（音箱偏小时调高）": "Software volume: 100%=original, >100% amplify (raise if speaker is quiet)",
 };
 const LANG = localStorage.getItem('bmo_lang')
@@ -829,6 +887,9 @@ function applyLangTo(root) {
   }
   root.querySelectorAll && root.querySelectorAll('[placeholder]').forEach(e => {
     if (I18N_EN[e.placeholder]) e.placeholder = I18N_EN[e.placeholder];
+  });
+  root.querySelectorAll && root.querySelectorAll('input[value]').forEach(e => {
+    if (I18N_EN[e.value]) e.value = I18N_EN[e.value];
   });
 }
 (function initI18n() {
@@ -913,13 +974,13 @@ function fillKeySelect(sel, cur) {
   let found = false;
   for (const [label, tok] of KEY_OPTIONS) {
     const o = document.createElement('option');
-    o.value = tok; o.textContent = `${label} (${tok})`;
+    o.value = tok; o.textContent = `${tr(label)} (${tok})`;
     if (tok === cur) { o.selected = true; found = true; }
     sel.appendChild(o);
   }
   if (cur && !found) {
     const o = document.createElement('option');
-    o.value = cur; o.textContent = cur + '（当前）'; o.selected = true;
+    o.value = cur; o.textContent = cur + tr('（当前）'); o.selected = true;
     sel.appendChild(o);
   }
 }
@@ -942,7 +1003,7 @@ async function saveKeymap() {
 // ============ 游戏 ROM ============
 function setGameHint(t) {
   const e = document.getElementById('game-hint');
-  if (e) e.textContent = t || '';
+  if (e) e.textContent = tr(t || '');
 }
 
 async function loadRoms() {
@@ -950,7 +1011,7 @@ async function loadRoms() {
   let roms = [];
   try { roms = (await fetchJSON('/api/roms')).roms || []; } catch (e) {}
   box.innerHTML = '';
-  if (!roms.length) { box.innerHTML = '<div class="help">还没有 ROM，上传一个 .nes 文件试试。</div>'; return; }
+  if (!roms.length) { box.innerHTML = `<div class="help">${tr('还没有 ROM，上传一个 .nes 文件试试。')}</div>`; return; }
   for (const r of roms) {
     const div = document.createElement('div');
     div.className = 'row';
@@ -959,15 +1020,15 @@ async function loadRoms() {
     name.textContent = `${r.filename} (${r.size_kb} KB)`;
     const play = document.createElement('button');
     play.className = 'btn';
-    play.textContent = '启动';
+    play.textContent = tr('启动');
     play.onclick = () => startGame(r.filename);
     const ren = document.createElement('button');
     ren.className = 'btn secondary';
-    ren.textContent = '重命名';
+    ren.textContent = tr('重命名');
     ren.onclick = () => renameRom(r.filename);
     const del = document.createElement('button');
     del.className = 'btn danger';
-    del.textContent = '删除';
+    del.textContent = tr('删除');
     del.onclick = () => deleteRom(r.filename);
     div.appendChild(name);
     div.appendChild(play);
@@ -1023,16 +1084,16 @@ async function gameControl(action) {
 async function pollState() {
   try {
     const s = await fetchJSON('/api/state');
-    document.getElementById('agent-state').textContent = s.state;
-    document.getElementById('agent-status').textContent = s.status;
-    document.getElementById('agent-mem').textContent = `${s.memory_turns} 轮`;
-    document.getElementById('db-state').textContent = s.state;
-    document.getElementById('db-status').textContent = s.status;
+    document.getElementById('agent-state').textContent = tr(s.state);
+    document.getElementById('agent-status').textContent = tr(s.status);
+    document.getElementById('agent-mem').textContent = `${s.memory_turns} ${tr('轮')}`;
+    document.getElementById('db-state').textContent = tr(s.state);
+    document.getElementById('db-status').textContent = tr(s.status);
     document.getElementById('db-queue').textContent = s.tts_queue_len;
     document.getElementById('db-mem').textContent = s.memory_turns;
     updateGameState(s.game || {});
   } catch (e) {
-    document.getElementById('agent-status').textContent = '连接不上 agent';
+    document.getElementById('agent-status').textContent = tr('连接不上 agent');
   }
 }
 
@@ -1041,12 +1102,12 @@ function updateGameState(game) {
   const rom = document.getElementById('game-rom');
   if (!state || !rom) return;
   if (!game.running) {
-    state.textContent = '未运行';
+    state.textContent = tr('未运行');
     state.className = 'pill';
     rom.textContent = '';
     return;
   }
-  state.textContent = game.paused ? '已暂停' : '运行中';
+  state.textContent = tr(game.paused ? '已暂停' : '运行中');
   state.className = 'pill ' + (game.paused ? 'err' : 'ok');
   rom.textContent = game.rom || '';
 }
@@ -1058,9 +1119,9 @@ function fmtGB(b) { return (b / (1024 ** 3)).toFixed(1) + 'GB'; }
 async function pollSysinfo() {
   try {
     const s = await fetchJSON('/api/sysinfo');
-    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = tr(v); };
     set('sys-model', s.model || '-');
-    set('sys-cpu', s.cpu_percent != null ? `${s.cpu_percent}%` + (s.cpu_count ? ` (${s.cpu_count} 核)` : '') : '-');
+    set('sys-cpu', s.cpu_percent != null ? `${s.cpu_percent}%` + (s.cpu_count ? ` (${s.cpu_count} ${tr('核')})` : '') : '-');
     set('sys-temp', s.temp_c != null ? `${s.temp_c} ℃` : '-');
     set('sys-mem', s.mem ? `${fmtGB(s.mem.used)} / ${fmtGB(s.mem.total)} (${s.mem.percent}%)` : '-');
     set('sys-disk', s.disk ? `${fmtGB(s.disk.used)} / ${fmtGB(s.disk.total)} (${s.disk.percent}%)` : '-');
@@ -1072,7 +1133,7 @@ async function pollSysinfo() {
       if (s.throttled && s.throttled.under_voltage) msgs.push('⚠️ 供电不足（欠压）');
       if (s.throttled && s.throttled.throttled) msgs.push('⚠️ 已降频');
       if (s.temp_c != null && s.temp_c >= 80) msgs.push('🔥 温度偏高');
-      warn.textContent = msgs.join('　');
+      warn.textContent = tr(msgs.join('　'));
     }
   } catch (e) { /* ignore */ }
 }
@@ -1107,7 +1168,7 @@ async function loadAutostart() {
   try {
     const s = await fetchJSON('/api/autostart');
     document.getElementById('boot-autostart').checked = s.enabled;
-    document.getElementById('boot-autostart-hint').textContent = s.enabled ? '开' : '关';
+    document.getElementById('boot-autostart-hint').textContent = tr(s.enabled ? '开' : '关');
   } catch (e) {
     document.getElementById('boot-autostart-hint').textContent = e.message;
   }
@@ -1116,7 +1177,7 @@ async function toggleAutostart() {
   const enabled = document.getElementById('boot-autostart').checked;
   try {
     await putJSON('/api/autostart', {enabled});
-    document.getElementById('boot-autostart-hint').textContent = enabled ? '已启用' : '已禁用';
+    document.getElementById('boot-autostart-hint').textContent = tr(enabled ? '已启用' : '已禁用');
     setTimeout(loadAutostart, 800);
   } catch (e) {
     alert('设置失败：' + e.message);
@@ -1171,7 +1232,7 @@ async function loadAudioOutputs() {
   let devs = [];
   try { devs = (await fetchJSON('/api/audio/outputs')).devices || []; } catch (e) {}
   sel.innerHTML = '';
-  const add = (val, txt) => { const o = document.createElement('option'); o.value = val; o.textContent = txt; if (val === cur) o.selected = true; sel.appendChild(o); };
+  const add = (val, txt) => { const o = document.createElement('option'); o.value = val; o.textContent = tr(txt); if (val === cur) o.selected = true; sel.appendChild(o); };
   add('auto', '自动检测 USB 音响（推荐）');
   add('', '系统默认输出');
   for (const d of devs) add(d.device, `${d.label}  (${d.device})`);
@@ -1184,7 +1245,7 @@ async function loadAudioInputs() {
   let devs = [];
   try { devs = (await fetchJSON('/api/audio/inputs')).devices || []; } catch (e) {}
   sel.innerHTML = '';
-  const add = (val, txt) => { const o = document.createElement('option'); o.value = val; o.textContent = txt; if (val === cur) o.selected = true; sel.appendChild(o); };
+  const add = (val, txt) => { const o = document.createElement('option'); o.value = val; o.textContent = tr(txt); if (val === cur) o.selected = true; sel.appendChild(o); };
   for (const d of devs) add(d.device, d.kind === 'AUTO' ? d.label : `${d.label}  (${d.device})`);
   // 当前值不在列表里也保留显示
   if (cur && cur !== 'auto' && !devs.some(d => d.device === cur)) add(cur, cur + '（当前）');
@@ -1196,11 +1257,11 @@ async function loadVolume() {
     if (v.ok && v.volume != null) {
       document.getElementById('volume-slider').value = v.volume;
       document.getElementById('volume-val').textContent = v.volume + '%';
-      hint.textContent = '软件音量：100%=原始，>100% 放大（音箱偏小时调高）';
+      hint.textContent = tr('软件音量：100%=原始，>100% 放大（音箱偏小时调高）');
     } else {
-      hint.textContent = v.reason || '无法读取音量';
+      hint.textContent = tr(v.reason || '无法读取音量');
     }
-  } catch (e) { hint.textContent = e.message; }
+  } catch (e) { hint.textContent = tr(e.message); }
 }
 function onVolumeInput() {
   document.getElementById('volume-val').textContent =
@@ -1211,7 +1272,7 @@ async function setVolume() {
   try {
     await putJSON('/api/volume', {percent: pct});
   } catch (e) {
-    document.getElementById('volume-hint').textContent = '设置失败：' + e.message;
+    document.getElementById('volume-hint').textContent = tr('设置失败：' + e.message);
   }
 }
 function ttsProviderKey(provider) {
@@ -1234,7 +1295,7 @@ function updateTTSProviderUI() {
   for (const opt of sel.options) {
     const allowed = canUseTTSProvider(opt.value);
     opt.disabled = !allowed;
-    opt.title = allowed ? '' : `请先在 API Key 中填写${ttsProviderKeyName(opt.value)}`;
+    opt.title = allowed ? '' : tr(`请先在 API Key 中填写${ttsProviderKeyName(opt.value)}`);
   }
   const provider = document.getElementById('tts-provider').value;
   document.getElementById('tts-doubao-settings').classList.toggle('hide', provider !== 'doubao');
@@ -1243,7 +1304,7 @@ function updateTTSProviderUI() {
   if (hint) {
     hint.textContent = canUseTTSProvider(provider)
       ? ''
-      : `请先在 API Key 中填写${ttsProviderKeyName(provider)}`;
+      : tr(`请先在 API Key 中填写${ttsProviderKeyName(provider)}`);
   }
   if (provider === 'edge') loadVoices();
 }
@@ -1254,7 +1315,7 @@ function showTTSProviderHelp() {
   if (!KEYS.volc_apikey) missing.push('豆包TTS API Key');
   if (!KEYS.siliconflow) missing.push('硅基流动 API Key');
   const hint = document.getElementById('tts-provider-hint');
-  if (hint) hint.textContent = missing.length ? `${missing.join('、')} 未配置，相关选项不可选` : '';
+  if (hint) hint.textContent = tr(missing.length ? `${missing.join('、')} 未配置，相关选项不可选` : '');
 }
 function handleTTSProviderChange() {
   const sel = document.getElementById('tts-provider');
@@ -1447,7 +1508,7 @@ function renderTwoCol(kind) {
     const hasKey = !!KEYS[prov];
 
     // key 状态
-    pill.textContent = hasKey ? '已配置' : '未配置';
+    pill.textContent = tr(hasKey ? '已配置' : '未配置');
     pill.className = 'pill ' + (hasKey ? 'ok' : 'err');
     col.classList.toggle('disabled', !hasKey);
     missing.classList.toggle('hide', hasKey);
@@ -1468,18 +1529,18 @@ function renderTwoCol(kind) {
     if (!shown.length) {
       const empty = document.createElement('div');
       empty.className = 'model-empty';
-      empty.textContent = q ? '没有匹配的模型' : '暂无模型';
+      empty.textContent = tr(q ? '没有匹配的模型' : '暂无模型');
       listEl.appendChild(empty);
     }
     if (list.length > KIND_MAX_SHOWN) {
       const more = document.createElement('div');
       more.className = 'model-empty';
-      more.textContent = `还有 ${list.length - KIND_MAX_SHOWN} 个，输入关键词缩小范围`;
+      more.textContent = tr(`还有 ${list.length - KIND_MAX_SHOWN} 个，输入关键词缩小范围`);
       listEl.appendChild(more);
     }
   }
   document.getElementById('cur-' + kind).textContent =
-    cur.model ? `[${cur.provider}] ${cur.model}` : '（未选择）';
+    cur.model ? `[${cur.provider}] ${cur.model}` : tr('（未选择）');
 }
 
 function pickModel(kind, prov, model) {
@@ -1529,7 +1590,7 @@ function fillModels() {
 
 async function loadLiveModels(refresh = false) {
   const status = document.getElementById('models-status');
-  status.textContent = refresh ? '正在刷新模型列表...' : '正在从 OpenRouter / 硅基流动 拉取全量模型...';
+  status.textContent = tr(refresh ? '正在刷新模型列表...' : '正在从 OpenRouter / 硅基流动 拉取全量模型...');
   try {
     const live = await fetchJSON('/api/models/live' + (refresh ? '?refresh=true' : ''));
     for (const k of Object.keys(MODELS_BY_KIND)) {
@@ -1538,9 +1599,9 @@ async function loadLiveModels(refresh = false) {
     for (const k of TWO_COL_KINDS) renderTwoCol(k);
     for (const k of Object.keys(KIND_SELECT)) renderModelSelect(k);
     const c = live.counts || {};
-    status.textContent = `已加载：LLM ${c.llm||0} · 视觉 ${c.vision||0} · 文生图 ${c.image_gen||0} · STT ${c.stt||0}（10分钟缓存）`;
+    status.textContent = tr(`已加载：LLM ${c.llm||0} · 视觉 ${c.vision||0} · 文生图 ${c.image_gen||0} · STT ${c.stt||0}（10分钟缓存）`);
   } catch (e) {
-    status.textContent = '拉取失败（使用内置列表）：' + e.message;
+    status.textContent = tr('拉取失败（使用内置列表）：' + e.message);
   }
 }
 async function saveLLM() {
@@ -1642,10 +1703,10 @@ async function fillWake() {
 
   const pill = document.getElementById('wake-sherpa-pill');
   if (s.sherpa_ready) {
-    pill.textContent = '已就绪 ' + s.sherpa_model_dir;
+    pill.textContent = tr('已就绪 ') + s.sherpa_model_dir;
     pill.className = 'pill ok';
   } else {
-    pill.textContent = '模型未下载（运行 setup_pi.sh）';
+    pill.textContent = tr('模型未下载（运行 setup_pi.sh）');
     pill.className = 'pill err';
   }
 
@@ -1716,19 +1777,19 @@ async function saveWake() {
     legacy_threshold: parseFloat(document.getElementById('wake-legacy-threshold').value),
   };
   await putJSON('/api/wakewords/config', payload);
-  document.getElementById('wake-status-hint').textContent = '已保存，正在重载唤醒词';
+  document.getElementById('wake-status-hint').textContent = tr('已保存，正在重载唤醒词');
   setTimeout(() => document.getElementById('wake-status-hint').textContent = '', 3000);
 }
 
 // ============ 历史 ============
 async function loadHistory() {
   const box = document.getElementById('history-list');
-  box.textContent = '正在加载...';
+  box.textContent = tr('正在加载...');
   let data;
   try {
     data = await fetchJSON('/api/history');
   } catch (e) {
-    box.textContent = '加载失败：' + e.message;
+    box.textContent = tr('加载失败：' + e.message);
     return;
   }
   box.innerHTML = '';
@@ -1740,7 +1801,7 @@ async function loadHistory() {
     div.innerHTML = `<b>${m.role}:</b> ${escapeHtml(String(content)).substring(0, 1000)}`;
     box.appendChild(div);
   }
-  if (data.length === 0) box.textContent = '（暂无对话）';
+  if (data.length === 0) box.textContent = tr('（暂无对话）');
 }
 async function clearHistory() {
   if (!confirm('确定清空所有对话记忆？')) return;
@@ -1755,12 +1816,12 @@ function escapeHtml(s) {
 // ============ 图片生成 ============
 async function loadImages() {
   const box = document.getElementById('image-grid');
-  box.textContent = '正在加载...';
+  box.textContent = tr('正在加载...');
   let data;
   try {
     data = await fetchJSON('/api/images');
   } catch (e) {
-    box.textContent = '加载失败：' + e.message;
+    box.textContent = tr('加载失败：' + e.message);
     return;
   }
   box.innerHTML = '';
@@ -1772,7 +1833,7 @@ async function loadImages() {
       <button class="btn danger" onclick="deleteImage('${img.filename}')">删除</button></div>`;
     box.appendChild(card);
   }
-  if (data.length === 0) box.textContent = '（还没画过图）';
+  if (data.length === 0) box.textContent = tr('（还没画过图）');
 }
 async function deleteImage(name) {
   if (!confirm(`删除 ${name}？`)) return;
@@ -1788,7 +1849,7 @@ async function trigger(action) {
 // ============ 打印控制 ============
 function setPrintHint(t) {
   const e = document.getElementById('print-hint');
-  if (e) e.textContent = t;
+  if (e) e.textContent = tr(t);
 }
 async function doPrint(type) {
   try { await postJSON('/api/print', { type }); setPrintHint('已发送打印任务'); }
@@ -1843,15 +1904,15 @@ async function loadKeys() {
     const div = document.createElement('div');
     div.className = 'row';
     const label = document.createElement('label');
-    label.textContent = labels[name] || name;
+    label.textContent = tr(labels[name] || name);
     const pill = document.createElement('span');
     pill.className = 'pill ' + (ok ? 'ok' : 'err');
-    pill.textContent = ok ? '已配置' : '未配置';
+    pill.textContent = tr(ok ? '已配置' : '未配置');
     div.append(label, pill);
     if (ok) {
       const btn = document.createElement('button');
       btn.className = 'btn danger';
-      btn.textContent = '删除';
+      btn.textContent = tr('删除');
       btn.onclick = () => deleteKey(name);
       div.appendChild(btn);
     }
@@ -1882,11 +1943,11 @@ async function loadPwState() {
   try {
     const s = await fetchJSON('/api/auth/status');
     const has = !!s.has_password;
-    document.getElementById('pw-state').textContent = has ? '已设置' : '未设置';
+    document.getElementById('pw-state').textContent = tr(has ? '已设置' : '未设置');
     document.getElementById('pw-state').className = has ? 'pill ok' : 'pill';
     document.getElementById('pw-old-row').style.display = has ? 'flex' : 'none';
   } catch (e) {
-    document.getElementById('pw-state').textContent = '查询失败';
+    document.getElementById('pw-state').textContent = tr('查询失败');
   }
 }
 async function setPassword() {
