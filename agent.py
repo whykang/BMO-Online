@@ -1630,6 +1630,9 @@ class BotGUI:
                     self.interrupted.clear()
                     self.set_state(BotStates.IDLE, "重置")
                     continue
+                if self._media_is_running():
+                    ok, msg = self.stop_media(restore_bmo=True)
+                    log(f"[MEDIA] 唤醒停止 -> {'成功' if ok else '失败'}: {msg}")
                 if self._game_is_running() and not self.game_paused:
                     self.pause_game(for_bmo=True, show_bmo=False)
                 # 先把动画切到"在听"，立刻给视觉反馈；否则要等应答音(TTS ~2s)念完动画才变
