@@ -262,6 +262,7 @@ class BotGUI:
         # 同步原语
         self.last_ptt_time = 0
         self.ptt_event = threading.Event()
+        self._wake_stream = None   # 唤醒监听的输入流；按钮按下时 abort 它，强制立刻恢复
         self.recording_active = threading.Event()
         self.interrupted = threading.Event()
         self.abort_to_wake = threading.Event()   # 长按回车：中止当前对话，回到待唤醒
@@ -1051,22 +1052,26 @@ class BotGUI:
             self._keep_game_pause_display()
         return True, "游戏已暂停。"
 
-    def resume_game(self):
+    def resume_game(self, auto=False):
+        """auto=True：回到待唤醒时自动继续（已经在等唤醒了，不要再 set abort_to_wake，
+        否则会吞掉下一次唤醒）。auto=False：语音“继续游戏”用，需打断当前对话回到游戏。"""
         if not self._game_is_running():
             return False, "现在没有正在运行的游戏。"
         if not self.game_paused:
             self._enter_game_display_mode()
             self._activate_game_window_later()
-            self.abort_to_wake.set()
+            if not auto:
+                self.abort_to_wake.set()
             return True, "游戏已经在运行。"
         ok = self._signal_game(signal.SIGCONT)
         if not ok:
             return False, "继续游戏失败。"
         self.game_paused = False
-        log(f"[GAME] 继续: {self.game_rom}")
+        log(f"[GAME] 继续: {self.game_rom}" + ("（自动）" if auto else ""))
         self._enter_game_display_mode()
         self._activate_game_window_later()
-        self.abort_to_wake.set()
+        if not auto:
+            self.abort_to_wake.set()
         return True, "继续游戏。"
 
     def stop_game(self, restore_bmo=True):
@@ -1448,6 +1453,10 @@ class BotGUI:
         self.abort_to_wake.clear()  # 已经回到待唤醒，清掉长按中止标志
         self.interrupted.clear()
         self.ptt_event.clear()
+
+        # 回到待唤醒：之前为了跟你说话把游戏暂停了的话，现在自动继续游戏（别一直暂停）
+        if self._game_is_running() and self.game_paused:
+            self.resume_game(auto=True)
 
         # 配置变更后在本线程安全重载唤醒词（避免和监听循环跨线程竞争）
         self._reload_wake_word_if_needed()
