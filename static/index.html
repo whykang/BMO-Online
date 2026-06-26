@@ -210,11 +210,6 @@
       <span class="help" id="boot-autostart-hint">关</span>
     </div>
     <div class="row">
-      <label>启动时自动开 Web 控制台：</label>
-      <input type="checkbox" id="webui-autostart" onchange="toggleWebuiAutostart()">
-      <span class="help">勾上后，跑 <code>./start_agent.sh</code> 时 webui 也会自动启动</span>
-    </div>
-    <div class="row">
       <label>Web 控制台端口：</label>
       <input type="number" id="webui-port" min="1024" max="65535" style="width: 100px;">
       <button class="btn" onclick="saveWebuiPort()">保存</button>
@@ -718,8 +713,7 @@ const I18N_EN = {
   "拍照打印": "Photo + print", "打印刚画的图": "Print last image", "打印对话：": "Print chat:",
   "打印": "Print", "打印文字：": "Print text:",
   "打印任务发给 BMO 执行；9600 波特，图片较慢，请耐心。": "Print jobs run on BMO; 9600 baud, images are slow, please wait.",
-  "启动设置": "Startup", "开机自启 BMO：": "Auto-start BMO on boot:",
-  "启动时自动开 Web 控制台：": "Auto-start web console:", "Web 控制台端口：": "Web console port:",
+  "启动设置": "Startup", "开机自启 BMO：": "Auto-start BMO on boot:", "Web 控制台端口：": "Web console port:",
   "立即重启 webui": "Restart webui now",
   "改完点保存，再点“立即重启 webui”，几秒后到新端口刷新页面。": "Save, then click \"Restart webui now\", and reload at the new port after a few seconds.",
   "保存": "Save",
@@ -1130,12 +1124,7 @@ async function toggleAutostart() {
   }
 }
 function fillWebuiAutostart() {
-  document.getElementById('webui-autostart').checked = !!CONFIG.webui_auto_start;
   document.getElementById('webui-port').value = CONFIG.webui_port || 8087;
-}
-async function toggleWebuiAutostart() {
-  CONFIG.webui_auto_start = document.getElementById('webui-autostart').checked;
-  await putJSON('/api/config', CONFIG);
 }
 async function saveWebuiPort() {
   const port = parseInt(document.getElementById('webui-port').value);

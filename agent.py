@@ -3154,13 +3154,11 @@ WEBUI_PROC = None
 
 
 def maybe_spawn_webui():
-    """如果 config 里开了，就 spawn webui 子进程。返回 Popen 句柄。"""
+    """启动 webui 子进程。Web 控制台强制随 agent 启动。"""
     try:
         cfg = load_config()
     except Exception:
-        return None
-    if not cfg.get("webui_auto_start", True):
-        return None
+        cfg = {}
     try:
         env = os.environ.copy()
         port = str(cfg.get("webui_port", 8087))
