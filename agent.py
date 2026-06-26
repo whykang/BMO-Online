@@ -65,6 +65,7 @@ MEMORY_FILE = "chat_memory.json"
 STATE_FILE = "state.json"            # agent → webui 状态
 COMMANDS_FILE = "commands.json"      # webui → agent 命令
 BMO_IMAGE_FILE = "current_image.jpg"
+CAPTURES_DIR = "captures"
 LOG_DIR = "logs"
 ROMS_DIR = "roms"
 ROM_EXTS = (".nes", ".zip", ".fds", ".unf")
@@ -75,6 +76,7 @@ MUSIC_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".opus")
 VIDEO_EXTS = (".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v")
 
 os.makedirs(LOG_DIR, exist_ok=True)
+os.makedirs(CAPTURES_DIR, exist_ok=True)
 os.makedirs(ROMS_DIR, exist_ok=True)
 os.makedirs(MUSIC_DIR, exist_ok=True)
 os.makedirs(VIDEOS_DIR, exist_ok=True)
@@ -2219,6 +2221,11 @@ class BotGUI:
             if rot:
                 img = Image.open(BMO_IMAGE_FILE).rotate(rot, expand=True)
                 img.save(BMO_IMAGE_FILE)
+            try:
+                name = datetime.datetime.now().strftime("capture_%Y%m%d_%H%M%S.jpg")
+                shutil.copy2(BMO_IMAGE_FILE, os.path.join(CAPTURES_DIR, name))
+            except Exception as e:
+                log(f"[CAM] 保存拍照历史失败: {e}")
             return BMO_IMAGE_FILE
         except Exception as e:
             log(f"[CAM ERROR] {e}")

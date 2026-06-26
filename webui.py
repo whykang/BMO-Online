@@ -30,6 +30,7 @@ COMMANDS_FILE = "commands.json"
 AUTH_FILE = "auth.json"
 LOG_DIR = "logs"
 GENERATED_DIR = "generated"
+CAPTURES_DIR = "captures"
 WAKEWORDS_DIR = "wakewords"
 ROMS_DIR = "roms"
 MEDIA_DIR = "media"
@@ -37,11 +38,14 @@ MUSIC_DIR = os.path.join(MEDIA_DIR, "music")
 VIDEOS_DIR = os.path.join(MEDIA_DIR, "videos")
 ENV_FILE = ".env"
 
+os.makedirs(GENERATED_DIR, exist_ok=True)
+os.makedirs(CAPTURES_DIR, exist_ok=True)
+
 app = FastAPI(title="BMO Web Control")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/generated", StaticFiles(directory=GENERATED_DIR), name="generated")
+app.mount("/captures", StaticFiles(directory=CAPTURES_DIR), name="captures")
 os.makedirs(WAKEWORDS_DIR, exist_ok=True)
-os.makedirs(GENERATED_DIR, exist_ok=True)
 os.makedirs(ROMS_DIR, exist_ok=True)
 os.makedirs(MUSIC_DIR, exist_ok=True)
 os.makedirs(VIDEOS_DIR, exist_ok=True)
@@ -795,23 +799,48 @@ async def clear_history():
 
 
 # =========================================================================
-# 路由：生成图画廊
+# 路由：图片
 # =========================================================================
 
-@app.get("/api/images")
-async def list_images():
+def _list_image_dir(folder: str, url_prefix: str):
     items = []
-    if os.path.isdir(GENERATED_DIR):
-        for f in sorted(os.listdir(GENERATED_DIR), reverse=True):
+    if os.path.isdir(folder):
+        for f in sorted(os.listdir(folder), reverse=True):
             if f.lower().endswith((".png", ".jpg", ".jpeg")):
-                path = os.path.join(GENERATED_DIR, f)
+                path = os.path.join(folder, f)
                 items.append({
                     "filename": f,
-                    "url": f"/generated/{f}",
+                    "url": f"{url_prefix}/{f}",
                     "size_kb": round(os.path.getsize(path) / 1024, 1),
                     "mtime": os.path.getmtime(path),
                 })
     return items
+
+
+@app.get("/api/images")
+async def list_images():
+    return {
+        "generated": _list_image_dir(GENERATED_DIR, "/generated"),
+        "captures": _list_image_dir(CAPTURES_DIR, "/captures"),
+    }
+
+
+@app.delete("/api/images/{kind}/{filename}")
+async def delete_image_by_kind(kind: str, filename: str):
+    if "/" in filename or ".." in filename:
+        raise HTTPException(400, "非法文件名")
+    folders = {
+        "generated": GENERATED_DIR,
+        "captures": CAPTURES_DIR,
+    }
+    folder = folders.get(kind)
+    if not folder:
+        raise HTTPException(400, "未知图片类型")
+    path = os.path.join(folder, filename)
+    if os.path.exists(path):
+        os.remove(path)
+        return {"ok": True}
+    raise HTTPException(404, "文件不存在")
 
 
 @app.delete("/api/images/{filename}")

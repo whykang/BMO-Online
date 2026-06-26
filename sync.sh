@@ -24,6 +24,7 @@ rsync -avz --delete \
     --exclude='.env' \
     --exclude='logs/' \
     --exclude='generated/' \
+    --exclude='captures/' \
     --exclude='chat_memory.json' \
     --exclude='state.json' \
     --exclude='commands.json' \
