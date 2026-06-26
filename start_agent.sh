@@ -4,6 +4,8 @@ set -euo pipefail
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$BASE_DIR"
 
+"$BASE_DIR/install_desktop_launcher.sh" >/dev/null 2>&1 || true
+
 export DISPLAY="${DISPLAY:-:0}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 if [ -z "${WAYLAND_DISPLAY:-}" ]; then

@@ -156,6 +156,9 @@ if [ ! -f .env ]; then
     echo -e "${YELLOW}    nano .env${NC}"
 fi
 
+chmod +x start_agent.sh start_webui.sh install_desktop_launcher.sh
+./install_desktop_launcher.sh || true
+
 echo -e "${GREEN}✨ 安装完成！下一步：${NC}"
 echo -e "${GREEN}    1. nano .env 填入 API key${NC}"
 echo -e "${GREEN}    2. ./start_agent.sh   （会自动同时启动 Web 控制台）${NC}"
