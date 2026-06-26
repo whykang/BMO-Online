@@ -136,6 +136,8 @@ TOOLS_PROMPT = (
     "8. 媒体播放（后台上传音乐/视频后可用）：\n"
     "   播放指定音乐：{\"action\": \"play_music\", \"name\": \"音乐文件名或歌名\"}\n"
     "   播放指定视频：{\"action\": \"play_video\", \"name\": \"视频文件名或视频名\"}\n"
+    "   用户只说'播放音乐'或'播放视频'、没有指定名字时，也必须输出对应 JSON，name 填空字符串，"
+    "不要自己猜文件名、不要用普通文字回答。\n"
     "   列出音乐：{\"action\": \"list_music\"}\n"
     "   列出视频：{\"action\": \"list_videos\"}\n"
     "   停止播放：{\"action\": \"stop_media\"}\n"
@@ -1202,41 +1204,6 @@ class BotGUI:
         if not files:
             return f"还没有{label}文件。"
         return f"现在有这些{label}：" + "、".join(self._speakable_media_name(f) for f in files[:12])
-
-    def _extract_media_query(self, text, kind):
-        q = (text or "").strip()
-        q = re.sub(r"[。！？!?，,；;：:\s]+$", "", q)
-        q = re.sub(r"^(请|帮我|给我|麻烦你)?(播放|放一下|放一放|放|打开|来一段|来一个)", "", q).strip()
-        if kind == "video":
-            q = re.sub(r"^(视频|影片|电影|动画片|动画)", "", q).strip()
-            q = re.sub(r"(视频|影片|电影|动画片|动画)$", "", q).strip()
-        else:
-            q = re.sub(r"^(音乐|歌曲|歌|音频)", "", q).strip()
-            q = re.sub(r"(音乐|歌曲|歌|音频)$", "", q).strip()
-        return re.sub(r"^[的\s]+|[的\s]+$", "", q)
-
-    def _match_direct_media_action(self, text):
-        """本地识别明确媒体指令，避免大模型偶尔把工具调用说成普通回复。"""
-        raw = (text or "").strip()
-        if not raw:
-            return None
-        compact = re.sub(r"\s+", "", raw.lower())
-        if any(x in compact for x in ("停止播放", "停止音乐", "停止视频", "关闭音乐", "关闭视频", "stopmusic", "stopvideo", "stopplayback")):
-            return "MEDIA_STOP"
-        if (any(x in compact for x in ("列出视频", "视频列表", "有哪些视频", "有什么视频"))
-                or re.fullmatch(r"(看看)?视频(列表|文件)?", compact)):
-            return "VIDEO_LIST"
-        if (any(x in compact for x in ("列出音乐", "音乐列表", "有哪些音乐", "有什么音乐", "有哪些歌", "有什么歌"))
-                or re.fullmatch(r"(看看)?(音乐|歌曲|歌)(列表|文件)?", compact)):
-            return "MUSIC_LIST"
-        play_words = ("播放", "放一下", "放一放", "放", "打开", "听", "play")
-        if not any(w in compact for w in play_words):
-            return None
-        if any(w in compact for w in ("视频", "影片", "电影", "动画片", "movie", "video")):
-            return f"MEDIA_PLAY::video::{self._extract_media_query(raw, 'video')}"
-        if any(w in compact for w in ("音乐", "歌曲", "放歌", "听歌", "音频", "music", "song", "audio")):
-            return f"MEDIA_PLAY::music::{self._extract_media_query(raw, 'music')}"
-        return None
 
     def _media_is_running(self):
         proc = self.media_proc
@@ -2524,12 +2491,6 @@ class BotGUI:
         # 看图(拍照)走独立干净流程：不进工具检测，绝不念 JSON
         if img_path:
             self._respond_with_image(text, img_path)
-            return
-
-        direct_media = self._match_direct_media_action(text)
-        if direct_media:
-            log(f"[MEDIA] 本地识别: {direct_media}")
-            self.handle_action_result(direct_media, text, img_path)
             return
 
         self.set_state(BotStates.THINKING, "思考中...")
