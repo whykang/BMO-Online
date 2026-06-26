@@ -1645,7 +1645,9 @@ class BotGUI:
                 blank = Image.new('RGB', (self.BG_WIDTH, self.BG_HEIGHT), color='#0000FF')
                 self.animations[s].append(ImageTk.PhotoImage(blank))
 
-    def _begin_wait_wake_display(self):
+    def _begin_wait_wake_display(self, reset=False):
+        if self.wait_wake_started_at and not reset:
+            return
         self.wait_wake_started_at = time.time()
         self.waiting_face_active = False
 
@@ -1699,7 +1701,9 @@ class BotGUI:
                 self.current_state = state
                 self.current_frame_index = 0
                 self.current_animation_key = None
-            if state != BotStates.IDLE or (msg and "等待唤醒" not in msg):
+            if state == BotStates.IDLE and msg and "等待唤醒" in msg:
+                self._begin_wait_wake_display()
+            elif state != BotStates.IDLE or msg:
                 self._end_wait_wake_display()
             if msg:
                 self.current_status = msg
@@ -1816,7 +1820,6 @@ class BotGUI:
     # -------------------------------------------------------------------
     def detect_wake_word_or_ptt(self):
         self.set_state(BotStates.IDLE, "等待唤醒...")
-        self._begin_wait_wake_display()
         self.pending_print = None   # 回到等唤醒就清掉"要不要打印"，避免下次唤醒被误当成回答
         self.abort_to_wake.clear()  # 已经回到待唤醒，清掉长按中止标志
         self.interrupted.clear()
