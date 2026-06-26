@@ -143,8 +143,11 @@ TOOLS_PROMPT = (
     "   打印最近对话：{\"action\": \"print\", \"target\": \"history\", \"count\": 轮数}"
     "（用户说'打印6轮/6条对话'就填 count=6，一轮=一问一答；不说数量就省略 count）\n"
     "   打印指定文字：{\"action\": \"print\", \"content\": \"要打印的内容\"}。"
-    "如果用户说'讲个笑话/说一句话，并把它打印出来'，必须先用 say 说出完整内容，"
-    "再用 print 打印同样的完整内容，不能只打印不说。\n\n"
+    "如果用户说'讲个笑话/讲故事/说一句话，并把它打印出来'，必须输出 JSON 数组，"
+    "先用 say 说出完整内容，再用 print 打印同样的完整内容，不能只打印不说，也不能只说不打印。"
+    "例如：[{\"action\":\"say\",\"text\":\"为什么电脑喜欢喝茶？因为它怕死机。\"},"
+    "{\"action\":\"print\",\"content\":\"为什么电脑喜欢喝茶？因为它怕死机。\"}]。"
+    "用户说'再打印一遍/重新打印'，打印上一次打印过的文字。\n\n"
     "8. 游戏（FCEUX/NES）：\n"
     "   打开指定游戏：{\"action\": \"start_game\", \"game\": \"ROM 文件名或游戏名\"}\n"
     "   列出游戏：{\"action\": \"list_games\"}\n"
@@ -332,6 +335,7 @@ class BotGUI:
         self.tts_doubao = None  # 豆包/火山引擎 TTS，懒加载（用到才校验凭证）
         self.printer = None     # 热敏打印机，懒加载（用到才开串口）
         self.last_image_for_print = None  # 最近生成的图片路径（供"打印刚画的图"用）
+        self.last_text_for_print = None   # 最近成功打印的文字（供"再打印一遍"用）
         self.pending_print = None          # 刚画完图、正等用户回答"要不要打印"
         self._suppress_action_memory = False
         self._action_sequence_spoken = []
@@ -2240,9 +2244,15 @@ class BotGUI:
     def execute_actions(self, action_data):
         if isinstance(action_data, list):
             results = []
+            last_say_text = ""
             for item in action_data:
                 if isinstance(item, dict):
-                    results.append(self.execute_action(item))
+                    result = self.execute_action(item)
+                    if isinstance(result, str) and result.startswith("SAY_TEXT::"):
+                        last_say_text = result.split("::", 1)[1].strip()
+                    elif result == "PRINT_EMPTY" and last_say_text:
+                        result = f"PRINT_TEXT::{last_say_text}"
+                    results.append(result)
                 else:
                     results.append("INVALID_ACTION")
             return results
@@ -2579,6 +2589,7 @@ class BotGUI:
             p = self._get_printer()
             p.text(text)
             p.feed(3)
+            self.last_text_for_print = text
             log(f"[PRINT] 文字 {len(text)} 字")
             return True
         except Exception as e:
@@ -2611,6 +2622,18 @@ class BotGUI:
             who = "你" if m["role"] == "user" else "BMO"
             lines.append(f"{who}: {m['content']}")
         return self._print_text("\n".join(lines))
+
+    def _wants_text_print(self, text: str) -> bool:
+        return any(k in text for k in (
+            "打印出来", "打印一下", "打印一份", "打印这", "打印它", "打印出来",
+            "把它打印", "把这个打印", "并打印", "再打印", "重新打印",
+            "打出来", "打一份", "打出", "print",
+        ))
+
+    def _wants_repeat_print(self, text: str) -> bool:
+        return self._wants_text_print(text) and any(
+            k in text for k in ("再", "重新", "重复", "一遍", "上次", "刚才", "again")
+        )
 
     # -------------------------------------------------------------------
     # 主对话
@@ -2645,6 +2668,13 @@ class BotGUI:
         # 看图(拍照)走独立干净流程：不进工具检测，绝不念 JSON
         if img_path:
             self._respond_with_image(text, img_path)
+            return
+
+        if self._wants_repeat_print(text) and self.last_text_for_print:
+            self.set_state(BotStates.THINKING, "打印中...")
+            ok = self._print_text(self.last_text_for_print)
+            self._say("打印好啦！" if ok else "打印没成功，检查下打印机连接哦。",
+                      remember=text)
             return
 
         self.set_state(BotStates.THINKING, "思考中...")
@@ -2708,6 +2738,13 @@ class BotGUI:
             self.save_chat_history()
 
             self.wait_for_tts()
+            if self._wants_text_print(text):
+                printable = full_buf.strip()
+                if printable:
+                    self.set_state(BotStates.THINKING, "打印中...")
+                    ok = self._print_text(printable)
+                    self._say("打印好啦！" if ok else "打印没成功，检查下打印机连接哦。")
+                    return
             self.set_state(BotStates.IDLE, "准备好啦")
 
         except Exception as e:
@@ -2926,6 +2963,12 @@ class BotGUI:
             return
 
         if result == "PRINT_EMPTY":
+            if self._wants_repeat_print(original_text) and self.last_text_for_print:
+                self.set_state(BotStates.THINKING, "打印中...")
+                ok = self._print_text(self.last_text_for_print)
+                self._say("打印好啦！" if ok else "打印没成功，检查下打印机连接哦。",
+                          remember=original_text)
+                return
             self._say("你要打印什么呀？照片、对话记录，还是一段文字？", remember=original_text)
             return
 
