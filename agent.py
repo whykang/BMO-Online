@@ -131,22 +131,27 @@ TOOLS_PROMPT = (
     "2. 拍照看：{\"action\": \"capture_image\"}\n"
     "3. 画图：{\"action\": \"generate_image\", \"prompt\": \"图片描述\"}\n"
     "4. 查看系统状态/温度/CPU/内存/磁盘：{\"action\": \"get_system_status\"}\n"
-    "5. 调音量：{\"action\": \"set_volume\", \"value\": 数字}\n"
+    "5. 说一句指定内容：{\"action\": \"say\", \"text\": \"要说的话\"}；"
+    "只有当用户一句话里同时要求说内容又要求工具（例如'讲个笑话并打印出来'）时使用。"
+    "如果只是普通聊天或单独让你讲笑话，不要用 JSON，直接正常回答。\n"
+    "6. 调音量：{\"action\": \"set_volume\", \"value\": 数字}\n"
     "   value 是目标音量百分比(10~200，100=原始)；说'大一点/小一点'用相对值"
     "\"+20\"/\"-20\"；'最大'用\"max\"。不支持静音。\n"
-    "6. 打印（热敏打印机）：\n"
+    "7. 打印（热敏打印机）：\n"
     "   打印照片：{\"action\": \"print\", \"target\": \"photo\"}（拍一张照片并打印）\n"
     "   打印刚画的图：{\"action\": \"print\", \"target\": \"generated\"}\n"
     "   打印最近对话：{\"action\": \"print\", \"target\": \"history\", \"count\": 轮数}"
     "（用户说'打印6轮/6条对话'就填 count=6，一轮=一问一答；不说数量就省略 count）\n"
-    "   打印指定文字：{\"action\": \"print\", \"content\": \"要打印的内容\"}\n\n"
-    "7. 游戏（FCEUX/NES）：\n"
+    "   打印指定文字：{\"action\": \"print\", \"content\": \"要打印的内容\"}。"
+    "如果用户说'讲个笑话/说一句话，并把它打印出来'，必须先用 say 说出完整内容，"
+    "再用 print 打印同样的完整内容，不能只打印不说。\n\n"
+    "8. 游戏（FCEUX/NES）：\n"
     "   打开指定游戏：{\"action\": \"start_game\", \"game\": \"ROM 文件名或游戏名\"}\n"
     "   列出游戏：{\"action\": \"list_games\"}\n"
     "   暂停游戏：{\"action\": \"pause_game\"}\n"
     "   继续游戏：{\"action\": \"resume_game\"}\n"
     "   退出游戏：{\"action\": \"stop_game\"}\n"
-    "8. 媒体播放（后台上传音乐/视频后可用）：\n"
+    "9. 媒体播放（后台上传音乐/视频后可用）：\n"
     "   播放指定音乐：{\"action\": \"play_music\", \"name\": \"音乐文件名或歌名\"}\n"
     "   播放指定视频：{\"action\": \"play_video\", \"name\": \"视频文件名或视频名\"}\n"
     "   用户只说'播放音乐'或'播放视频'、没有指定名字时，也必须输出对应 JSON，name 填空字符串，"
@@ -154,8 +159,8 @@ TOOLS_PROMPT = (
     "   列出音乐：{\"action\": \"list_music\"}\n"
     "   列出视频：{\"action\": \"list_videos\"}\n"
     "   停止播放：{\"action\": \"stop_media\"}\n"
-    "9. 识别屏幕（截屏看屏幕上有什么）：{\"action\": \"read_screen\"}\n"
-    "10. 隐身（最小化自己但继续运行）：{\"action\": \"hide\"}\n"
+    "10. 识别屏幕（截屏看屏幕上有什么）：{\"action\": \"read_screen\"}\n"
+    "11. 隐身（最小化自己但继续运行）：{\"action\": \"hide\"}\n"
     "   取消隐身（恢复显示）：{\"action\": \"unhide\"}\n\n"
     "重要：只要用户的话涉及上面这些能力（尤其是调音量，例如'声音大一点'、'调大声'、"
     "'太吵了小声点'、'音量调到50'），就必须直接输出对应工具的纯 JSON，"
@@ -2316,6 +2321,7 @@ class BotGUI:
             "check_time": "get_time", "draw": "generate_image", "paint": "generate_image",
             "status": "get_system_status", "system_status": "get_system_status",
             "system": "get_system_status", "health": "get_system_status",
+            "speak": "say", "talk": "say", "reply": "say",
             "volume": "set_volume", "adjust_volume": "set_volume",
             "set_vol": "set_volume", "change_volume": "set_volume",
             "print_photo": "print", "print_text": "print", "print_history": "print",
@@ -2351,6 +2357,12 @@ class BotGUI:
 
         if action == "get_system_status":
             return self.get_system_status()
+
+        if action == "say":
+            text = (action_data.get("text") or action_data.get("content")
+                    or action_data.get("message") or action_data.get("joke")
+                    or value or "")
+            return f"SAY_TEXT::{text}"
 
         if action == "set_volume":
             return self._set_volume_action(action_data)
@@ -2712,6 +2724,11 @@ class BotGUI:
         if isinstance(result, str) and result.startswith("VOLUME_SET::"):
             # 音量已在 execute_action 里改好，这里直接念确认（新音量立即生效）
             self._say(result.split("::", 1)[1], remember=original_text)
+            return
+
+        if isinstance(result, str) and result.startswith("SAY_TEXT::"):
+            text = result.split("::", 1)[1].strip()
+            self._say(text or "好的~", remember=original_text)
             return
 
         if result == "READ_SCREEN":
