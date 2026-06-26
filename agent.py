@@ -183,6 +183,7 @@ class BotStates:
     ERROR = "error"
     CAPTURING = "capturing"
     WARMUP = "warmup"
+    WAITING_FACE = "waiting"
 
 
 # =========================================================================
@@ -287,8 +288,11 @@ class BotGUI:
         self.current_status = "启动中..."
         self.animations = {}
         self.current_frame_index = 0
+        self.current_animation_key = None
         self.current_overlay_image = None
         self.exiting = False
+        self.wait_wake_started_at = None
+        self.waiting_face_active = False
 
         # 记忆
         self.permanent_memory = self.load_chat_history()
@@ -1598,14 +1602,30 @@ class BotGUI:
     # -------------------------------------------------------------------
     # 动画 / 状态显示
     # -------------------------------------------------------------------
+    def _waiting_animation_files(self, files):
+        closed_to_open = [
+            "waiting 04.png",
+            "waiting 05.png",
+            "waiting 03.png",
+            "waiting 02.png",
+            "waiting 01.png",
+            "waiting 06.png",
+        ]
+        present = {f: f for f in files}
+        ordered = [present[f] for f in closed_to_open if f in present]
+        ordered.extend(f for f in files if f not in set(ordered))
+        return ordered
+
     def load_animations(self):
         base = "faces"
-        states = ["idle", "listening", "thinking", "speaking", "error", "capturing", "warmup"]
+        states = ["idle", "listening", "thinking", "speaking", "error", "capturing", "warmup", "waiting"]
         for s in states:
             folder = os.path.join(base, s)
             self.animations[s] = []
             if os.path.isdir(folder):
                 files = sorted(f for f in os.listdir(folder) if f.lower().endswith(".png"))
+                if s == BotStates.WAITING_FACE:
+                    files = self._waiting_animation_files(files)
                 for f in files:
                     try:
                         img = Image.open(os.path.join(folder, f)).resize((self.BG_WIDTH, self.BG_HEIGHT))
@@ -1616,12 +1636,33 @@ class BotGUI:
                 blank = Image.new('RGB', (self.BG_WIDTH, self.BG_HEIGHT), color='#0000FF')
                 self.animations[s].append(ImageTk.PhotoImage(blank))
 
+    def _begin_wait_wake_display(self):
+        self.wait_wake_started_at = time.time()
+        self.waiting_face_active = False
+
+    def _end_wait_wake_display(self):
+        self.wait_wake_started_at = None
+        self.waiting_face_active = False
+
+    def _current_animation_key(self):
+        if self.current_state == BotStates.IDLE and self.wait_wake_started_at:
+            if time.time() - self.wait_wake_started_at >= 300:
+                if not self.waiting_face_active:
+                    self.waiting_face_active = True
+                    self.current_frame_index = 0
+                return BotStates.WAITING_FACE
+        return self.current_state
+
     def update_animation(self):
-        frames = self.animations.get(self.current_state) or self.animations.get(BotStates.IDLE)
+        animation_key = self._current_animation_key()
+        frames = self.animations.get(animation_key) or self.animations.get(BotStates.IDLE)
         if not frames:
             self.master.after(500, self.update_animation)
             return
-        if self.current_state == BotStates.SPEAKING and len(frames) > 1:
+        if animation_key != self.current_animation_key:
+            self.current_animation_key = animation_key
+            self.current_frame_index = 0
+        elif self.current_state == BotStates.SPEAKING and len(frames) > 1:
             self.current_frame_index = random.randint(1, len(frames) - 1)
         else:
             self.current_frame_index = (self.current_frame_index + 1) % len(frames)
@@ -1648,6 +1689,9 @@ class BotGUI:
             if self.current_state != state:
                 self.current_state = state
                 self.current_frame_index = 0
+                self.current_animation_key = None
+            if state != BotStates.IDLE or (msg and "等待唤醒" not in msg):
+                self._end_wait_wake_display()
             if msg:
                 self.current_status = msg
                 self.status_var.set(msg)
@@ -1763,6 +1807,7 @@ class BotGUI:
     # -------------------------------------------------------------------
     def detect_wake_word_or_ptt(self):
         self.set_state(BotStates.IDLE, "等待唤醒...")
+        self._begin_wait_wake_display()
         self.pending_print = None   # 回到等唤醒就清掉"要不要打印"，避免下次唤醒被误当成回答
         self.abort_to_wake.clear()  # 已经回到待唤醒，清掉长按中止标志
         self.interrupted.clear()
