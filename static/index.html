@@ -105,6 +105,9 @@
   .col.disabled select, .col.disabled input, .col.disabled .model-list { pointer-events: none; }
   .key-missing { color: var(--err); font-size: 12px; margin-top: 8px; cursor: pointer;
                  text-decoration: underline; }
+  .api-key-link { align-items: flex-start; }
+  .api-key-link a { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
+  .api-key-link a:hover { text-decoration: underline; }
   .cur-model { margin-top: 10px; font-size: 13px; }
   .cur-model b { color: var(--accent); }
   .model-list {
@@ -671,6 +674,13 @@
       <label>新 Key：</label>
       <input type="password" id="key-value" placeholder="sk-..." style="flex: 1; min-width: 300px;">
     </div>
+    <div class="row api-key-link">
+      <label>获取网址：</label>
+      <span>
+        <a id="key-provider-url" href="#" target="_blank" rel="noopener noreferrer"></a>
+        <span class="help" id="key-provider-url-help"></span>
+      </span>
+    </div>
     <div class="row">
       <button class="btn" onclick="saveKey()">保存到 .env</button>
     </div>
@@ -818,6 +828,7 @@ const I18N_EN = {
   "空格": "Space", "左Shift": "Left Shift", "回车": "Enter", "退格": "Backspace",
   // keys
   "API Key 状态": "API Key Status", "更新 API Key": "Update API Key", "API 花费": "API Cost",
+  "获取网址：": "Get API key:", "打开 ": "Open ", " API Key 页面": " API key page",
   "新 Key：": "New key:", "保存到 .env": "Save to .env",
   "豆包TTS API Key（火山 seed-tts-2.0）": "Doubao TTS API Key (Volcengine seed-tts-2.0)",
   "硅基流动暂未开放公开余额查询 API，请到官方控制台查看：": "SiliconFlow does not provide a public balance API yet. Check the official console:",
@@ -873,6 +884,7 @@ const I18N_EN = {
   "模型未下载（运行 setup_pi.sh）": "Model not downloaded (run setup_pi.sh)", "端口范围 1024~65535": "Port range 1024–65535",
   "（暂无对话）": "(no chat yet)", "（还没画过图）": "(no images yet)", "（当前）": "(current)", "（未选择）": "(none selected)",
   "硅基流动 API Key": "SiliconFlow API Key", "豆包TTS API Key": "Doubao TTS API Key",
+  "豆包 TTS / 火山引擎": "Doubao TTS / Volcengine",
   "自动检测 USB 音响（推荐）": "Auto-detect USB speaker (recommended)", "系统默认输出": "System default output",
   " 未配置，相关选项不可选": " not configured; related options are disabled",
   "已保存。引擎=": "Saved. Engine=", "，输出=": ", output=", "，麦克风=": ", microphone=",
@@ -1448,6 +1460,36 @@ const PROVIDERS_BY_KIND = {
 const KIND_CONFIG = { llm: 'llm', vision: 'vision', stt: 'stt', image_gen: 'image_gen' };
 const KIND_MAX_SHOWN = 1000;
 let KEYS = { siliconflow: false, openrouter: false, deepseek: false, volc_apikey: false };
+
+const API_KEY_URLS = {
+  siliconflow: {
+    name: 'SiliconFlow',
+    url: 'https://cloud.siliconflow.cn/account/ak',
+  },
+  openrouter: {
+    name: 'OpenRouter',
+    url: 'https://openrouter.ai/settings/keys',
+  },
+  deepseek: {
+    name: 'DeepSeek',
+    url: 'https://platform.deepseek.com/api_keys',
+  },
+  volc_apikey: {
+    name: '豆包 TTS / 火山引擎',
+    url: 'https://console.volcengine.com/speech/app',
+  },
+};
+
+function updateApiKeyUrl() {
+  const provider = document.getElementById('key-provider')?.value;
+  const link = document.getElementById('key-provider-url');
+  const help = document.getElementById('key-provider-url-help');
+  const info = API_KEY_URLS[provider];
+  if (!link || !help || !info) return;
+  link.href = info.url;
+  link.textContent = `${tr('打开 ')}${tr(info.name)}${tr(' API Key 页面')}`;
+  help.textContent = '  ' + info.url;
+}
 const SELECTED = { llm: {}, vision: {}, image_gen: {} };   // 当前选中 {provider, model}
 
 function dedupe(list) {
@@ -1756,6 +1798,7 @@ document.getElementById('wake-score').addEventListener('input', e => {
 document.getElementById('wake-legacy-threshold').addEventListener('input', e => {
   document.getElementById('wake-legacy-threshold-val').textContent = parseFloat(e.target.value).toFixed(2);
 });
+document.getElementById('key-provider').addEventListener('change', updateApiKeyUrl);
 
 async function loadWakeList() {
   const list = await fetchJSON('/api/wakewords');
@@ -1951,6 +1994,7 @@ async function loadKeys() {
   // key 状态变了，重渲染双列模型（灰显/恢复）
   for (const k of TWO_COL_KINDS) renderTwoCol(k);
   updateTTSProviderUI();
+  updateApiKeyUrl();
 }
 async function saveKey() {
   const provider = document.getElementById('key-provider').value;
