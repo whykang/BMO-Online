@@ -66,6 +66,11 @@
     padding: 7px 13px; border-radius: 5px; cursor: pointer; font-size: 13px;
   }
   button.btn:hover { background: #dceae5; }
+  button.btn:disabled {
+    background: var(--panel-light); color: var(--muted); border-color: var(--line);
+    cursor: not-allowed; opacity: 0.65;
+  }
+  button.btn:disabled:hover { background: var(--panel-light); }
   button.btn.danger { background: #f7e9e7; color: #8b403b; border-color: #e0c1bd; }
   button.btn.secondary { background: #fff; color: var(--text); border-color: var(--line); }
   .file-input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
@@ -188,8 +193,7 @@
   <div class="panel">
     <h2>快捷操作</h2>
     <div class="row">
-      <button class="btn" onclick="trigger('record')">开始录音</button>
-      <button class="btn secondary" onclick="trigger('stop')">停止录音</button>
+      <button class="btn" id="wake-btn" onclick="triggerWake()">唤醒 BMO</button>
       <button class="btn danger" onclick="trigger('interrupt')">打断说话</button>
       <button class="btn" onclick="trigger('capture')">拍照</button>
     </div>
@@ -729,7 +733,7 @@ const I18N_EN = {
   "记忆轮数：": "Memory turns:", "系统信息": "System Info", "设备：": "Device:",
   "CPU 使用率：": "CPU usage:", "温度：": "Temperature:", "内存：": "Memory:", "存储：": "Storage:",
   "负载：": "Load:", "已运行：": "Uptime:", "快捷操作": "Quick Actions",
-  "开始录音": "Start recording", "停止录音": "Stop recording", "打断说话": "Interrupt",
+  "唤醒 BMO": "Wake BMO", "开始录音": "Start recording", "停止录音": "Stop recording", "打断说话": "Interrupt",
   "拍照": "Take photo", "打印控制（热敏打印机）": "Print (thermal printer)",
   "拍照打印": "Photo + print", "打印刚画的图": "Print last image", "打印对话：": "Print chat:",
   "打印": "Print", "打印文字：": "Print text:", "轮": "turns", "0 轮": "0 turns",
@@ -864,7 +868,7 @@ const I18N_EN = {
   "说话中...": "Speaking...", "思考中...": "Thinking...", "游戏已退出": "Game exited",
   "记忆已清空": "Memory cleared", "画画中: ": "Drawing: ",
   "已发送启动命令": "Start command sent", "启动失败：": "Start failed: ", "已发送命令": "Command sent",
-  "失败：": "Failed: ",
+  "唤醒失败：": "Wake failed: ", "失败：": "Failed: ",
   "已发送打印任务": "Print job sent", "已发送：打印 ": "Sent: print ", " 轮对话": " chat turns",
   "请输入要打印的文字": "Enter text to print",
   "新文件名（不写后缀会自动保留 ": "New filename (leave extension off to keep ",
@@ -1131,10 +1135,25 @@ async function pollState() {
     document.getElementById('db-status').textContent = tr(s.status);
     document.getElementById('db-queue').textContent = s.tts_queue_len;
     document.getElementById('db-mem').textContent = s.memory_turns;
+    updateWakeButton(s.state, s.status);
     updateGameState(s.game || {});
   } catch (e) {
     document.getElementById('agent-status').textContent = tr('连接不上 agent');
+    updateWakeButton('', '');
   }
+}
+
+function updateWakeButton(state, status) {
+  const btn = document.getElementById('wake-btn');
+  if (!btn) return;
+  const st = String(state || '').toLowerCase();
+  const msg = String(status || '');
+  const msgLower = msg.toLowerCase();
+  const canWake = st === 'idle' && (
+    msg.includes('等待') || msg.includes('准备好') ||
+    msgLower.includes('wait') || msgLower.includes('ready')
+  );
+  btn.disabled = !canWake;
 }
 
 function updateGameState(game) {
@@ -1917,6 +1936,17 @@ async function deleteImage(name) {
 // ============ 快捷操作 ============
 async function trigger(action) {
   await postJSON(`/api/trigger/${action}`);
+}
+async function triggerWake() {
+  const btn = document.getElementById('wake-btn');
+  if (btn?.disabled) return;
+  if (btn) btn.disabled = true;
+  try {
+    await trigger('wake');
+  } catch (e) {
+    if (btn) btn.disabled = false;
+    alert('唤醒失败：' + e.message);
+  }
 }
 
 // ============ 打印控制 ============

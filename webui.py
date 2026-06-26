@@ -716,6 +716,12 @@ async def trigger_record():
     return {"ok": True}
 
 
+@app.post("/api/trigger/wake")
+async def trigger_wake():
+    queue_command({"action": "ptt_start"})
+    return {"ok": True}
+
+
 @app.post("/api/trigger/stop")
 async def trigger_stop():
     queue_command({"action": "ptt_stop"})
