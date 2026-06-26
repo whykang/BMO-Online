@@ -112,8 +112,10 @@ def save_config(cfg: dict):
 # 工具调用说明（硬编码，用户在网页改不到）
 # =========================================================================
 TOOLS_PROMPT = (
-    "你有这几个工具，需要用时整条回复必须是纯 JSON，第一个字符就是 {，"
-    "前后绝对不要加任何文字、不要说'让我试试'之类的话：\n"
+    "你有这几个工具，需要用时整条回复必须是纯 JSON，第一个字符只能是 { 或 [，"
+    "前后绝对不要加任何文字、不要说'让我试试'之类的话。"
+    "如果用户一句话里有多项控制，就按执行顺序输出 JSON 数组，例如："
+    "[{\"action\":\"set_volume\",\"value\":50},{\"action\":\"play_music\",\"name\":\"花海\"}]。\n"
     "1. 查时间：{\"action\": \"get_time\"}\n"
     "2. 拍照看：{\"action\": \"capture_image\"}\n"
     "3. 画图：{\"action\": \"generate_image\", \"prompt\": \"图片描述\"}\n"
@@ -2154,13 +2156,32 @@ class BotGUI:
     # 工具执行
     # -------------------------------------------------------------------
     def extract_json_from_text(self, text):
-        try:
-            m = re.search(r'\{.*\}', text, re.DOTALL)
-            if m:
-                return json.loads(m.group(0))
-        except Exception:
-            pass
+        if not text:
+            return None
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.IGNORECASE)
+        starts = [i for i in (cleaned.find("{"), cleaned.find("[")) if i >= 0]
+        if not starts:
+            return None
+        decoder = json.JSONDecoder()
+        for start in sorted(starts):
+            try:
+                data, _ = decoder.raw_decode(cleaned[start:])
+                if isinstance(data, (dict, list)):
+                    return data
+            except Exception:
+                continue
         return None
+
+    def execute_actions(self, action_data):
+        if isinstance(action_data, list):
+            results = []
+            for item in action_data:
+                if isinstance(item, dict):
+                    results.append(self.execute_action(item))
+                else:
+                    results.append("INVALID_ACTION")
+            return results
+        return self.execute_action(action_data)
 
     def _read_cpu_times(self):
         try:
@@ -2274,6 +2295,8 @@ class BotGUI:
         return "系统状态：" + "；".join(items) + "。"
 
     def execute_action(self, action_data):
+        if not isinstance(action_data, dict):
+            return "INVALID_ACTION"
         raw = (action_data.get("action") or "").lower().strip()
         value = action_data.get("value") or action_data.get("query") or action_data.get("prompt")
 
@@ -2570,8 +2593,8 @@ class BotGUI:
                 if self.interrupted.is_set():
                     break
                 full_buf += chunk
-                # 工具调用检测：回复里只要出现 { 就当作工具调用，立刻停止朗读
-                if allow_tools and not is_action and "{" in full_buf:
+                # 工具调用检测：对象或数组 JSON 都立刻停止朗读
+                if allow_tools and not is_action and ("{" in full_buf or full_buf.lstrip().startswith("[")):
                     is_action = True
                     continue
                 if is_action:
@@ -2600,8 +2623,8 @@ class BotGUI:
             if is_action:
                 action_data = self.extract_json_from_text(full_buf)
                 if action_data:
-                    result = self.execute_action(action_data)
-                    self.handle_action_result(result, text, img_path)
+                    result = self.execute_actions(action_data)
+                    self.handle_action_results(result, text, img_path)
                     return
 
             # 保存对话历史
@@ -2658,6 +2681,20 @@ class BotGUI:
             log(f"[LLM ERROR] {e}")
             final = f"我看到了：{desc}"
         self._say(final, remember=text, overlay_path=img_path)
+
+    def handle_action_results(self, result, original_text, img_path):
+        """处理单个或多个工具结果；数组按顺序执行。"""
+        if not isinstance(result, list):
+            self.handle_action_result(result, original_text, img_path)
+            return
+        if not result:
+            self.handle_action_result("INVALID_ACTION", original_text, img_path)
+            return
+        log(f"[ACTION] 多项执行: {len(result)}")
+        for item in result:
+            if self.exiting:
+                return
+            self.handle_action_result(item, original_text, img_path)
 
     def handle_action_result(self, result, original_text, img_path):
         """工具执行结果处理。"""
