@@ -68,6 +68,13 @@
   button.btn:hover { background: #dceae5; }
   button.btn.danger { background: #f7e9e7; color: #8b403b; border-color: #e0c1bd; }
   button.btn.secondary { background: #fff; color: var(--text); border-color: var(--line); }
+  .file-input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+  .file-label {
+    background: #fff; color: var(--text); border: 1px solid var(--line);
+    padding: 7px 13px; border-radius: 5px; cursor: pointer; font-size: 13px;
+  }
+  .file-label:hover { background: var(--panel-light); }
+  .file-name { color: var(--text); font-size: 14px; }
   .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
   .img-card { background: #fff; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
   .img-card img { width: 100%; display: block; }
@@ -548,7 +555,9 @@
     </div>
     <h3 style="margin-top: 20px;">上传 .onnx 模型</h3>
     <div class="row">
-      <input type="file" id="wake-upload" accept=".onnx">
+      <input class="file-input" type="file" id="wake-upload" accept=".onnx" onchange="updateFileLabel('wake-upload','wake-upload-name')">
+      <label class="file-label" for="wake-upload">选择文件</label>
+      <span class="file-name" id="wake-upload-name">未选择任何文件</span>
       <button class="btn" onclick="uploadWake()">上传</button>
     </div>
     <h3 style="margin-top: 20px;">本地模型库</h3>
@@ -605,7 +614,9 @@
       <span class="help" id="game-hint"></span>
     </div>
     <div class="row">
-      <input type="file" id="rom-file" accept=".nes,.zip,.fds,.unf">
+      <input class="file-input" type="file" id="rom-file" accept=".nes,.zip,.fds,.unf" onchange="updateFileLabel('rom-file','rom-file-name')">
+      <label class="file-label" for="rom-file">选择文件</label>
+      <span class="file-name" id="rom-file-name">未选择任何文件</span>
       <button class="btn" onclick="uploadRom()">上传 ROM</button>
       <button class="btn secondary" onclick="loadRoms()">刷新</button>
     </div>
@@ -770,6 +781,7 @@ const I18N_EN = {
   "识别阈值：": "Threshold:", "越低越容易触发，越高越严格": "Lower = easier to trigger, higher = stricter",
   "关键词得分：": "Keyword score:", "越高越偏向词典里的词（误唤醒少，但漏唤醒多）": "Higher favors dictionary words (fewer false triggers, more misses)",
   "OpenWakeWord 模型（英文）": "OpenWakeWord model (English)", "上传 .onnx 模型": "Upload .onnx model",
+  "选择文件": "Choose file", "未选择任何文件": "No file selected",
   "上传": "Upload", "使用提示": "Tips", "本地模型库": "Local model library", "检查中...": "Checking...",
   "Sherpa-ONNX 默认中文 KWS 模型支持任意中文关键词，3~4 字最稳。例：「你好小明」「嗨小明」「嘿哔莫哔莫」":
     "The default Sherpa-ONNX Chinese KWS model supports arbitrary Chinese keywords; 3-4 characters is most stable. Examples: \"你好小明\", \"嗨小明\", \"嘿哔莫哔莫\"",
@@ -832,6 +844,14 @@ const I18N_EN = {
   "已保存，下一轮对话生效": "Saved; applies next chat", "已保存，正在重载唤醒词": "Saved; reloading wake word",
   "已填入默认性格，确认后点“保存”生效": "Default personality filled in; click Save to apply",
   "已保存。留空的状态不会播放。": "Saved. Empty cues won't play.",
+  "等待唤醒...": "Waiting for wake word...", "准备好啦": "Ready", "暖机中...": "Warming up...",
+  "在听...": "Listening...", "请说...": "Please speak...", "没听到": "Didn't hear anything",
+  "没听清": "Didn't catch that", "已打断": "Interrupted", "重置": "Reset",
+  "看一下屏幕...": "Checking the screen...", "看一下...": "Taking a look...",
+  "看看是什么...": "Looking at it...", "拍照打印中...": "Printing photo...",
+  "打印中...": "Printing...", "打印图片中...": "Printing image...", "打印对话中...": "Printing chat...",
+  "说话中...": "Speaking...", "思考中...": "Thinking...", "游戏已退出": "Game exited",
+  "记忆已清空": "Memory cleared", "画画中: ": "Drawing: ",
   "已发送启动命令": "Start command sent", "启动失败：": "Start failed: ", "已发送命令": "Command sent",
   "失败：": "Failed: ",
   "已发送打印任务": "Print job sent", "已发送：打印 ": "Sent: print ", " 轮对话": " chat turns",
@@ -858,6 +878,7 @@ const I18N_EN = {
   "已保存。引擎=": "Saved. Engine=", "，输出=": ", output=", "，麦克风=": ", microphone=",
   "核": "cores", "⚠️ 供电不足（欠压）": "⚠️ Undervoltage", "⚠️ 已降频": "⚠️ Throttled",
   "🔥 温度偏高": "🔥 High temperature",
+  "未知": "Unknown", "天": "d ", "小时": "h ", "分钟": "min",
   "还有 ": "More: ", " 个，输入关键词缩小范围": " more; type a keyword to narrow the list",
   "已加载：LLM ": "Loaded: LLM ", " · 视觉 ": " · vision ", " · 文生图 ": " · image ", " · STT ": " · STT ",
   "（10分钟缓存）": " (10 min cache)",
@@ -939,6 +960,12 @@ async function postJSON(url, body) {
 }
 async function deleteJSON(url) {
   return fetchJSON(url, {method: 'DELETE'});
+}
+function updateFileLabel(inputId, labelId) {
+  const inp = document.getElementById(inputId);
+  const label = document.getElementById(labelId);
+  if (!inp || !label) return;
+  label.textContent = inp.files && inp.files.length ? inp.files[0].name : tr('未选择任何文件');
 }
 
 function showTab(name) {
@@ -1045,6 +1072,7 @@ async function uploadRom() {
   const r = await fetch('/api/roms/upload', { method: 'POST', body: fd });
   if (!r.ok) { alert('上传失败：' + (await r.text())); return; }
   inp.value = '';
+  updateFileLabel('rom-file', 'rom-file-name');
   await loadRoms();
   alert('上传成功');
 }
@@ -1756,6 +1784,8 @@ async function uploadWake() {
   const fd = new FormData();
   fd.append('file', f);
   await fetch('/api/wakewords/upload', {method: 'POST', body: fd});
+  document.getElementById('wake-upload').value = '';
+  updateFileLabel('wake-upload', 'wake-upload-name');
   alert('已上传');
   await loadWakeList();
 }
