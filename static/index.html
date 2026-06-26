@@ -80,6 +80,7 @@
   }
   .file-label:hover { background: var(--panel-light); }
   .file-name { color: var(--text); font-size: 14px; }
+  .upload-progress { min-width: 170px; }
   .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
   .img-card { background: #fff; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
   .img-card img { width: 100%; display: block; }
@@ -611,10 +612,11 @@
   <div class="panel">
     <h2>音乐播放</h2>
     <div class="row">
-      <input class="file-input" type="file" id="music-file" accept=".mp3,.wav,.flac,.m4a,.aac,.ogg,.opus" onchange="updateFileLabel('music-file','music-file-name')">
+      <input class="file-input" type="file" id="music-file" accept=".mp3,.wav,.flac,.m4a,.aac,.ogg,.opus" multiple onchange="updateFileLabel('music-file','music-file-name')">
       <label class="file-label" for="music-file">选择文件</label>
       <span class="file-name" id="music-file-name">未选择任何文件</span>
       <button class="btn" onclick="uploadMedia('music')">上传音乐</button>
+      <span class="help upload-progress" id="music-upload-progress"></span>
       <button class="btn secondary" onclick="loadMedia('music')">刷新</button>
       <button class="btn danger" onclick="stopMedia()">停止播放</button>
     </div>
@@ -623,10 +625,11 @@
   <div class="panel">
     <h2>视频播放</h2>
     <div class="row">
-      <input class="file-input" type="file" id="video-file" accept=".mp4,.mkv,.avi,.mov,.webm,.m4v" onchange="updateFileLabel('video-file','video-file-name')">
+      <input class="file-input" type="file" id="video-file" accept=".mp4,.mkv,.avi,.mov,.webm,.m4v" multiple onchange="updateFileLabel('video-file','video-file-name')">
       <label class="file-label" for="video-file">选择文件</label>
       <span class="file-name" id="video-file-name">未选择任何文件</span>
       <button class="btn" onclick="uploadMedia('video')">上传视频</button>
+      <span class="help upload-progress" id="video-upload-progress"></span>
       <button class="btn secondary" onclick="loadMedia('video')">刷新</button>
       <button class="btn danger" onclick="stopMedia()">停止播放</button>
     </div>
@@ -651,10 +654,11 @@
       <span class="help" id="game-hint"></span>
     </div>
     <div class="row">
-      <input class="file-input" type="file" id="rom-file" accept=".nes,.zip,.fds,.unf" onchange="updateFileLabel('rom-file','rom-file-name')">
+      <input class="file-input" type="file" id="rom-file" accept=".nes,.zip,.fds,.unf" multiple onchange="updateFileLabel('rom-file','rom-file-name')">
       <label class="file-label" for="rom-file">选择文件</label>
       <span class="file-name" id="rom-file-name">未选择任何文件</span>
       <button class="btn" onclick="uploadRom()">上传 ROM</button>
+      <span class="help upload-progress" id="rom-upload-progress"></span>
       <button class="btn secondary" onclick="loadRoms()">刷新</button>
     </div>
     <div class="help">上传 NES 游戏（.nes / .zip），也可以语音说“打开某某游戏”。运行游戏时 BMO 会退到后台；唤醒 BMO 会自动暂停游戏。</div>
@@ -819,6 +823,8 @@ const I18N_EN = {
   "关键词得分：": "Keyword score:", "越高越偏向词典里的词（误唤醒少，但漏唤醒多）": "Higher favors dictionary words (fewer false triggers, more misses)",
   "OpenWakeWord 模型（英文）": "OpenWakeWord model (English)", "上传 .onnx 模型": "Upload .onnx model",
   "选择文件": "Choose file", "未选择任何文件": "No file selected",
+  "已选择 ": "Selected ", " 个文件": " files", "正在上传 ": "Uploading ",
+  "上传完成：": "Upload complete: ", "网络错误": "Network error",
   "上传": "Upload", "使用提示": "Tips", "本地模型库": "Local model library", "检查中...": "Checking...",
   "Sherpa-ONNX 默认中文 KWS 模型支持任意中文关键词，3~4 字最稳。例：「你好小明」「嗨小明」「嘿哔莫哔莫」":
     "The default Sherpa-ONNX Chinese KWS model supports arbitrary Chinese keywords; 3-4 characters is most stable. Examples: \"你好小明\", \"嗨小明\", \"嘿哔莫哔莫\"",
@@ -1010,7 +1016,60 @@ function updateFileLabel(inputId, labelId) {
   const inp = document.getElementById(inputId);
   const label = document.getElementById(labelId);
   if (!inp || !label) return;
-  label.textContent = inp.files && inp.files.length ? inp.files[0].name : tr('未选择任何文件');
+  const count = inp.files ? inp.files.length : 0;
+  if (!count) {
+    label.textContent = tr('未选择任何文件');
+  } else if (count === 1) {
+    label.textContent = inp.files[0].name;
+  } else {
+    label.textContent = tr('已选择 ') + count + tr(' 个文件');
+  }
+}
+function setUploadProgress(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text ? tr(text) : '';
+}
+function uploadOneFile(url, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.upload.onprogress = ev => {
+      if (ev.lengthComputable && onProgress) {
+        onProgress(Math.round((ev.loaded / ev.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.responseText);
+      else reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+    };
+    xhr.onerror = () => reject(new Error('网络错误'));
+    const fd = new FormData();
+    fd.append('file', file);
+    xhr.send(fd);
+  });
+}
+async function uploadSelectedFiles({ inputId, labelId, progressId, url, emptyMessage, reload }) {
+  const inp = document.getElementById(inputId);
+  const files = Array.from((inp && inp.files) || []);
+  if (!files.length) return alert(emptyMessage);
+  try {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const prefix = files.length > 1 ? `${i + 1}/${files.length}: ` : '';
+      setUploadProgress(progressId, '正在上传 ' + prefix + file.name + ' 0%');
+      await uploadOneFile(url, file, pct => {
+        setUploadProgress(progressId, '正在上传 ' + prefix + file.name + ' ' + pct + '%');
+      });
+    }
+    inp.value = '';
+    updateFileLabel(inputId, labelId);
+    if (reload) await reload();
+    setUploadProgress(progressId, '上传完成：' + files.length + ' 个文件');
+    alert('上传成功');
+  } catch (e) {
+    setUploadProgress(progressId, '');
+    alert('上传失败：' + e.message);
+  }
 }
 
 function showTab(name) {
@@ -1111,16 +1170,14 @@ async function loadRoms() {
   }
 }
 async function uploadRom() {
-  const inp = document.getElementById('rom-file');
-  if (!inp.files.length) return alert('先选一个 ROM 文件');
-  const fd = new FormData();
-  fd.append('file', inp.files[0]);
-  const r = await fetch('/api/roms/upload', { method: 'POST', body: fd });
-  if (!r.ok) { alert('上传失败：' + (await r.text())); return; }
-  inp.value = '';
-  updateFileLabel('rom-file', 'rom-file-name');
-  await loadRoms();
-  alert('上传成功');
+  await uploadSelectedFiles({
+    inputId: 'rom-file',
+    labelId: 'rom-file-name',
+    progressId: 'rom-upload-progress',
+    url: '/api/roms/upload',
+    emptyMessage: '先选一个 ROM 文件',
+    reload: loadRoms,
+  });
 }
 async function deleteRom(name) {
   if (!confirm('删除 ' + name + ' ？')) return;
@@ -2015,16 +2072,14 @@ async function loadMedia(kind) {
   }
 }
 async function uploadMedia(kind) {
-  const inp = document.getElementById(mediaInputId(kind));
-  if (!inp.files.length) return alert(kind === 'video' ? '先选一个视频文件' : '先选一个音乐文件');
-  const fd = new FormData();
-  fd.append('file', inp.files[0]);
-  const r = await fetch(`/api/media/${kind}/upload`, { method: 'POST', body: fd });
-  if (!r.ok) { alert('上传失败：' + (await r.text())); return; }
-  inp.value = '';
-  updateFileLabel(mediaInputId(kind), mediaFileNameId(kind));
-  await loadMedia(kind);
-  alert('上传成功');
+  await uploadSelectedFiles({
+    inputId: mediaInputId(kind),
+    labelId: mediaFileNameId(kind),
+    progressId: `${kind}-upload-progress`,
+    url: `/api/media/${kind}/upload`,
+    emptyMessage: kind === 'video' ? '先选一个视频文件' : '先选一个音乐文件',
+    reload: () => loadMedia(kind),
+  });
 }
 async function playMedia(kind, filename) {
   try {
