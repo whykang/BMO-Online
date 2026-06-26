@@ -100,7 +100,14 @@ def load_config() -> dict:
         shutil.copy("config.default.json", CONFIG_FILE)
         print("[INIT] 已从 config.default.json 创建 config.json", flush=True)
     with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+        cfg = json.load(f)
+    rec = cfg.setdefault("recording", {})
+    # 旧版默认 1.0/12.0 容易把长句截断；已有配置若还是旧默认，自动迁移到更稳的值。
+    if float(rec.get("silence_duration", 1.0)) <= 1.0:
+        rec["silence_duration"] = 1.8
+    if float(rec.get("max_record_seconds", 12.0)) <= 12.0:
+        rec["max_record_seconds"] = 25.0
+    return cfg
 
 
 def save_config(cfg: dict):
@@ -1951,8 +1958,8 @@ class BotGUI:
         sr = choose_input_samplerate(self.input_device, self.config.get("input_sample_rate"))
 
         rec_cfg = self.config.get("recording", {})
-        silence_duration = float(rec_cfg.get("silence_duration", 1.0))
-        max_speech = float(rec_cfg.get("max_record_seconds", 12.0))
+        silence_duration = float(rec_cfg.get("silence_duration", 1.8))
+        max_speech = float(rec_cfg.get("max_record_seconds", 25.0))
         margin = float(rec_cfg.get("silence_margin", 0.05))
         floor_min = float(rec_cfg.get("silence_floor_min", 0.02))
 

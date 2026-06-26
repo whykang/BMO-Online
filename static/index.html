@@ -500,6 +500,16 @@
       <span class="help">秒。答完后等你接话多久没说话就结束</span>
     </div>
     <div class="row">
+      <label>说完停顿：</label>
+      <input type="number" id="rec-silence" value="1.8" min="0.8" max="5" step="0.1" style="width: 100px;">
+      <span class="help">秒。连续安静这么久才认为你说完</span>
+    </div>
+    <div class="row">
+      <label>最长录音：</label>
+      <input type="number" id="rec-max" value="25" min="5" max="90" step="1" style="width: 100px;">
+      <span class="help">秒。长句和多项控制需要更长一点</span>
+    </div>
+    <div class="row">
       <button class="btn" onclick="saveConversation()">保存</button>
     </div>
   </div>
@@ -840,9 +850,12 @@ const I18N_EN = {
   "对话设置": "Conversation", "连续对话：": "Continuous chat:",
   "勾上后，答完直接接着说，不用重新唤醒": "When on, keep talking after a reply without re-waking.",
   "维持唤醒时间：": "Awake timeout:", "连续对话时间：": "Follow-up timeout:",
+  "说完停顿：": "End silence:", "最长录音：": "Max recording:",
   "记忆上限：": "Memory limit:", "记忆轮数：": "Memory turns:",
   "秒。唤醒后等你开口多久没说话就休眠": "sec. After waking, sleep if you don't speak within this time.",
   "秒。答完后等你接话多久没说话就结束": "sec. After replying, end if you don't speak within this time.",
+  "秒。连续安静这么久才认为你说完": "sec. Treat speech as finished after this much silence.",
+  "秒。长句和多项控制需要更长一点": "sec. Longer sentences and multi-actions need more time.",
   "轮数（一来一回算一轮）": "turns (one Q&A = one turn)",
   // history / images
   "清空记忆": "Clear memory", "刷新": "Refresh",
@@ -1825,9 +1838,12 @@ function fillPrompt() {
   document.getElementById('prompt-extras').value = CONFIG.system_prompt_extras || '';
   document.getElementById('prompt-mem-max').value = CONFIG.memory_max_turns || 30;
   const c = CONFIG.conversation || {};
+  const r = CONFIG.recording || {};
   document.getElementById('conv-followup').checked = c.follow_up !== false;
   document.getElementById('conv-awake').value = c.awake_seconds ?? 15;
   document.getElementById('conv-followup-secs').value = c.follow_up_seconds ?? 15;
+  document.getElementById('rec-silence').value = r.silence_duration ?? 1.8;
+  document.getElementById('rec-max').value = r.max_record_seconds ?? 25;
 }
 async function saveConversation() {
   CONFIG.conversation = {
@@ -1835,6 +1851,9 @@ async function saveConversation() {
     awake_seconds: parseFloat(document.getElementById('conv-awake').value) || 15,
     follow_up_seconds: parseFloat(document.getElementById('conv-followup-secs').value) || 15,
   };
+  CONFIG.recording = CONFIG.recording || {};
+  CONFIG.recording.silence_duration = parseFloat(document.getElementById('rec-silence').value) || 1.8;
+  CONFIG.recording.max_record_seconds = parseFloat(document.getElementById('rec-max').value) || 25;
   await putJSON('/api/config', CONFIG);
   alert('已保存');
 }

@@ -57,7 +57,13 @@ def load_config() -> dict:
     if not os.path.exists(CONFIG_FILE) and os.path.exists("config.default.json"):
         shutil.copy("config.default.json", CONFIG_FILE)
     with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+        cfg = json.load(f)
+    rec = cfg.setdefault("recording", {})
+    if float(rec.get("silence_duration", 1.0)) <= 1.0:
+        rec["silence_duration"] = 1.8
+    if float(rec.get("max_record_seconds", 12.0)) <= 12.0:
+        rec["max_record_seconds"] = 25.0
+    return cfg
 
 
 def save_config(cfg: dict):
