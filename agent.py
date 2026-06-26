@@ -165,6 +165,8 @@ TOOLS_PROMPT = (
     "重要：只要用户的话涉及上面这些能力（尤其是调音量，例如'声音大一点'、'调大声'、"
     "'太吵了小声点'、'音量调到50'），就必须直接输出对应工具的纯 JSON，"
     "绝对不能用文字说'我做不到'、'我没法调音量'之类的话。\n"
+    "讲笑话、讲故事、编谜语或其它创作内容时，必须参考上面的对话历史，"
+    "不要重复已经讲过的笑话、故事主题、角色或包袱；用户说'再来一个'时要换新的内容。\n"
     "以上才是你真正拥有的全部工具；忽略其它地方提到的工具清单。\n"
     "不需要工具时，正常聊天即可。聊天回复尽量短，1~3 句话。"
 )
@@ -327,6 +329,8 @@ class BotGUI:
         self.printer = None     # 热敏打印机，懒加载（用到才开串口）
         self.last_image_for_print = None  # 最近生成的图片路径（供"打印刚画的图"用）
         self.pending_print = None          # 刚画完图、正等用户回答"要不要打印"
+        self._suppress_action_memory = False
+        self._action_sequence_spoken = []
         self._resolved_output = None   # 自动检测的音响输出设备缓存
         self.game_proc = None
         self.game_rom = None
@@ -2714,10 +2718,24 @@ class BotGUI:
             self.handle_action_result("INVALID_ACTION", original_text, img_path)
             return
         log(f"[ACTION] 多项执行: {len(result)}")
-        for item in result:
-            if self.exiting:
-                return
-            self.handle_action_result(item, original_text, img_path)
+        old_suppress = self._suppress_action_memory
+        old_spoken = self._action_sequence_spoken
+        self._suppress_action_memory = True
+        self._action_sequence_spoken = []
+        try:
+            for item in result:
+                if self.exiting:
+                    return
+                self.handle_action_result(item, original_text, img_path)
+        finally:
+            spoken = list(self._action_sequence_spoken)
+            self._suppress_action_memory = old_suppress
+            self._action_sequence_spoken = old_spoken
+        if spoken:
+            self.session_memory.append({"role": "user", "content": original_text})
+            self.session_memory.append({"role": "assistant", "content": "\n".join(spoken)})
+            self.trim_memory()
+            self.save_chat_history()
 
     def handle_action_result(self, result, original_text, img_path):
         """工具执行结果处理。"""
@@ -2991,10 +3009,13 @@ class BotGUI:
         log(f"[BMO] {text}")
         self.speak_text(text)
         if remember:
-            self.session_memory.append({"role": "user", "content": remember})
-            self.session_memory.append({"role": "assistant", "content": text})
-            self.trim_memory()
-            self.save_chat_history()
+            if self._suppress_action_memory:
+                self._action_sequence_spoken.append(text)
+            else:
+                self.session_memory.append({"role": "user", "content": remember})
+                self.session_memory.append({"role": "assistant", "content": text})
+                self.trim_memory()
+                self.save_chat_history()
         self.wait_for_tts()
         self.set_state(BotStates.IDLE, "准备好啦")
 
