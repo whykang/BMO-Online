@@ -135,6 +135,7 @@
     <span id="agent-status">连接中...</span>
     <span class="badge" id="agent-mem">0 轮</span>
   </div>
+  <button class="btn secondary" id="lang-toggle" onclick="toggleLang()">EN</button>
   <button class="btn secondary" onclick="logout()">退出登录</button>
 </header>
 
@@ -700,6 +701,164 @@
 </main>
 
 <script>
+// ===================== i18n（中/英自动切换）=====================
+const I18N_EN = {
+  // header / nav
+  "BMO 控制台": "BMO Console", "退出登录": "Logout", "连接中...": "Connecting...",
+  "仪表板": "Dashboard", "语音设置": "Voice", "模型选择": "Models", "性格设定": "Personality",
+  "唤醒词": "Wake Word", "对话历史": "History", "图片生成": "Images", "游戏": "Games",
+  "日志": "Logs", "安全": "Security",
+  // dashboard
+  "当前状态": "Current Status", "状态：": "State:", "提示：": "Status:", "TTS 队列：": "TTS queue:",
+  "记忆轮数：": "Memory turns:", "系统信息": "System Info", "设备：": "Device:",
+  "CPU 使用率：": "CPU usage:", "温度：": "Temperature:", "内存：": "Memory:", "存储：": "Storage:",
+  "负载：": "Load:", "已运行：": "Uptime:", "快捷操作": "Quick Actions",
+  "开始录音": "Start recording", "停止录音": "Stop recording", "打断说话": "Interrupt",
+  "拍照": "Take photo", "打印控制（热敏打印机）": "Print (thermal printer)",
+  "拍照打印": "Photo + print", "打印刚画的图": "Print last image", "打印对话：": "Print chat:",
+  "打印": "Print", "打印文字：": "Print text:",
+  "打印任务发给 BMO 执行；9600 波特，图片较慢，请耐心。": "Print jobs run on BMO; 9600 baud, images are slow, please wait.",
+  "启动设置": "Startup", "开机自启 BMO：": "Auto-start BMO on boot:",
+  "启动时自动开 Web 控制台：": "Auto-start web console:", "Web 控制台端口：": "Web console port:",
+  "立即重启 webui": "Restart webui now",
+  "改完点保存，再点“立即重启 webui”，几秒后到新端口刷新页面。": "Save, then click \"Restart webui now\", and reload at the new port after a few seconds.",
+  "保存": "Save",
+  // voice / TTS
+  "TTS 引擎": "TTS Engine", "引擎：": "Engine:", "Edge-TTS（云端免费，音色多）": "Edge-TTS (cloud, free, many voices)",
+  "豆包 TTS（火山引擎，需填 .env 凭证）": "Doubao TTS (Volcengine, needs API key)",
+  "Piper 本地（离线免费，需下模型）": "Piper local (offline, free, needs model)",
+  "硅基流动 CosyVoice（云端）": "SiliconFlow CosyVoice (cloud)",
+  "豆包音色 ID：": "Doubao voice ID:", "音箱输出设备：": "Speaker output:",
+  "麦克风输入设备：": "Microphone input:", "刷新设备": "Refresh devices",
+  "音量：": "Volume:", "保存引擎/输出": "Save engine/output",
+  "默认“自动检测 USB 音响”。多个设备时在这里选。": "Default auto-detects USB speaker; pick here if multiple.",
+  "默认自动检测；换了麦点\"刷新设备\"再选。": "Auto-detect by default; after changing mic click \"Refresh devices\".",
+  "Edge-TTS 音色（免费）": "Edge-TTS Voice (free)", "语言：": "Language:", "中文": "Chinese",
+  "英文": "English", "日文": "Japanese", "音色：": "Voice:", "语速：": "Speed:",
+  "试听文字：": "Preview text:", "试听": "Preview", "保存为默认": "Save as default",
+  "TTS 兜底（Edge 失效时用）": "TTS fallback (when Edge fails)", "兜底模型：": "Fallback model:",
+  "状态语音提示": "Status voice cues", "开机问候：": "Greeting:", "唤醒应答：": "Wake reply:",
+  "思考中：": "Thinking:", "出错提示：": "Error:", "保存语音设置": "Save voice settings",
+  // models
+  "LLM 大脑": "LLM Brain", "视觉模型": "Vision Model", "STT 语音转文字": "STT (speech-to-text)",
+  "文生图": "Image Generation", "硅基流动": "SiliconFlow", "刷新模型列表": "Refresh model list",
+  "当前模型：": "Current model:", "保存所有设置": "Save all settings", "尺寸：": "Size:",
+  // personality
+  "System Prompt（BMO 性格设定）": "System Prompt (BMO personality)",
+  "只需写性格/说话风格。工具调用说明（查时间/拍照/画图/系统状态等）已内置在程序里，不用也无法在这里写，改性格不会影响工具。改完点保存，agent 自动重载，新对话立刻生效。":
+    "Only write personality / speaking style. Tool instructions (time, photo, drawing, system status, etc.) are built in and can't be set here. Save and the agent reloads; new chats apply immediately.",
+  "附加说明（可选）": "Extra notes (optional)", "恢复默认": "Reset to default",
+  // wake word
+  "唤醒词总开关": "Wake word master switch", "启用：": "Enabled:",
+  "关掉就是纯 PTT 模式（按钮触发）": "Off = pure PTT mode (button trigger)",
+  "Sherpa-ONNX（中文，推荐）": "Sherpa-ONNX (Chinese, recommended)",
+  "OpenWakeWord（英文，需 .onnx 模型）": "OpenWakeWord (English, needs .onnx model)",
+  "关键词（中文/英文都可以）": "Keywords (Chinese or English)",
+  "识别阈值：": "Threshold:", "越低越容易触发，越高越严格": "Lower = easier to trigger, higher = stricter",
+  "关键词得分：": "Keyword score:", "越高越偏向词典里的词（误唤醒少，但漏唤醒多）": "Higher favors dictionary words (fewer false triggers, more misses)",
+  "OpenWakeWord 模型（英文）": "OpenWakeWord model (English)", "上传 .onnx 模型": "Upload .onnx model",
+  "上传": "Upload", "使用提示": "Tips",
+  "调阈值：误唤醒多时调高（0.30~0.40）；唤不醒时调低（0.15~0.20）": "Tune threshold: raise (0.30–0.40) if too many false triggers; lower (0.15–0.20) if it won't wake.",
+  // conversation
+  "对话设置": "Conversation", "连续对话：": "Continuous chat:",
+  "勾上后，答完直接接着说，不用重新唤醒": "When on, keep talking after a reply without re-waking.",
+  "维持唤醒时间：": "Awake timeout:", "连续对话时间：": "Follow-up timeout:",
+  "记忆上限：": "Memory limit:", "记忆轮数：": "Memory turns:",
+  "秒。唤醒后等你开口多久没说话就休眠": "sec. After waking, sleep if you don't speak within this time.",
+  "秒。答完后等你接话多久没说话就结束": "sec. After replying, end if you don't speak within this time.",
+  "轮数（一来一回算一轮）": "turns (one Q&A = one turn)",
+  // history / images
+  "清空记忆": "Clear memory", "刷新": "Refresh",
+  // games
+  "上传 ROM": "Upload ROM", "当前：": "Current:", "暂停": "Pause", "继续": "Resume",
+  "退出游戏": "Quit game", "启动": "Start", "删除": "Delete", "重命名": "Rename",
+  "上传 NES 游戏（.nes / .zip），也可以语音说“打开某某游戏”。运行游戏时 BMO 会退到后台；唤醒 BMO 会自动暂停游戏。":
+    "Upload NES games (.nes / .zip), or say \"open <game>\". BMO steps aside while a game runs; waking BMO auto-pauses it.",
+  "游戏键位（FCEUX）": "Game keys (FCEUX)",
+  "A（跳/开炮）": "A (jump/fire)", "B（加速/副键）": "B (run/secondary)", "Start（开始）": "Start",
+  "↑ 上": "↑ Up", "↓ 下": "↓ Down", "← 左": "← Left", "→ 右": "→ Right",
+  "保存键位": "Save keys", "下次开游戏生效": "applies next time a game starts",
+  // keys
+  "API Key 状态": "API Key Status", "更新 API Key": "Update API Key", "API 花费": "API Cost",
+  "新 Key：": "New key:", "保存到 .env": "Save to .env",
+  // security
+  "访问密码": "Access password", "设置 / 修改": "Set / change", "原密码：": "Old password:",
+  "新密码：": "New password:", "取消密码": "Remove password",
+  // logs
+  "实时日志": "Live Log", "自动滚动": "Auto-scroll",
+  // common dynamic (alert/status)
+  "已保存": "Saved", "已删除": "Deleted", "已上传": "Uploaded", "上传成功": "Uploaded",
+  "上传失败：": "Upload failed: ", "保存失败：": "Save failed: ", "加载失败：": "Load failed: ",
+  "设置失败：": "Failed: ", "重启失败：": "Restart failed: ", "查询失败": "Query failed",
+  "获取默认失败：": "Failed to get default: ", "重命名失败：": "Rename failed: ",
+  "请输入 key": "Enter a key", "请输入新密码": "Enter a new password",
+  "先选一个 ROM 文件": "Pick a ROM file first", "请先选择文件": "Pick a file first",
+  "请先在左/右栏选一个模型": "Pick a model in the left/right column first",
+  "密码已设置（当前已自动登录，下次访问需输入密码）": "Password set (logged in now; password required next time)",
+  "密码已取消": "Password removed", "键位已保存，下次开游戏生效。": "Keys saved; applies next game.",
+  "已保存，下一轮对话生效": "Saved; applies next chat", "已保存，正在重载唤醒词": "Saved; reloading wake word",
+  "已填入默认性格，确认后点“保存”生效": "Default personality filled in; click Save to apply",
+  "已保存。留空的状态不会播放。": "Saved. Empty cues won't play.",
+  "未运行": "Not running", "运行中": "Running", "已暂停": "Paused", "已就绪 ": "Ready ",
+  "连接不上 agent": "Can't reach agent", "未配置": "Not set", "已配置": "Set",
+  "已启用": "Enabled", "已禁用": "Disabled", "已设置": "Set", "未设置": "Not set",
+  "开": "On", "关": "Off", "系统默认": "System default", "暂无模型": "No models",
+  "没有匹配的模型": "No matching models", "正在加载...": "Loading...", "正在刷新模型列表...": "Refreshing models...",
+  "正在从 OpenRouter / 硅基流动 拉取全量模型...": "Fetching all models from OpenRouter / SiliconFlow...",
+  "拉取失败（使用内置列表）：": "Fetch failed (using built-in list): ", "无法读取音量": "Can't read volume",
+  "模型未下载（运行 setup_pi.sh）": "Model not downloaded (run setup_pi.sh)", "端口范围 1024~65535": "Port range 1024–65535",
+  "（暂无对话）": "(no chat yet)", "（还没画过图）": "(no images yet)", "（当前）": "(current)",
+  "硅基流动 API Key": "SiliconFlow API Key", "豆包TTS API Key": "Doubao TTS API Key",
+  "软件音量：100%=原始，>100% 放大（音箱偏小时调高）": "Software volume: 100%=original, >100% amplify (raise if speaker is quiet)",
+};
+const LANG = localStorage.getItem('bmo_lang')
+  || ((navigator.language || 'zh').toLowerCase().startsWith('zh') ? 'zh' : 'en');
+function toggleLang() {
+  localStorage.setItem('bmo_lang', LANG === 'en' ? 'zh' : 'en');
+  location.reload();
+}
+function tr(s) {                       // 单串精确翻译（动态文本/alert 用，按子串替换）
+  if (LANG !== 'en' || s == null) return s;
+  let out = String(s);
+  for (const [zh, en] of I18N_SORTED) if (out.includes(zh)) out = out.split(zh).join(en);
+  return out;
+}
+const I18N_SORTED = Object.entries(I18N_EN).sort((a, b) => b[0].length - a[0].length);
+function applyLangTo(root) {
+  if (LANG !== 'en' || !root) return;
+  const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = []; let n;
+  while ((n = walk.nextNode())) nodes.push(n);
+  for (const node of nodes) {
+    const raw = node.textContent, key = raw.trim();
+    if (key && I18N_EN[key]) node.textContent = raw.replace(key, I18N_EN[key]);
+  }
+  root.querySelectorAll && root.querySelectorAll('[placeholder]').forEach(e => {
+    if (I18N_EN[e.placeholder]) e.placeholder = I18N_EN[e.placeholder];
+  });
+}
+(function initI18n() {
+  document.getElementById('lang-toggle').textContent = LANG === 'en' ? '中' : 'EN';
+  if (LANG !== 'en') return;
+  document.documentElement.lang = 'en';
+  document.title = 'BMO Console';
+  // 翻译初始 DOM
+  window.addEventListener('DOMContentLoaded', () => applyLangTo(document.body));
+  applyLangTo(document.body);
+  // 动态新增的节点（列表项/按钮/模型行）自动翻译
+  new MutationObserver(muts => {
+    for (const m of muts) m.addedNodes.forEach(nd => {
+      if (nd.nodeType === 1) applyLangTo(nd);
+      else if (nd.nodeType === 3 && I18N_EN[nd.textContent.trim()]) nd.textContent = I18N_EN[nd.textContent.trim()];
+    });
+  }).observe(document.body, { childList: true, subtree: true });
+  // alert/confirm 文案翻译
+  const _alert = window.alert.bind(window), _confirm = window.confirm.bind(window);
+  window.alert = m => _alert(tr(m));
+  window.confirm = m => _confirm(tr(m));
+})();
+// ===================== /i18n =====================
+
 let CONFIG = {};
 let PRESETS = {};
 
