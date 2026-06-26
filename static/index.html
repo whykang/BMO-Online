@@ -82,8 +82,11 @@
   .file-name { color: var(--text); font-size: 14px; }
   .upload-progress { min-width: 170px; }
   .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
-  .image-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
-  .image-column h3 { margin: 0 0 10px; font-size: 15px; }
+  .segmented { display: inline-flex; gap: 4px; padding: 3px; border: 1px solid var(--line);
+               border-radius: 6px; background: var(--panel-light); }
+  .segmented button { border: 0; background: transparent; padding: 6px 10px;
+                      border-radius: 4px; color: var(--muted); cursor: pointer; }
+  .segmented button.active { background: #fff; color: var(--text); box-shadow: 0 0 0 1px var(--line); }
   .img-card { background: #fff; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
   .img-card img { width: 100%; display: block; }
   .img-card .meta { padding: 8px; font-size: 12px; color: var(--muted); display: flex;
@@ -142,9 +145,6 @@
   }
   .model-empty { color: var(--muted); font-size: 13px; padding: 12px; text-align: center; }
   .rom-name { flex: 1; min-width: 220px; overflow-wrap: anywhere; }
-  @media (max-width: 760px) {
-    .image-columns { grid-template-columns: 1fr; }
-  }
 </style>
 </head>
 <body>
@@ -616,18 +616,13 @@
   <div class="panel">
     <h2>图片</h2>
     <div class="row">
+      <div class="segmented">
+        <button id="image-tab-generated" class="active" onclick="setImageKind('generated')">生成的图片</button>
+        <button id="image-tab-captures" onclick="setImageKind('captures')">拍照图片</button>
+      </div>
       <button class="btn" onclick="loadImages()">刷新</button>
     </div>
-    <div class="image-columns">
-      <div class="image-column">
-        <h3>生成的图片</h3>
-        <div id="generated-image-grid" class="grid"></div>
-      </div>
-      <div class="image-column">
-        <h3>拍照图片</h3>
-        <div id="capture-image-grid" class="grid"></div>
-      </div>
-    </div>
+    <div id="image-grid" class="grid" style="margin-top: 16px;"></div>
   </div>
 </section>
 
@@ -2027,33 +2022,45 @@ function escapeHtml(s) {
   return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// ============ 图片生成 ============
+// ============ 图片 ============
+let IMAGE_DATA = { generated: [], captures: [] };
+let IMAGE_KIND = 'generated';
+
 async function loadImages() {
-  const generatedBox = document.getElementById('generated-image-grid');
-  const captureBox = document.getElementById('capture-image-grid');
-  generatedBox.textContent = tr('正在加载...');
-  captureBox.textContent = tr('正在加载...');
+  const box = document.getElementById('image-grid');
+  box.textContent = tr('正在加载...');
   let data;
   try {
     data = await fetchJSON('/api/images');
   } catch (e) {
-    generatedBox.textContent = tr('加载失败：' + e.message);
-    captureBox.textContent = '';
+    box.textContent = tr('加载失败：' + e.message);
     return;
   }
-  const generated = Array.isArray(data) ? data : (data.generated || []);
-  const captures = Array.isArray(data) ? [] : (data.captures || []);
-  renderImageGrid(generatedBox, generated, 'generated', '（还没画过图）');
-  renderImageGrid(captureBox, captures, 'captures', '（还没有拍照）');
+  IMAGE_DATA = {
+    generated: Array.isArray(data) ? data : (data.generated || []),
+    captures: Array.isArray(data) ? [] : (data.captures || []),
+  };
+  renderCurrentImages();
 }
-function renderImageGrid(box, data, kind, emptyText) {
+
+function setImageKind(kind) {
+  IMAGE_KIND = kind;
+  renderCurrentImages();
+}
+
+function renderCurrentImages() {
+  const box = document.getElementById('image-grid');
+  document.getElementById('image-tab-generated').classList.toggle('active', IMAGE_KIND === 'generated');
+  document.getElementById('image-tab-captures').classList.toggle('active', IMAGE_KIND === 'captures');
+  const data = IMAGE_DATA[IMAGE_KIND] || [];
+  const emptyText = IMAGE_KIND === 'captures' ? '（还没有拍照）' : '（还没画过图）';
   box.innerHTML = '';
   for (const img of data) {
     const card = document.createElement('div');
     card.className = 'img-card';
     card.innerHTML = `<img src="${img.url}" loading="lazy">
       <div class="meta"><span>${img.filename}</span>
-      <button class="btn danger" onclick="deleteImage('${kind}', '${img.filename}')">删除</button></div>`;
+      <button class="btn danger" onclick="deleteImage('${IMAGE_KIND}', '${img.filename}')">删除</button></div>`;
     box.appendChild(card);
   }
   if (data.length === 0) box.textContent = tr(emptyText);
