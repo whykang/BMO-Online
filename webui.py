@@ -32,6 +32,9 @@ LOG_DIR = "logs"
 GENERATED_DIR = "generated"
 WAKEWORDS_DIR = "wakewords"
 ROMS_DIR = "roms"
+MEDIA_DIR = "media"
+MUSIC_DIR = os.path.join(MEDIA_DIR, "music")
+VIDEOS_DIR = os.path.join(MEDIA_DIR, "videos")
 ENV_FILE = ".env"
 
 app = FastAPI(title="BMO Web Control")
@@ -40,8 +43,11 @@ app.mount("/generated", StaticFiles(directory=GENERATED_DIR), name="generated")
 os.makedirs(WAKEWORDS_DIR, exist_ok=True)
 os.makedirs(GENERATED_DIR, exist_ok=True)
 os.makedirs(ROMS_DIR, exist_ok=True)
+os.makedirs(MUSIC_DIR, exist_ok=True)
+os.makedirs(VIDEOS_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 app.mount("/wakewords", StaticFiles(directory=WAKEWORDS_DIR), name="wakewords")
+app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 
 # =========================================================================
 # 工具
@@ -88,6 +94,7 @@ def load_state() -> dict:
         "tts_queue_len": 0,
         "memory_turns": 0,
         "game": {"running": False, "paused": False, "rom": None},
+        "media": {"running": False, "kind": None, "name": None},
     }
 
 
@@ -646,6 +653,116 @@ async def control_game(req: GameReq):
     elif action == "stop":
         queue_command({"action": "stop_game"})
     return {"ok": True, "note": "已发送游戏控制命令"}
+
+
+# =========================================================================
+# 路由：媒体管理（音乐 / 视频）
+# =========================================================================
+MUSIC_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".opus")
+VIDEO_EXTS = (".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v")
+
+
+def _media_info(kind: str):
+    kind = (kind or "").lower().strip()
+    if kind in ("music", "audio", "song", "songs"):
+        return "music", MUSIC_DIR, MUSIC_EXTS
+    if kind in ("video", "videos", "movie", "movies"):
+        return "video", VIDEOS_DIR, VIDEO_EXTS
+    raise HTTPException(400, "kind 必须是 music 或 video")
+
+
+def _check_media_filename(filename: str, exts: tuple[str, ...]):
+    if not filename or "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(400, "非法文件名")
+    if not filename.lower().endswith(exts):
+        raise HTTPException(400, "不支持的文件类型")
+
+
+@app.get("/api/media/{kind}")
+async def list_media(kind: str):
+    kind, folder, exts = _media_info(kind)
+    items = []
+    if os.path.isdir(folder):
+        for f in sorted(os.listdir(folder)):
+            if f.lower().endswith(exts):
+                p = os.path.join(folder, f)
+                url_dir = "music" if kind == "music" else "videos"
+                items.append({
+                    "filename": f,
+                    "size_kb": round(os.path.getsize(p) / 1024, 1),
+                    "url": f"/media/{url_dir}/{f}",
+                })
+    return {"kind": kind, "items": items}
+
+
+@app.post("/api/media/{kind}/upload")
+async def upload_media(kind: str, file: UploadFile = File(...)):
+    _, folder, exts = _media_info(kind)
+    _check_media_filename(file.filename, exts)
+    os.makedirs(folder, exist_ok=True)
+    dest = os.path.join(folder, file.filename)
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    return {"ok": True, "filename": file.filename}
+
+
+@app.delete("/api/media/{kind}/{filename}")
+async def delete_media(kind: str, filename: str):
+    _, folder, exts = _media_info(kind)
+    _check_media_filename(filename, exts)
+    path = os.path.join(folder, filename)
+    if os.path.exists(path):
+        os.remove(path)
+        return {"ok": True}
+    raise HTTPException(404, "文件不存在")
+
+
+class RenameMediaReq(BaseModel):
+    old: str
+    new: str
+
+
+@app.post("/api/media/{kind}/rename")
+async def rename_media(kind: str, req: RenameMediaReq):
+    _, folder, exts = _media_info(kind)
+    old, new = req.old.strip(), req.new.strip()
+    _check_media_filename(old, exts)
+    if not new or "/" in new or "\\" in new or ".." in new:
+        raise HTTPException(400, "非法文件名")
+    src = os.path.join(folder, old)
+    if not os.path.exists(src):
+        raise HTTPException(404, "原文件不存在")
+    if not new.lower().endswith(exts):
+        new = new + os.path.splitext(old)[1]
+    _check_media_filename(new, exts)
+    dst = os.path.join(folder, new)
+    if os.path.abspath(dst) != os.path.abspath(src) and os.path.exists(dst):
+        raise HTTPException(409, "已存在同名文件")
+    os.rename(src, dst)
+    return {"ok": True, "filename": new}
+
+
+class MediaReq(BaseModel):
+    action: str
+    kind: str | None = None
+    filename: str | None = None
+
+
+@app.post("/api/media/control")
+async def control_media(req: MediaReq):
+    action = (req.action or "").lower().strip()
+    if action == "stop":
+        queue_command({"action": "stop_media"})
+        return {"ok": True, "note": "已发送媒体控制命令"}
+    if action != "play":
+        raise HTTPException(400, "action 必须是 play/stop")
+    kind, folder, exts = _media_info(req.kind or "")
+    filename = (req.filename or "").strip()
+    _check_media_filename(filename, exts)
+    if not os.path.exists(os.path.join(folder, filename)):
+        raise HTTPException(404, "媒体文件不存在")
+    queue_command({"action": "play_media", "kind": kind, "name": filename})
+    return {"ok": True, "note": "已发送媒体控制命令"}
 
 
 # =========================================================================

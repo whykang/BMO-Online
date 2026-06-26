@@ -15,6 +15,7 @@ config.json
 logs/
 generated/
 roms/
+media/
 chat_memory.json
 state.json
 commands.json

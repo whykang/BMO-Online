@@ -163,6 +163,7 @@
   <button data-tab="wake" onclick="showTab('wake')">唤醒词</button>
   <button data-tab="history" onclick="showTab('history')">对话历史</button>
   <button data-tab="images" onclick="showTab('images')">图片生成</button>
+  <button data-tab="media" onclick="showTab('media')">媒体</button>
   <button data-tab="games" onclick="showTab('games')">游戏</button>
   <button data-tab="logs" onclick="showTab('logs')">日志</button>
   <button data-tab="security" onclick="showTab('security')">安全</button>
@@ -605,6 +606,35 @@
   </div>
 </section>
 
+<!-- 媒体 -->
+<section id="tab-media" class="tab hide">
+  <div class="panel">
+    <h2>音乐播放</h2>
+    <div class="row">
+      <input class="file-input" type="file" id="music-file" accept=".mp3,.wav,.flac,.m4a,.aac,.ogg,.opus" onchange="updateFileLabel('music-file','music-file-name')">
+      <label class="file-label" for="music-file">选择文件</label>
+      <span class="file-name" id="music-file-name">未选择任何文件</span>
+      <button class="btn" onclick="uploadMedia('music')">上传音乐</button>
+      <button class="btn secondary" onclick="loadMedia('music')">刷新</button>
+      <button class="btn danger" onclick="stopMedia()">停止播放</button>
+    </div>
+    <div id="music-list" style="margin-top: 12px;"></div>
+  </div>
+  <div class="panel">
+    <h2>视频播放</h2>
+    <div class="row">
+      <input class="file-input" type="file" id="video-file" accept=".mp4,.mkv,.avi,.mov,.webm,.m4v" onchange="updateFileLabel('video-file','video-file-name')">
+      <label class="file-label" for="video-file">选择文件</label>
+      <span class="file-name" id="video-file-name">未选择任何文件</span>
+      <button class="btn" onclick="uploadMedia('video')">上传视频</button>
+      <button class="btn secondary" onclick="loadMedia('video')">刷新</button>
+      <button class="btn danger" onclick="stopMedia()">停止播放</button>
+    </div>
+    <div class="help">上传音乐或视频后，可以语音说“播放某某音乐 / 播放某某视频”。</div>
+    <div id="video-list" style="margin-top: 12px;"></div>
+  </div>
+</section>
+
 <!-- 游戏 ROM -->
 <section id="tab-games" class="tab hide">
   <div class="panel">
@@ -719,7 +749,7 @@ const I18N_EN = {
   // header / nav
   "BMO 控制台": "BMO Console", "退出登录": "Logout", "连接中...": "Connecting...",
   "仪表板": "Dashboard", "语音设置": "Voice", "模型选择": "Models", "性格设定": "Personality",
-  "唤醒词": "Wake Word", "对话历史": "History", "图片生成": "Images", "游戏": "Games",
+  "唤醒词": "Wake Word", "对话历史": "History", "图片生成": "Images", "媒体": "Media", "游戏": "Games",
   "日志": "Logs", "安全": "Security",
   // dashboard
   "当前状态": "Current Status", "状态：": "State:", "提示：": "Status:", "TTS 队列：": "TTS queue:",
@@ -810,6 +840,14 @@ const I18N_EN = {
   "轮数（一来一回算一轮）": "turns (one Q&A = one turn)",
   // history / images
   "清空记忆": "Clear memory", "刷新": "Refresh",
+  // media
+  "音乐播放": "Music Playback", "视频播放": "Video Playback", "上传音乐": "Upload music",
+  "上传视频": "Upload video", "播放": "Play", "停止播放": "Stop playback",
+  "上传音乐或视频后，可以语音说“播放某某音乐 / 播放某某视频”。":
+    "After uploading music or videos, you can say \"play <name> music\" or \"play <name> video\".",
+  "还没有音乐文件。": "No music files yet.", "还没有视频文件。": "No video files yet.",
+  "先选一个音乐文件": "Pick a music file first", "先选一个视频文件": "Pick a video file first",
+  "已发送播放命令": "Play command sent", "已发送停止命令": "Stop command sent",
   // games
   "上传 ROM": "Upload ROM", "当前：": "Current:", "暂停": "Pause", "继续": "Resume",
   "退出游戏": "Quit game", "启动": "Start", "删除": "Delete", "重命名": "Rename",
@@ -857,7 +895,7 @@ const I18N_EN = {
   "看看是什么...": "Looking at it...", "拍照打印中...": "Printing photo...",
   "打印中...": "Printing...", "打印图片中...": "Printing image...", "打印对话中...": "Printing chat...",
   "说话中...": "Speaking...", "思考中...": "Thinking...", "游戏已退出": "Game exited",
-  "记忆已清空": "Memory cleared", "画画中: ": "Drawing: ",
+  "记忆已清空": "Memory cleared", "媒体播放已结束": "Media playback ended", "画画中: ": "Drawing: ",
   "已发送启动命令": "Start command sent", "启动失败：": "Start failed: ", "已发送命令": "Command sent",
   "唤醒失败：": "Wake failed: ", "失败：": "Failed: ",
   "已发送打印任务": "Print job sent", "已发送：打印 ": "Sent: print ", " 轮对话": " chat turns",
@@ -986,6 +1024,7 @@ function showTab(name) {
 function refreshTab(name) {
   if (name === 'history') loadHistory();
   if (name === 'images') loadImages();
+  if (name === 'media') { loadMedia('music'); loadMedia('video'); }
   if (name === 'games') { loadRoms(); loadKeymap(); }
 }
 
@@ -1922,6 +1961,99 @@ async function deleteImage(name) {
   if (!confirm(`删除 ${name}？`)) return;
   await deleteJSON(`/api/images/${encodeURIComponent(name)}`);
   await loadImages();
+}
+
+// ============ 媒体 ============
+function mediaLabel(kind) {
+  return kind === 'video' ? '视频' : '音乐';
+}
+function mediaInputId(kind) {
+  return kind === 'video' ? 'video-file' : 'music-file';
+}
+function mediaFileNameId(kind) {
+  return kind === 'video' ? 'video-file-name' : 'music-file-name';
+}
+function mediaListId(kind) {
+  return kind === 'video' ? 'video-list' : 'music-list';
+}
+async function loadMedia(kind) {
+  const box = document.getElementById(mediaListId(kind));
+  box.textContent = tr('正在加载...');
+  let data;
+  try {
+    data = await fetchJSON(`/api/media/${kind}`);
+  } catch (e) {
+    box.textContent = tr('加载失败：' + e.message);
+    return;
+  }
+  const items = data.items || [];
+  box.innerHTML = '';
+  if (!items.length) {
+    box.innerHTML = `<div class="help">${tr(kind === 'video' ? '还没有视频文件。' : '还没有音乐文件。')}</div>`;
+    return;
+  }
+  for (const item of items) {
+    const div = document.createElement('div');
+    div.className = 'row';
+    const name = document.createElement('span');
+    name.className = 'rom-name';
+    name.textContent = `${item.filename} (${item.size_kb} KB)`;
+    const play = document.createElement('button');
+    play.className = 'btn';
+    play.textContent = tr('播放');
+    play.onclick = () => playMedia(kind, item.filename);
+    const ren = document.createElement('button');
+    ren.className = 'btn secondary';
+    ren.textContent = tr('重命名');
+    ren.onclick = () => renameMedia(kind, item.filename);
+    const del = document.createElement('button');
+    del.className = 'btn danger';
+    del.textContent = tr('删除');
+    del.onclick = () => deleteMedia(kind, item.filename);
+    div.append(name, play, ren, del);
+    box.appendChild(div);
+  }
+}
+async function uploadMedia(kind) {
+  const inp = document.getElementById(mediaInputId(kind));
+  if (!inp.files.length) return alert(kind === 'video' ? '先选一个视频文件' : '先选一个音乐文件');
+  const fd = new FormData();
+  fd.append('file', inp.files[0]);
+  const r = await fetch(`/api/media/${kind}/upload`, { method: 'POST', body: fd });
+  if (!r.ok) { alert('上传失败：' + (await r.text())); return; }
+  inp.value = '';
+  updateFileLabel(mediaInputId(kind), mediaFileNameId(kind));
+  await loadMedia(kind);
+  alert('上传成功');
+}
+async function playMedia(kind, filename) {
+  try {
+    await postJSON('/api/media/control', { action: 'play', kind, filename });
+    alert('已发送播放命令');
+  } catch (e) {
+    alert('失败：' + e.message);
+  }
+}
+async function stopMedia() {
+  try {
+    await postJSON('/api/media/control', { action: 'stop' });
+    alert('已发送停止命令');
+  } catch (e) {
+    alert('失败：' + e.message);
+  }
+}
+async function deleteMedia(kind, name) {
+  if (!confirm('删除 ' + name + '？')) return;
+  await deleteJSON(`/api/media/${kind}/${encodeURIComponent(name)}`);
+  await loadMedia(kind);
+}
+async function renameMedia(kind, name) {
+  const nn = prompt('新文件名（不写后缀会自动保留 ' + (name.match(/\.[^.]+$/) || [''])[0] + '）', name);
+  if (!nn || nn.trim() === name) return;
+  try {
+    await postJSON(`/api/media/${kind}/rename`, { old: name, new: nn.trim() });
+    await loadMedia(kind);
+  } catch (e) { alert('重命名失败：' + e.message); }
 }
 
 // ============ 快捷操作 ============

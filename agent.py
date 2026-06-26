@@ -68,9 +68,16 @@ BMO_IMAGE_FILE = "current_image.jpg"
 LOG_DIR = "logs"
 ROMS_DIR = "roms"
 ROM_EXTS = (".nes", ".zip", ".fds", ".unf")
+MEDIA_DIR = "media"
+MUSIC_DIR = os.path.join(MEDIA_DIR, "music")
+VIDEOS_DIR = os.path.join(MEDIA_DIR, "videos")
+MUSIC_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".opus")
+VIDEO_EXTS = (".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v")
 
 os.makedirs(LOG_DIR, exist_ok=True)
 os.makedirs(ROMS_DIR, exist_ok=True)
+os.makedirs(MUSIC_DIR, exist_ok=True)
+os.makedirs(VIDEOS_DIR, exist_ok=True)
 
 
 def log(msg: str):
@@ -126,8 +133,14 @@ TOOLS_PROMPT = (
     "   暂停游戏：{\"action\": \"pause_game\"}\n"
     "   继续游戏：{\"action\": \"resume_game\"}\n"
     "   退出游戏：{\"action\": \"stop_game\"}\n"
-    "8. 识别屏幕（截屏看屏幕上有什么）：{\"action\": \"read_screen\"}\n"
-    "9. 隐身（最小化自己但继续运行）：{\"action\": \"hide\"}\n"
+    "8. 媒体播放（后台上传音乐/视频后可用）：\n"
+    "   播放指定音乐：{\"action\": \"play_music\", \"name\": \"音乐文件名或歌名\"}\n"
+    "   播放指定视频：{\"action\": \"play_video\", \"name\": \"视频文件名或视频名\"}\n"
+    "   列出音乐：{\"action\": \"list_music\"}\n"
+    "   列出视频：{\"action\": \"list_videos\"}\n"
+    "   停止播放：{\"action\": \"stop_media\"}\n"
+    "9. 识别屏幕（截屏看屏幕上有什么）：{\"action\": \"read_screen\"}\n"
+    "10. 隐身（最小化自己但继续运行）：{\"action\": \"hide\"}\n"
     "   取消隐身（恢复显示）：{\"action\": \"unhide\"}\n\n"
     "重要：只要用户的话涉及上面这些能力（尤其是调音量，例如'声音大一点'、'调大声'、"
     "'太吵了小声点'、'音量调到50'），就必须直接输出对应工具的纯 JSON，"
@@ -299,6 +312,10 @@ class BotGUI:
         self.game_rom = None
         self.game_paused = False
         self.game_lock = threading.Lock()
+        self.media_proc = None
+        self.media_kind = None
+        self.media_name = None
+        self.media_lock = threading.Lock()
         self.hidden = False              # 隐身：窗口最小化但程序继续运行
         self.screen_shot = "/tmp/bmo_screen.png"   # 识别屏幕的截图路径
 
@@ -431,6 +448,10 @@ class BotGUI:
             pass
         try:
             self.stop_game(restore_bmo=False)
+        except Exception:
+            pass
+        try:
+            self.stop_media(restore_bmo=False)
         except Exception:
             pass
         self.recording_active.clear()
@@ -1121,6 +1142,218 @@ class BotGUI:
             "paused": bool(self.game_paused),
             "rom": self.game_rom,
         }
+
+    # -------------------------------------------------------------------
+    # 媒体播放（音乐 / 视频）
+    # -------------------------------------------------------------------
+    def _media_cfg(self):
+        return self.config.get("media", {})
+
+    def _media_dir(self, kind):
+        cfg = self._media_cfg()
+        if kind == "music":
+            return os.path.abspath(cfg.get("music_dir") or MUSIC_DIR)
+        return os.path.abspath(cfg.get("video_dir") or VIDEOS_DIR)
+
+    def _media_exts(self, kind):
+        return MUSIC_EXTS if kind == "music" else VIDEO_EXTS
+
+    def _list_media_files(self, kind):
+        folder = self._media_dir(kind)
+        if not os.path.isdir(folder):
+            return []
+        exts = self._media_exts(kind)
+        return sorted(f for f in os.listdir(folder) if f.lower().endswith(exts) and "/" not in f)
+
+    def _norm_media_name(self, name: str) -> str:
+        base = os.path.splitext(name or "")[0].lower()
+        return re.sub(r"[\s_\-()\[\]【】（）·.]+", "", base)
+
+    def _speakable_media_name(self, filename: str) -> str:
+        name = os.path.splitext(filename or "")[0]
+        name = re.sub(r"[\(\[（【].*?[\)\]）】]", "", name)
+        name = re.sub(r"[_\-—–·.]+", " ", name)
+        name = re.sub(r"\s+", " ", name).strip()
+        return name or os.path.splitext(filename or "")[0]
+
+    def _find_media(self, kind, query=None):
+        files = self._list_media_files(kind)
+        label = "音乐" if kind == "music" else "视频"
+        if not files:
+            return None, f"还没有{label}文件。先在后台“媒体”页上传吧。"
+        q = (query or "").strip()
+        if not q:
+            if len(files) == 1:
+                return os.path.join(self._media_dir(kind), files[0]), ""
+            return None, f"你想播放哪个{label}呀？现在有：" + "、".join(self._speakable_media_name(f) for f in files[:8])
+        q_norm = self._norm_media_name(q)
+        for name in files:
+            if q == name or q.lower() == name.lower():
+                return os.path.join(self._media_dir(kind), name), ""
+        for name in files:
+            n_norm = self._norm_media_name(name)
+            if q_norm and (q_norm in n_norm or n_norm in q_norm):
+                return os.path.join(self._media_dir(kind), name), ""
+        return None, f"没找到“{q}”这个{label}。现在有：" + "、".join(self._speakable_media_name(f) for f in files[:8])
+
+    def list_media_text(self, kind):
+        files = self._list_media_files(kind)
+        label = "音乐" if kind == "music" else "视频"
+        if not files:
+            return f"还没有{label}文件。"
+        return f"现在有这些{label}：" + "、".join(self._speakable_media_name(f) for f in files[:12])
+
+    def _media_is_running(self):
+        proc = self.media_proc
+        return bool(proc and proc.poll() is None)
+
+    def _configured_player(self, key):
+        value = (self._media_cfg().get(key) or "").strip()
+        if not value:
+            return []
+        try:
+            return shlex.split(value)
+        except ValueError:
+            return value.split()
+
+    def _media_command_candidates(self, kind, path):
+        cfg = self._media_cfg()
+        if kind == "music":
+            custom = self._configured_player("music_player")
+            if custom:
+                return [custom + [path]]
+            out = []
+            mpv = shutil.which("mpv")
+            if mpv:
+                out.append([mpv, "--no-video", "--really-quiet", path])
+            cvlc = shutil.which("cvlc")
+            if cvlc:
+                out.append([cvlc, "--intf", "dummy", "--play-and-exit", path])
+            ffplay = shutil.which("ffplay")
+            if ffplay:
+                out.append([ffplay, "-nodisp", "-autoexit", "-loglevel", "quiet", path])
+            mpg123 = shutil.which("mpg123")
+            if mpg123 and path.lower().endswith(".mp3"):
+                cmd = [mpg123, "-q"]
+                dev = self._resolve_output_device()
+                if dev:
+                    cmd += ["-a", dev]
+                out.append(cmd + [path])
+            return out
+        custom = self._configured_player("video_player")
+        if custom:
+            return [custom + [path]]
+        out = []
+        mpv = shutil.which("mpv")
+        if mpv:
+            out.append([mpv, "--fs", "--really-quiet", path])
+        vlc = shutil.which("vlc")
+        if vlc:
+            out.append([vlc, "--fullscreen", "--play-and-exit", path])
+        cvlc = shutil.which("cvlc")
+        if cvlc:
+            out.append([cvlc, "--fullscreen", "--play-and-exit", path])
+        ffplay = shutil.which("ffplay")
+        if ffplay:
+            out.append([ffplay, "-fs", "-autoexit", "-loglevel", "quiet", path])
+        return out
+
+    def _monitor_media_proc(self, proc, kind, name):
+        rc = proc.wait()
+        with self.media_lock:
+            if self.media_proc is not proc:
+                return
+            self.media_proc = None
+            self.media_kind = None
+            self.media_name = None
+        log(f"[MEDIA] 已退出: {name} rc={rc}")
+        if kind == "video":
+            self._restore_bmo_display_mode()
+        self.set_state(BotStates.IDLE, "媒体播放已结束")
+
+    def play_media(self, kind, query=None):
+        kind = "video" if kind == "video" else "music"
+        path, err = self._find_media(kind, query)
+        if err:
+            return False, err
+        name = os.path.basename(path)
+        candidates = self._media_command_candidates(kind, path)
+        if not candidates:
+            return False, "没找到可用播放器。请安装 mpv、vlc 或 ffmpeg。"
+        if self._media_is_running():
+            self.stop_media(restore_bmo=False)
+        if kind == "video":
+            self._enter_game_display_mode()
+        else:
+            self._ensure_pipewire_usb_sink()
+            self._pin_hw_volume()
+        last_err = ""
+        for cmd in candidates:
+            try:
+                log(f"[MEDIA] 启动: {' '.join(cmd)}")
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                with self.media_lock:
+                    self.media_proc = proc
+                    self.media_kind = kind
+                    self.media_name = name
+                threading.Thread(target=self._monitor_media_proc, args=(proc, kind, name), daemon=True).start()
+                self.abort_to_wake.set()
+                label = "视频" if kind == "video" else "音乐"
+                return True, f"开始播放{label}：{self._speakable_media_name(name)}"
+            except Exception as e:
+                last_err = str(e)
+                log(f"[MEDIA] 播放器失败: {e}")
+        if kind == "video":
+            self._restore_bmo_display_mode()
+        return False, f"播放失败：{last_err or '没有可用播放器'}"
+
+    def stop_media(self, restore_bmo=True):
+        proc = self.media_proc
+        kind = self.media_kind
+        name = self.media_name or "媒体"
+        if not proc or proc.poll() is not None:
+            with self.media_lock:
+                self.media_proc = None
+                self.media_kind = None
+                self.media_name = None
+            if restore_bmo and kind == "video":
+                self._restore_bmo_display_mode()
+            return False, "现在没有正在播放的媒体。"
+        try:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except Exception:
+                proc.terminate()
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except Exception:
+                    proc.kill()
+        except Exception as e:
+            log(f"[MEDIA] 停止失败: {e}")
+            return False, "停止播放失败。"
+        finally:
+            with self.media_lock:
+                if self.media_proc is proc:
+                    self.media_proc = None
+                    self.media_kind = None
+                    self.media_name = None
+            if restore_bmo and kind == "video":
+                self._restore_bmo_display_mode()
+        log(f"[MEDIA] 已停止: {name}")
+        return True, f"已停止播放 {self._speakable_media_name(name)}。"
+
+    def _media_state(self):
+        if not self._media_is_running():
+            return {"running": False, "kind": None, "name": None}
+        return {"running": True, "kind": self.media_kind, "name": self.media_name}
 
     # -------------------------------------------------------------------
     # 识别屏幕（截屏 + 视觉模型描述）
@@ -1997,6 +2230,14 @@ class BotGUI:
             "resume": "resume_game", "continue_game": "resume_game", "game_resume": "resume_game",
             "quit_game": "stop_game", "exit_game": "stop_game", "close_game": "stop_game",
             "game_stop": "stop_game",
+            "music": "play_music", "play_song": "play_music", "song": "play_music",
+            "audio": "play_music", "play_audio": "play_music", "list_songs": "list_music",
+            "songs": "list_music", "music_list": "list_music",
+            "video": "play_video", "movie": "play_video", "play_movie": "play_video",
+            "media": "play_media",
+            "list_video": "list_videos", "video_list": "list_videos", "movies": "list_videos",
+            "stop_music": "stop_media", "stop_video": "stop_media", "stop_playback": "stop_media",
+            "media_stop": "stop_media",
             "打印": "print",
             "read_screen": "read_screen", "screen": "read_screen", "screenshot": "read_screen",
             "recognize_screen": "read_screen", "看屏幕": "read_screen", "识别屏幕": "read_screen",
@@ -2035,6 +2276,32 @@ class BotGUI:
 
         if action == "stop_game":
             return "GAME_STOP"
+
+        if action == "list_music":
+            return "MUSIC_LIST"
+
+        if action == "list_videos":
+            return "VIDEO_LIST"
+
+        if action == "play_music":
+            name = (action_data.get("name") or action_data.get("music")
+                    or action_data.get("song") or action_data.get("file") or value or "")
+            return f"MEDIA_PLAY::music::{name}"
+
+        if action == "play_video":
+            name = (action_data.get("name") or action_data.get("video")
+                    or action_data.get("movie") or action_data.get("file") or value or "")
+            return f"MEDIA_PLAY::video::{name}"
+
+        if action == "play_media":
+            kind_raw = str(action_data.get("kind") or action_data.get("type") or "").lower()
+            kind = "video" if any(w in kind_raw for w in ("video", "movie", "视频")) else "music"
+            name = (action_data.get("name") or action_data.get("file")
+                    or action_data.get("media") or value or "")
+            return f"MEDIA_PLAY::{kind}::{name}"
+
+        if action == "stop_media":
+            return "MEDIA_STOP"
 
         if action == "read_screen":
             return "READ_SCREEN"
@@ -2387,6 +2654,32 @@ class BotGUI:
 
         if result == "GAME_STOP":
             _, msg = self.stop_game(restore_bmo=True)
+            self._say(msg, remember=original_text)
+            return
+
+        if result == "MUSIC_LIST":
+            self._say(self.list_media_text("music"), remember=original_text)
+            return
+
+        if result == "VIDEO_LIST":
+            self._say(self.list_media_text("video"), remember=original_text)
+            return
+
+        if isinstance(result, str) and result.startswith("MEDIA_PLAY::"):
+            _, kind, name = result.split("::", 2)
+            path, err = self._find_media(kind, name)
+            if err:
+                self._say(err, remember=original_text)
+                return
+            label = "视频" if kind == "video" else "音乐"
+            self._say(f"好的，播放{label} {self._speakable_media_name(os.path.basename(path))}。", remember=original_text)
+            ok, msg = self.play_media(kind, name)
+            if not ok:
+                self._say(msg)
+            return
+
+        if result == "MEDIA_STOP":
+            _, msg = self.stop_media(restore_bmo=True)
             self._say(msg, remember=original_text)
             return
 
@@ -3087,6 +3380,12 @@ class BotGUI:
         elif action == "stop_game":
             ok, msg = self.stop_game(restore_bmo=True)
             log(f"[WEBUI GAME] stop -> {'成功' if ok else '失败'}: {msg}")
+        elif action == "play_media":
+            ok, msg = self.play_media(cmd.get("kind") or "music", cmd.get("name") or "")
+            log(f"[WEBUI MEDIA] play -> {'成功' if ok else '失败'}: {msg}")
+        elif action == "stop_media":
+            ok, msg = self.stop_media(restore_bmo=True)
+            log(f"[WEBUI MEDIA] stop -> {'成功' if ok else '失败'}: {msg}")
         elif action == "restart_webui":
             self._restart_webui()
 
@@ -3143,6 +3442,7 @@ class BotGUI:
                     "tts_queue_len": len(self.tts_queue),
                     "memory_turns": len(self.session_memory) // 2,
                     "game": self._game_state(),
+                    "media": self._media_state(),
                     "timestamp": time.time(),
                 }, f, ensure_ascii=False)
         except Exception:

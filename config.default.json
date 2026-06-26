@@ -124,5 +124,11 @@
       "left": "kLeft",
       "right": "kRight"
     }
+  },
+  "media": {
+    "music_dir": "media/music",
+    "video_dir": "media/videos",
+    "music_player": "",
+    "video_player": ""
   }
 }
