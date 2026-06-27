@@ -373,25 +373,66 @@ async def audio_outputs():
 
 @app.get("/api/audio/inputs")
 async def audio_inputs():
-    """列出可用的录音设备（供网页下拉选麦克风）。device 用设备名子串，agent 端模糊匹配。"""
+    """列出 PortAudio 可用输入设备，ALSA 硬件列表作为兜底。"""
     items = [{"device": "auto", "label": "自动检测（推荐）", "kind": "AUTO"}]
+    seen = set()
+    warnings = []
+
+    def append_item(device, label, kind):
+        key = str(device).strip().lower()
+        if not key or key in seen or any(len(key) >= 5 and key in old for old in seen):
+            return
+        seen.add(key)
+        items.append({"device": device, "label": label, "kind": kind})
+
+    # agent 使用 sounddevice/PortAudio 录音，这里的列表优先采用相同后端，
+    # 避免 arecord 能看到、PortAudio 却无法按该名称匹配。
     try:
-        out = subprocess.run(["arecord", "-l"], capture_output=True, text=True, timeout=8).stdout
+        import sounddevice as sd
+        hostapis = sd.query_hostapis()
+        for dev in sd.query_devices():
+            channels = int(dev.get("max_input_channels", 0) or 0)
+            if channels <= 0:
+                continue
+            name = str(dev.get("name", "")).strip()
+            if not name:
+                continue
+            lower_name = name.lower()
+            virtual = ("sysdefault", "default", "pulse", "pipewire", "dmix", "front", "surround")
+            if lower_name in virtual or lower_name.startswith(("surround", "dmix:", "front:")):
+                continue
+            host_idx = int(dev.get("hostapi", -1))
+            host_name = ""
+            if 0 <= host_idx < len(hostapis):
+                host_name = str(hostapis[host_idx].get("name", ""))
+            tag = f"{name} {host_name}".lower()
+            kind = "USB" if any(x in tag for x in ("usb", "dji", "mic mini")) else "其它"
+            rate = int(float(dev.get("default_samplerate", 0) or 0))
+            detail = f"{channels}ch" + (f" / {rate}Hz" if rate else "")
+            append_item(name, f"[{kind}] {name} ({detail})", kind)
+    except Exception as e:
+        warnings.append(f"PortAudio: {e}")
+
+    try:
+        env = dict(os.environ)
+        env.update({"LC_ALL": "C", "LANG": "C"})
+        proc = subprocess.run(
+            ["arecord", "-l"], capture_output=True, text=True, timeout=8, env=env,
+        )
+        if proc.returncode != 0 and proc.stderr.strip():
+            warnings.append(f"arecord: {proc.stderr.strip()}")
+        out = proc.stdout
         for line in out.splitlines():
-            m = re.match(r"\s*card (\d+): (\S+) \[(.*?)\].*device (\d+):", line)
+            m = re.match(r"\s*card (\d+): (\S+) \[(.*?)\].*device (\d+):", line, re.I)
             if not m:
                 continue
             card, cid, name, dev = m.group(1), m.group(2), m.group(3), m.group(4)
             tag = f"{cid} {name}".lower()
-            kind = "USB" if "usb" in tag else ("HDMI" if "hdmi" in tag else "其它")
-            items.append({
-                "device": name,   # 如 "USB PnP Sound Device"，agent 按子串匹配
-                "label": f"[{kind}] card {card}: {name}",
-                "kind": kind,
-            })
+            kind = "USB" if any(x in tag for x in ("usb", "dji", "mic mini")) else "其它"
+            append_item(name, f"[{kind}] card {card}: {name} (hw:{card},{dev})", kind)
     except Exception as e:
-        return {"devices": items, "error": str(e)}
-    return {"devices": items}
+        warnings.append(f"arecord: {e}")
+    return {"devices": items, "warnings": warnings}
 
 
 @app.get("/api/volume")

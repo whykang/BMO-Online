@@ -205,11 +205,17 @@ class BotStates:
 
 def _auto_pick_input(devices):
     """自动挑一个像样的麦输入设备，避开坏掉的 ALSA 默认（capture slave 未定义那种）。"""
-    prefer = ("usb", "pnp", "mic", "microphone", "webcam", "camera")
+    prefer = ("dji", "mic mini", "microphone", "mic", "usb", "pnp", "webcam", "camera")
+    ranked = []
     for idx, dev in enumerate(devices):
+        if dev.get("max_input_channels", 0) <= 0:
+            continue
         name = dev.get("name", "").lower()
-        if dev.get("max_input_channels", 0) > 0 and any(k in name for k in prefer):
-            return idx
+        score = sum((len(prefer) - pos) for pos, token in enumerate(prefer) if token in name)
+        if score:
+            ranked.append((score, idx))
+    if ranked:
+        return max(ranked, key=lambda item: item[0])[1]
     # 兜底：第一个有输入通道、且不是 default/sysdefault 的设备
     for idx, dev in enumerate(devices):
         name = dev.get("name", "").lower()
@@ -241,7 +247,8 @@ def resolve_input_device(requested):
     return _auto_pick_input(devices)
 
 
-def choose_input_samplerate(device, preferred=None) -> int:
+def choose_input_settings(device, preferred=None) -> tuple[int, int]:
+    """协商设备实际支持的采样率和声道数；部分 USB 无线麦只接受双声道。"""
     candidates = []
     if preferred:
         candidates.append(preferred)
@@ -252,17 +259,34 @@ def choose_input_samplerate(device, preferred=None) -> int:
     except Exception:
         pass
     candidates.extend([48000, 44100, 32000, 16000])
+    max_channels = 1
+    try:
+        max_channels = max(1, int(sd.query_devices(device).get("max_input_channels", 1)))
+    except Exception:
+        pass
+    channel_candidates = [1]
+    if max_channels >= 2:
+        channel_candidates.append(2)
+
     seen = set()
     for rate in candidates:
         if not rate or rate in seen:
             continue
         seen.add(rate)
-        try:
-            sd.check_input_settings(device=device, samplerate=rate, channels=1, dtype="int16")
-            return rate
-        except Exception:
-            continue
-    return int(candidates[0]) if candidates else 44100
+        for channels in channel_candidates:
+            try:
+                sd.check_input_settings(
+                    device=device, samplerate=rate, channels=channels, dtype="int16",
+                )
+                return int(rate), channels
+            except Exception:
+                continue
+    return (int(candidates[0]) if candidates else 44100), 1
+
+
+def choose_input_samplerate(device, preferred=None) -> int:
+    """兼容旧调用方；新录音流应使用 choose_input_settings。"""
+    return choose_input_settings(device, preferred)[0]
 
 
 # =========================================================================
@@ -1862,11 +1886,13 @@ class BotGUI:
         # OpenWakeWord 要求 1280 样本/chunk；sherpa 不挑，但 0.1s = 1600 样本一块比较合适
         target_chunk = 1280 if self.wake_backend == "openwakeword" else 1600
 
-        input_rate = choose_input_samplerate(self.input_device, self.config.get("input_sample_rate"))
+        input_rate, input_channels = choose_input_settings(
+            self.input_device, self.config.get("input_sample_rate"),
+        )
         use_resample = (input_rate != TARGET_SR)
         in_chunk = int(target_chunk * (input_rate / TARGET_SR)) if use_resample else target_chunk
 
-        stream_args = dict(samplerate=input_rate, channels=1, dtype='int16',
+        stream_args = dict(samplerate=input_rate, channels=input_channels, dtype='int16',
                            blocksize=in_chunk, device=self.input_device,
                            latency=self.config.get("audio_latency", "high"))
         refresh_secs = float(self.config.get("wake_word", {}).get("stream_refresh_seconds", 180))
@@ -1961,7 +1987,8 @@ class BotGUI:
                     pass
 
         with sd.InputStream(**args, callback=_audio_callback):
-            log(f"[AUDIO] 听唤醒词 backend={self.wake_backend} sr={args['samplerate']}")
+            log(f"[AUDIO] 听唤醒词 backend={self.wake_backend} "
+                f"sr={args['samplerate']} channels={args['channels']}")
             while True:
                 if self.exiting:
                     raise StopIteration("EXIT")
@@ -1982,9 +2009,10 @@ class BotGUI:
                         raise RuntimeError(f"audio callback timeout > {audio_timeout:.1f}s")
                     continue
 
-                audio = np.asarray(data, dtype=np.int16)
+                audio = np.asarray(data)
                 if audio.ndim > 1:
-                    audio = audio.flatten()
+                    audio = audio.astype(np.float32).mean(axis=1)
+                audio = np.clip(audio, -32768, 32767).astype(np.int16)
                 if use_resample:
                     audio = scipy.signal.resample_poly(
                         audio.astype(np.float32),
@@ -2029,7 +2057,9 @@ class BotGUI:
         在 onset_timeout 内没开口 → 返回 None（结束本次对话）。"""
         log(f"录音（自适应，等待开口≤{onset_timeout:.0f}s）...")
         time.sleep(0.2)
-        sr = choose_input_samplerate(self.input_device, self.config.get("input_sample_rate"))
+        sr, input_channels = choose_input_settings(
+            self.input_device, self.config.get("input_sample_rate"),
+        )
 
         rec_cfg = self.config.get("recording", {})
         silence_duration = float(rec_cfg.get("silence_duration", 1.8))
@@ -2061,20 +2091,23 @@ class BotGUI:
 
         def _cb(indata, frames, time_info, status):
             try:
-                audio_q.put_nowait(indata.copy())
+                chunk = np.asarray(indata)
+                if chunk.ndim > 1:
+                    chunk = chunk.astype(np.float32).mean(axis=1)
+                audio_q.put_nowait(chunk.copy())
             except queue.Full:
                 try:
                     audio_q.get_nowait()
                 except queue.Empty:
                     pass
                 try:
-                    audio_q.put_nowait(indata.copy())
+                    audio_q.put_nowait(chunk.copy())
                 except queue.Full:
                     pass
 
         try:
             last_audio = time.time()
-            with sd.InputStream(samplerate=sr, channels=1, dtype='int16',
+            with sd.InputStream(samplerate=sr, channels=input_channels, dtype='int16',
                                 blocksize=chunk_size, device=self.input_device,
                                 latency=self.config.get("audio_latency", "high"),
                                 callback=_cb) as stream:
@@ -2156,11 +2189,13 @@ class BotGUI:
     def record_voice_ptt(self, filename="input.wav"):
         log("录音（PTT）...")
         time.sleep(0.2)
-        sr = choose_input_samplerate(self.input_device, self.config.get("input_sample_rate"))
+        sr, input_channels = choose_input_settings(
+            self.input_device, self.config.get("input_sample_rate"),
+        )
         chunk_size = int(sr * 0.05)
         buf = []
         try:
-            with sd.InputStream(samplerate=sr, channels=1, dtype='int16',
+            with sd.InputStream(samplerate=sr, channels=input_channels, dtype='int16',
                                 blocksize=chunk_size, device=self.input_device,
                                 latency=self.config.get("audio_latency", "high")) as stream:
                 while self.recording_active.is_set() and not self.exiting:
@@ -2169,7 +2204,10 @@ class BotGUI:
                     except Exception as e:
                         log(f"[AUDIO] PTT 读取失败: {e}")
                         break
-                    buf.append(np.frombuffer(data, dtype=np.int16).astype(np.float32))
+                    chunk = np.asarray(data)
+                    if chunk.ndim > 1:
+                        chunk = chunk.astype(np.float32).mean(axis=1)
+                    buf.append(chunk.astype(np.float32).flatten())
         except Exception as e:
             log(f"[AUDIO ERROR] PTT 录音失败: {e}")
             return None

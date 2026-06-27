@@ -269,7 +269,7 @@
       <label>麦克风输入设备：</label>
       <select id="audio-input" style="min-width: 320px;"></select>
       <button class="btn secondary" onclick="loadAudioInputs()">刷新设备</button>
-      <span class="help">默认自动检测；换了麦点"刷新设备"再选。</span>
+      <span class="help" id="audio-input-hint">默认自动检测；换了麦点"刷新设备"再选。</span>
     </div>
     <div class="row">
       <label>音量：</label>
@@ -823,6 +823,9 @@ const I18N_EN = {
   "音量：": "Volume:", "保存引擎/输出": "Save engine/output",
   "默认“自动检测 USB 音响”。多个设备时在这里选。": "Default auto-detects USB speaker; pick here if multiple.",
   "默认自动检测；换了麦点\"刷新设备\"再选。": "Auto-detect by default; after changing mic click \"Refresh devices\".",
+  "检测麦克风失败：": "Microphone detection failed: ", "检测到": "Detected",
+  "个录音设备": "recording device(s)", "未检测到录音设备：": "No recording device detected: ",
+  "未检测到录音设备，请运行 arecord -l 检查": "No recording device detected. Run arecord -l to check.",
   "填火山控制台已开通的音色代号。": "Enter the voice ID enabled in the Volcengine console.",
   "Edge-TTS 音色（免费）": "Edge-TTS Voice (free)", "语言：": "Language:", "中文": "Chinese",
   "英文": "English", "日文": "Japanese", "音色：": "Voice:", "语速：": "Speed:",
@@ -1439,14 +1442,31 @@ async function loadAudioOutputs() {
 }
 async function loadAudioInputs() {
   const sel = document.getElementById('audio-input');
+  const hint = document.getElementById('audio-input-hint');
   const cur = CONFIG.input_device || 'auto';
-  let devs = [];
-  try { devs = (await fetchJSON('/api/audio/inputs')).devices || []; } catch (e) {}
+  let devs = [], warnings = [], loadError = '';
+  try {
+    const data = await fetchJSON('/api/audio/inputs');
+    devs = data.devices || [];
+    warnings = data.warnings || [];
+  } catch (e) {
+    loadError = e.message;
+  }
   sel.innerHTML = '';
   const add = (val, txt) => { const o = document.createElement('option'); o.value = val; o.textContent = tr(txt); if (val === cur) o.selected = true; sel.appendChild(o); };
   for (const d of devs) add(d.device, d.kind === 'AUTO' ? d.label : `${d.label}  (${d.device})`);
   // 当前值不在列表里也保留显示
   if (cur && cur !== 'auto' && !devs.some(d => d.device === cur)) add(cur, cur + '（当前）');
+  const detected = devs.filter(d => d.kind !== 'AUTO').length;
+  if (loadError) {
+    hint.textContent = tr('检测麦克风失败：') + loadError;
+  } else if (detected) {
+    hint.textContent = `${tr('检测到')} ${detected} ${tr('个录音设备')}`;
+  } else if (warnings.length) {
+    hint.textContent = tr('未检测到录音设备：') + warnings.join(' / ');
+  } else {
+    hint.textContent = tr('未检测到录音设备，请运行 arecord -l 检查');
+  }
 }
 async function loadVolume() {
   const hint = document.getElementById('volume-hint');
