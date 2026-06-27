@@ -252,6 +252,7 @@ def choose_input_settings(device, preferred=None) -> tuple[int, int]:
     candidates = []
     if preferred:
         candidates.append(preferred)
+    info = {}
     try:
         info = sd.query_devices(device)
         if "default_samplerate" in info:
@@ -260,10 +261,7 @@ def choose_input_settings(device, preferred=None) -> tuple[int, int]:
         pass
     candidates.extend([48000, 44100, 32000, 16000])
     max_channels = 1
-    try:
-        max_channels = max(1, int(sd.query_devices(device).get("max_input_channels", 1)))
-    except Exception:
-        pass
+    max_channels = max(1, int(info.get("max_input_channels", 1) or 1))
     channel_candidates = [1]
     if max_channels >= 2:
         channel_candidates.append(2)
@@ -281,7 +279,13 @@ def choose_input_settings(device, preferred=None) -> tuple[int, int]:
                 return int(rate), channels
             except Exception:
                 continue
-    return (int(candidates[0]) if candidates else 44100), 1
+    fallback_rate = int(info.get("default_samplerate", 0) or 0)
+    if not fallback_rate:
+        fallback_rate = int(candidates[0]) if candidates else 44100
+    fallback_channels = 2 if max_channels >= 2 else 1
+    log(f"[AUDIO] 无法预检输入参数，尝试设备默认值: "
+        f"sr={fallback_rate} channels={fallback_channels}")
+    return fallback_rate, fallback_channels
 
 
 def choose_input_samplerate(device, preferred=None) -> int:
@@ -1898,15 +1902,20 @@ class BotGUI:
         # OpenWakeWord 要求 1280 样本/chunk；sherpa 不挑，但 0.1s = 1600 样本一块比较合适
         target_chunk = 1280 if self.wake_backend == "openwakeword" else 1600
 
-        input_rate, input_channels = choose_input_settings(
-            self.input_device, self.config.get("input_sample_rate"),
-        )
-        use_resample = (input_rate != TARGET_SR)
-        in_chunk = int(target_chunk * (input_rate / TARGET_SR)) if use_resample else target_chunk
+        def build_stream_args():
+            input_rate, input_channels = choose_input_settings(
+                self.input_device, self.config.get("input_sample_rate"),
+            )
+            should_resample = (input_rate != TARGET_SR)
+            chunk = int(target_chunk * (input_rate / TARGET_SR)) if should_resample else target_chunk
+            args = dict(
+                samplerate=input_rate, channels=input_channels, dtype='int16',
+                blocksize=chunk, device=self.input_device,
+                latency=self.config.get("audio_latency", "high"),
+            )
+            return args, chunk, should_resample
 
-        stream_args = dict(samplerate=input_rate, channels=input_channels, dtype='int16',
-                           blocksize=in_chunk, device=self.input_device,
-                           latency=self.config.get("audio_latency", "high"))
+        stream_args, in_chunk, use_resample = build_stream_args()
         refresh_secs = float(self.config.get("wake_word", {}).get("stream_refresh_seconds", 180))
 
         # 自动重开：定期刷新音频流 + 读取出错时重开，避免长时间空闲后唤不醒
@@ -1926,6 +1935,7 @@ class BotGUI:
                 # 连续失败 → 彻底重置 PortAudio，强制重新枚举设备（清掉卡死的 ALSA 句柄）
                 if fail_count in (2, 4, 6):
                     self._reset_portaudio()
+                    stream_args, in_chunk, use_resample = build_stream_args()
                 if fail_count >= 12:
                     log("[AUDIO] 连续重开失败，回落 PTT")
                     while not self.ptt_event.is_set() and not self.exiting:
@@ -1967,6 +1977,9 @@ class BotGUI:
             time.sleep(0.8)
             sd._initialize()
             time.sleep(0.4)
+            # USB 设备重连/PortAudio 重建后序号可能变化，必须按配置名称重新定位。
+            self.input_device = resolve_input_device(self.config.get("input_device"))
+            self._log_input_device()
         except Exception as e:
             log(f"[AUDIO] 重置 PortAudio 失败: {e}")
 

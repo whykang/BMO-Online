@@ -63,7 +63,7 @@ class LLMProvider:
             # GPT-5 / o-series reject legacy max_tokens and non-default temperature.
             args["max_completion_tokens"] = self.max_tokens
             if self.model.lower().startswith("gpt-5"):
-                args["reasoning_effort"] = "minimal"
+                args["reasoning_effort"] = "low"
         else:
             args["temperature"] = self.temperature
             args["max_tokens"] = self.max_tokens

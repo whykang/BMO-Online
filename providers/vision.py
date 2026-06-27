@@ -62,7 +62,7 @@ class VisionProvider:
         if self.provider == "openai" and model.lower().startswith(("gpt-5", "o1", "o3", "o4")):
             args["max_completion_tokens"] = 256
             if model.lower().startswith("gpt-5"):
-                args["reasoning_effort"] = "minimal"
+                args["reasoning_effort"] = "low"
         else:
             args["max_tokens"] = 256
         return self._client().chat.completions.create(**args)
