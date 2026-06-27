@@ -289,6 +289,18 @@ def choose_input_samplerate(device, preferred=None) -> int:
     return choose_input_settings(device, preferred)[0]
 
 
+def select_active_input_channel(data):
+    """将多声道麦克风转为单声道，保留当前实际有声音的轨道。"""
+    audio = np.asarray(data)
+    if audio.ndim <= 1:
+        return audio.flatten()
+    if audio.shape[1] == 1:
+        return audio[:, 0]
+    work = audio.astype(np.float32)
+    energy = np.mean(work * work, axis=0)
+    return audio[:, int(np.argmax(energy))]
+
+
 # =========================================================================
 # 主 GUI 类
 # =========================================================================
@@ -2009,9 +2021,7 @@ class BotGUI:
                         raise RuntimeError(f"audio callback timeout > {audio_timeout:.1f}s")
                     continue
 
-                audio = np.asarray(data)
-                if audio.ndim > 1:
-                    audio = audio.astype(np.float32).mean(axis=1)
+                audio = select_active_input_channel(data)
                 audio = np.clip(audio, -32768, 32767).astype(np.int16)
                 if use_resample:
                     audio = scipy.signal.resample_poly(
@@ -2091,9 +2101,7 @@ class BotGUI:
 
         def _cb(indata, frames, time_info, status):
             try:
-                chunk = np.asarray(indata)
-                if chunk.ndim > 1:
-                    chunk = chunk.astype(np.float32).mean(axis=1)
+                chunk = select_active_input_channel(indata)
                 audio_q.put_nowait(chunk.copy())
             except queue.Full:
                 try:
@@ -2204,9 +2212,7 @@ class BotGUI:
                     except Exception as e:
                         log(f"[AUDIO] PTT 读取失败: {e}")
                         break
-                    chunk = np.asarray(data)
-                    if chunk.ndim > 1:
-                        chunk = chunk.astype(np.float32).mean(axis=1)
+                    chunk = select_active_input_channel(data)
                     buf.append(chunk.astype(np.float32).flatten())
         except Exception as e:
             log(f"[AUDIO ERROR] PTT 录音失败: {e}")
