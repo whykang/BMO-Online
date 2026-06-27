@@ -346,7 +346,7 @@
 <section id="tab-models" class="tab hide">
   <div class="panel">
     <div class="row">
-      <span id="models-status" class="help">正在从 OpenRouter / 硅基流动 拉取全量模型...</span>
+      <span id="models-status" class="help">正在从 OpenRouter / 硅基流动 / OpenAI 拉取全量模型...</span>
       <button class="btn secondary" onclick="loadLiveModels(true)">刷新模型列表</button>
     </div>
   </div>
@@ -374,6 +374,13 @@
                oninput="renderTwoCol('llm')">
         <div id="model-llm-deepseek" class="model-list"></div>
         <div class="key-missing hide" onclick="showTab('keys')">未填写 DeepSeek Key，点此去添加</div>
+      </div>
+      <div class="col" id="col-llm-openai">
+        <h3>OpenAI <span class="pill" id="key-llm-openai"></span></h3>
+        <input type="text" id="filter-llm-openai" placeholder="搜索 gpt-5 / gpt-4.1 / o3…"
+               oninput="renderTwoCol('llm')">
+        <div id="model-llm-openai" class="model-list"></div>
+        <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenAI Key，点此去添加</div>
       </div>
     </div>
     <div class="cur-model">当前模型：<b id="cur-llm">-</b></div>
@@ -404,6 +411,13 @@
                oninput="renderTwoCol('vision')">
         <div id="model-vision-openrouter" class="model-list"></div>
         <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenRouter Key，点此去添加</div>
+      </div>
+      <div class="col" id="col-vision-openai">
+        <h3>OpenAI <span class="pill" id="key-vision-openai"></span></h3>
+        <input type="text" id="filter-vision-openai" placeholder="搜索 gpt-5 / gpt-4o…"
+               oninput="renderTwoCol('vision')">
+        <div id="model-vision-openai" class="model-list"></div>
+        <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenAI Key，点此去添加</div>
       </div>
     </div>
     <div class="cur-model">当前模型：<b id="cur-vision">-</b></div>
@@ -445,12 +459,21 @@
         <div id="model-image_gen-openrouter" class="model-list"></div>
         <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenRouter Key，点此去添加</div>
       </div>
+      <div class="col" id="col-image_gen-openai">
+        <h3>OpenAI <span class="pill" id="key-image_gen-openai"></span></h3>
+        <input type="text" id="filter-image_gen-openai" placeholder="搜索 gpt-image…"
+               oninput="renderTwoCol('image_gen')">
+        <div id="model-image_gen-openai" class="model-list"></div>
+        <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenAI Key，点此去添加</div>
+      </div>
     </div>
     <div class="cur-model">当前模型：<b id="cur-image_gen">-</b></div>
     <div class="row">
       <label>尺寸：</label>
       <select id="model-imggen-size">
         <option>1024x1024</option>
+        <option>1024x1536</option>
+        <option>1536x1024</option>
         <option>768x1024</option>
         <option>1024x768</option>
         <option>512x512</option>
@@ -723,6 +746,7 @@
       <select id="key-provider">
         <option value="siliconflow">硅基流动</option>
         <option value="openrouter">OpenRouter</option>
+        <option value="openai">OpenAI</option>
         <option value="deepseek">DeepSeek</option>
         <option value="volc_apikey">豆包TTS API Key（火山 seed-tts-2.0）</option>
       </select>
@@ -815,10 +839,14 @@ const I18N_EN = {
   "搜索：": "Search:", "模型：": "Model:", "最大 tokens：": "Max tokens:",
   "未填写硅基流动 Key，点此去添加": "SiliconFlow key missing. Click to add.",
   "未填写 OpenRouter Key，点此去添加": "OpenRouter key missing. Click to add.",
+  "未填写 OpenAI Key，点此去添加": "OpenAI key missing. Click to add.",
   "未填写 DeepSeek Key，点此去添加": "DeepSeek key missing. Click to add.",
   "搜索 deepseek / qwen / glm…": "Search deepseek / qwen / glm...",
   "搜索 claude / gpt / gemini…": "Search claude / gpt / gemini...",
   "搜索 deepseek…": "Search deepseek...",
+  "搜索 gpt-5 / gpt-4.1 / o3…": "Search gpt-5 / gpt-4.1 / o3...",
+  "搜索 gpt-5 / gpt-4o…": "Search gpt-5 / gpt-4o...",
+  "搜索 gpt-image…": "Search gpt-image...",
   "搜索 qwen-vl / internvl…": "Search qwen-vl / internvl...",
   "搜索 gpt-4o / claude / gemini…": "Search gpt-4o / claude / gemini...",
   "搜索 kolors / flux / stable-diffusion…": "Search kolors / flux / stable-diffusion...",
@@ -941,7 +969,7 @@ const I18N_EN = {
   "已启用": "Enabled", "已禁用": "Disabled", "已设置": "Set", "未设置": "Not set",
   "开": "On", "关": "Off", "系统默认": "System default", "暂无模型": "No models",
   "没有匹配的模型": "No matching models", "正在加载...": "Loading...", "正在刷新模型列表...": "Refreshing models...",
-  "正在从 OpenRouter / 硅基流动 拉取全量模型...": "Fetching all models from OpenRouter / SiliconFlow...",
+  "正在从 OpenRouter / 硅基流动 / OpenAI 拉取全量模型...": "Fetching all models from OpenRouter / SiliconFlow / OpenAI...",
   "拉取失败（使用内置列表）：": "Fetch failed (using built-in list): ", "无法读取音量": "Can't read volume",
   "模型未下载（运行 setup_pi.sh）": "Model not downloaded (run setup_pi.sh)", "端口范围 1024~65535": "Port range 1024–65535",
   "（暂无对话）": "(no chat yet)", "（还没画过图）": "(no generated images yet)", "（还没有拍照）": "(no captured photos yet)",
@@ -1580,16 +1608,16 @@ async function saveVoice() {
 const MODELS_BY_KIND = { llm: [], vision: [], stt: [], image_gen: [] };
 const KIND_SELECT = { stt: 'model-stt' };
 const TWO_COL_KINDS = ['llm', 'vision', 'image_gen'];
-const PROVIDERS_2COL = ['siliconflow', 'openrouter'];
-// 各类型显示哪些 provider 列：只有 LLM 多一列 DeepSeek
+const PROVIDERS_2COL = ['siliconflow', 'openrouter', 'openai'];
+// 各类型显示哪些 provider 列：LLM 额外支持 DeepSeek 直连
 const PROVIDERS_BY_KIND = {
-  llm: ['siliconflow', 'openrouter', 'deepseek'],
-  vision: ['siliconflow', 'openrouter'],
-  image_gen: ['siliconflow', 'openrouter'],
+  llm: ['siliconflow', 'openrouter', 'deepseek', 'openai'],
+  vision: ['siliconflow', 'openrouter', 'openai'],
+  image_gen: ['siliconflow', 'openrouter', 'openai'],
 };
 const KIND_CONFIG = { llm: 'llm', vision: 'vision', stt: 'stt', image_gen: 'image_gen' };
 const KIND_MAX_SHOWN = 1000;
-let KEYS = { siliconflow: false, openrouter: false, deepseek: false, volc_apikey: false };
+let KEYS = { siliconflow: false, openrouter: false, openai: false, deepseek: false, volc_apikey: false };
 
 const API_KEY_URLS = {
   siliconflow: {
@@ -1599,6 +1627,10 @@ const API_KEY_URLS = {
   openrouter: {
     name: 'OpenRouter',
     url: 'https://openrouter.ai/settings/keys',
+  },
+  openai: {
+    name: 'OpenAI',
+    url: 'https://platform.openai.com/api-keys',
   },
   deepseek: {
     name: 'DeepSeek',
@@ -1768,6 +1800,10 @@ function renderModelSelect(kind) {
     const opt = document.createElement('option');
     opt.value = JSON.stringify({ provider: p.provider, model: p.model });
     opt.textContent = `[${p.provider}] ${p.model}`;
+    if (Object.hasOwn(KEYS, p.provider) && !KEYS[p.provider]) {
+      opt.disabled = true;
+      opt.title = tr(`请先在「API Key」标签填写 ${p.provider} 的 key`);
+    }
     if (p.model === cfg.model && p.provider === cfg.provider) opt.selected = true;
     sel.appendChild(opt);
   }
@@ -1790,7 +1826,7 @@ function fillModels() {
 
 async function loadLiveModels(refresh = false) {
   const status = document.getElementById('models-status');
-  status.textContent = tr(refresh ? '正在刷新模型列表...' : '正在从 OpenRouter / 硅基流动 拉取全量模型...');
+  status.textContent = tr(refresh ? '正在刷新模型列表...' : '正在从 OpenRouter / 硅基流动 / OpenAI 拉取全量模型...');
   try {
     const live = await fetchJSON('/api/models/live' + (refresh ? '?refresh=true' : ''));
     for (const k of Object.keys(MODELS_BY_KIND)) {
@@ -1827,6 +1863,9 @@ async function saveVision() {
 }
 async function saveSTT() {
   const p = JSON.parse(document.getElementById('model-stt').value);
+  if (Object.hasOwn(KEYS, p.provider) && !KEYS[p.provider]) {
+    return alert(`请先在「API Key」标签填写 ${p.provider} 的 key`);
+  }
   CONFIG.stt = { ...CONFIG.stt, provider: p.provider, model: p.model };
   await putJSON('/api/config', CONFIG);
   alert('已保存');
@@ -2252,6 +2291,7 @@ async function loadKeys() {
   }
   // key 状态变了，重渲染双列模型（灰显/恢复）
   for (const k of TWO_COL_KINDS) renderTwoCol(k);
+  renderModelSelect('stt');
   updateTTSProviderUI();
   updateApiKeyUrl();
 }

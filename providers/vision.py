@@ -58,11 +58,14 @@ class VisionProvider:
         return resp.choices[0].message.content or ""
 
     def _describe_once(self, messages, model: str):
-        return self._client().chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=256,
-        )
+        args = {"model": model, "messages": messages}
+        if self.provider == "openai" and model.lower().startswith(("gpt-5", "o1", "o3", "o4")):
+            args["max_completion_tokens"] = 256
+            if model.lower().startswith("gpt-5"):
+                args["reasoning_effort"] = "minimal"
+        else:
+            args["max_tokens"] = 256
+        return self._client().chat.completions.create(**args)
 
     def _is_model_missing_error(self, err: APIStatusError) -> bool:
         body = getattr(err, "body", None)

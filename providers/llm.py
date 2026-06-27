@@ -40,13 +40,7 @@ class LLMProvider:
 
     def chat_stream(self, messages):
         """流式聊天，逐 chunk yield 文本片段。"""
-        stream = self._client().chat.completions.create(
-            model=self.model,
-            messages=messages,
-            stream=True,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-        )
+        stream = self._client().chat.completions.create(**self._completion_args(messages, True))
         for chunk in stream:
             if not chunk.choices:
                 continue
@@ -56,11 +50,25 @@ class LLMProvider:
 
     def chat_once(self, messages) -> str:
         """非流式，一次拿完整回答。"""
-        resp = self._client().chat.completions.create(
-            model=self.model,
-            messages=messages,
-            stream=False,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-        )
+        resp = self._client().chat.completions.create(**self._completion_args(messages, False))
         return resp.choices[0].message.content or ""
+
+    def _completion_args(self, messages, stream: bool) -> dict:
+        args = {
+            "model": self.model,
+            "messages": messages,
+            "stream": stream,
+        }
+        if self.provider == "openai" and self._is_reasoning_model():
+            # GPT-5 / o-series reject legacy max_tokens and non-default temperature.
+            args["max_completion_tokens"] = self.max_tokens
+            if self.model.lower().startswith("gpt-5"):
+                args["reasoning_effort"] = "minimal"
+        else:
+            args["temperature"] = self.temperature
+            args["max_tokens"] = self.max_tokens
+        return args
+
+    def _is_reasoning_model(self) -> bool:
+        model = self.model.lower()
+        return model.startswith("gpt-5") or model.startswith(("o1", "o3", "o4"))

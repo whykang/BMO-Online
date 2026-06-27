@@ -7,7 +7,7 @@
 
 - **语音对话**：硅基流动 SenseVoice 听话，DeepSeek-V3 思考，Edge-TTS 说话（**中文音色一流，免费**）
 - **看图能力**：摄像头拍照 → Qwen2-VL 描述
-- **画图能力**：说"画一只戴帽子的猫" → 硅基流动 / OpenRouter 文生图模型生成 → 屏幕展示
+- **画图能力**：说"画一只戴帽子的猫" → 硅基流动 / OpenRouter / OpenAI 文生图模型生成 → 屏幕展示
 - **直接问答**：搜索/新闻类问题由大模型直接回答，不再调用外部搜索工具
 - **中文唤醒词**（Sherpa-ONNX KWS，零训练）+ **物理按钮 PTT** 两种触发，并存
 - **网页控制台**（http://树莓派IP:8087）：在线切换音色 / 模型 / 性格 / 唤醒词，看日志、看历史、看画廊、当遥控器
@@ -66,12 +66,13 @@ chmod +x setup_pi.sh
 nano .env
 ```
 
-至少填一个：
+至少填一个，也可以启动后在网页的「API Key」中填写：
 ```
 SILICONFLOW_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# 或 OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-注册：<https://cloud.siliconflow.cn>
+注册地址：[硅基流动](https://cloud.siliconflow.cn) / [OpenAI](https://platform.openai.com/api-keys)
 
 ### 5. 启动
 

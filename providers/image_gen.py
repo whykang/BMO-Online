@@ -1,4 +1,4 @@
-"""文生图 provider —— 硅基流动 / OpenRouter。"""
+"""文生图 provider —— 硅基流动 / OpenRouter / OpenAI。"""
 import os
 import time
 import requests
@@ -24,11 +24,42 @@ class ImageGenProvider:
 
     def generate(self, prompt: str) -> str | None:
         """生成图片，返回本地文件路径；失败返回 None。"""
+        self.api_key = self._get_key()
         if not self.api_key:
             raise RuntimeError(f"缺少 {self.provider} API key")
         if self.provider == "openrouter":
             return self._generate_openrouter(prompt)
+        if self.provider == "openai":
+            return self._generate_openai(prompt)
         return self._generate_siliconflow(prompt)
+
+    def _generate_openai(self, prompt: str) -> str | None:
+        size = {
+            "512x512": "1024x1024",
+            "768x1024": "1024x1536",
+            "1024x768": "1536x1024",
+        }.get(self.size, self.size)
+        r = requests.post(
+            f"{self.base_url}/images/generations",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": self.model,
+                "prompt": prompt,
+                "size": size,
+                "n": 1,
+            },
+            timeout=180,
+        )
+        r.raise_for_status()
+        images = r.json().get("data") or []
+        if not images:
+            return None
+        image = images[0]
+        url = image.get("url") or image.get("b64_json")
+        return self._save_image_url(url, prompt) if url else None
 
     def _generate_siliconflow(self, prompt: str) -> str | None:
         r = requests.post(

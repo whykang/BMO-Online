@@ -1000,14 +1000,26 @@ PRESETS = {
         {"provider": "openrouter", "model": "openai/gpt-4o-mini", "desc": "GPT-4o mini（OpenRouter）"},
         {"provider": "deepseek", "model": "deepseek-v4-flash", "desc": "DeepSeek V4 Flash（快）"},
         {"provider": "deepseek", "model": "deepseek-v4-pro", "desc": "DeepSeek V4 Pro（强）"},
+        {"provider": "openai", "model": "gpt-5.2", "desc": "GPT-5.2"},
+        {"provider": "openai", "model": "gpt-5-mini", "desc": "GPT-5 mini（快速、经济）"},
+        {"provider": "openai", "model": "gpt-4.1", "desc": "GPT-4.1"},
+        {"provider": "openai", "model": "gpt-4.1-mini", "desc": "GPT-4.1 mini（快速、经济）"},
+        {"provider": "openai", "model": "gpt-4o-mini", "desc": "GPT-4o mini（轻量）"},
     ],
     "vision": [
         {"provider": "openrouter", "model": "openai/gpt-4o-mini", "desc": "GPT-4o mini（OpenRouter）"},
         {"provider": "openrouter", "model": "google/gemini-2.5-flash", "desc": "Gemini 2.5 Flash（OpenRouter）"},
+        {"provider": "openai", "model": "gpt-5.2", "desc": "GPT-5.2 视觉"},
+        {"provider": "openai", "model": "gpt-5-mini", "desc": "GPT-5 mini 视觉"},
+        {"provider": "openai", "model": "gpt-4.1-mini", "desc": "GPT-4.1 mini 视觉"},
+        {"provider": "openai", "model": "gpt-4o-mini", "desc": "GPT-4o mini 视觉"},
     ],
     "stt": [
         {"provider": "siliconflow", "model": "FunAudioLLM/SenseVoiceSmall", "desc": "SenseVoice 云端（多语种、便宜）"},
         {"provider": "local_sherpa", "model": "models/sense-voice", "desc": "SenseVoice 本地（Sherpa-ONNX，离线免费）"},
+        {"provider": "openai", "model": "gpt-4o-transcribe", "desc": "GPT-4o Transcribe"},
+        {"provider": "openai", "model": "gpt-4o-mini-transcribe", "desc": "GPT-4o mini Transcribe（经济）"},
+        {"provider": "openai", "model": "whisper-1", "desc": "Whisper（经典）"},
     ],
     "tts_fallback": [
         {"provider": "siliconflow", "model": "FunAudioLLM/CosyVoice2-0.5B",
@@ -1027,6 +1039,9 @@ PRESETS = {
          "desc": "Gemini 3 Pro Image（OpenRouter）"},
         {"provider": "openrouter", "model": "recraft/recraft-v4.1",
          "desc": "Recraft V4.1（OpenRouter）"},
+        {"provider": "openai", "model": "gpt-image-1.5", "desc": "GPT Image 1.5（画质最佳）"},
+        {"provider": "openai", "model": "gpt-image-1", "desc": "GPT Image 1"},
+        {"provider": "openai", "model": "gpt-image-1-mini", "desc": "GPT Image 1 mini（经济）"},
     ],
 }
 
@@ -1137,8 +1152,66 @@ def _fetch_siliconflow(sub_type, mtype="text"):
             for m in data if m.get("id")]
 
 
+def _fetch_openai():
+    """拉取当前账号可用的 OpenAI 模型，并按 BMO 支持的接口分类。"""
+    key = os.getenv("OPENAI_API_KEY", "")
+    if not key:
+        return [], [], [], []
+    try:
+        r = requests.get(
+            "https://api.openai.com/v1/models",
+            headers={"Authorization": f"Bearer {key}"},
+            timeout=20,
+        )
+        r.raise_for_status()
+        model_ids = [m.get("id", "") for m in r.json().get("data", [])]
+    except Exception as e:
+        print(f"[MODELS] OpenAI 拉取失败: {e}", flush=True)
+        return [], [], [], []
+
+    def is_chat(mid):
+        name = mid.lower()
+        excluded = (
+            "audio", "realtime", "transcribe", "tts", "embedding", "moderation",
+            "whisper", "dall-e", "gpt-image", "sora", "codex", "search",
+        )
+        return (name.startswith("gpt-") or name.startswith(("o1", "o3", "o4"))) \
+            and not any(token in name for token in excluded)
+
+    def is_vision(mid):
+        name = mid.lower()
+        return is_chat(mid) and name.startswith(("gpt-4o", "gpt-4.1", "gpt-5", "o1", "o3", "o4"))
+
+    def item(mid, modalities):
+        return {
+            "provider": "openai",
+            "model": mid,
+            "desc": mid,
+            "input_modalities": modalities[0],
+            "output_modalities": modalities[1],
+        }
+
+    llm = [item(mid, (["text"], ["text"])) for mid in model_ids if is_chat(mid)]
+    vision = [item(mid, (["text", "image"], ["text"])) for mid in model_ids if is_vision(mid)]
+    image_gen = [
+        item(mid, (["text", "image"], ["image"]))
+        for mid in model_ids
+        if mid.lower().startswith(("gpt-image", "chatgpt-image-latest"))
+    ]
+    stt = [
+        item(mid, (["audio"], ["text"]))
+        for mid in model_ids
+        if "transcribe" in mid.lower() or mid.lower() == "whisper-1"
+    ]
+    return (
+        dedupe_models(llm), dedupe_models(vision),
+        dedupe_models(image_gen), dedupe_models(stt),
+    )
+
+
 def _build_live_models():
     or_llm, or_vision, or_img = _fetch_openrouter()
+    oa_llm, oa_vision, oa_img, oa_stt = _fetch_openai()
     sf_chat = _fetch_siliconflow("chat", "text")
     sf_img = _fetch_siliconflow("text-to-image", "image")
     sf_tts = _fetch_siliconflow("text-to-speech", "audio")
@@ -1151,17 +1224,17 @@ def _build_live_models():
     sf_vision = [x for x in sf_chat if is_vision(x["model"])]
 
     return {
-        "llm": or_llm + sf_chat,
-        "vision": or_vision + sf_vision,
-        "image_gen": or_img + sf_img,
+        "llm": or_llm + sf_chat + oa_llm,
+        "vision": or_vision + sf_vision + oa_vision,
+        "image_gen": or_img + sf_img + oa_img,
         "tts_fallback": sf_tts,
-        "stt": sf_stt,
+        "stt": sf_stt + oa_stt,
         "counts": {
-            "llm": len(or_llm) + len(sf_chat),
-            "vision": len(or_vision) + len(sf_vision),
-            "image_gen": len(or_img) + len(sf_img),
+            "llm": len(or_llm) + len(sf_chat) + len(oa_llm),
+            "vision": len(or_vision) + len(sf_vision) + len(oa_vision),
+            "image_gen": len(or_img) + len(sf_img) + len(oa_img),
             "tts_fallback": len(sf_tts),
-            "stt": len(sf_stt),
+            "stt": len(sf_stt) + len(oa_stt),
         },
     }
 
@@ -1188,6 +1261,7 @@ async def list_keys():
     return {
         "siliconflow": bool(os.getenv("SILICONFLOW_API_KEY")),
         "openrouter": bool(os.getenv("OPENROUTER_API_KEY")),
+        "openai": bool(os.getenv("OPENAI_API_KEY")),
         "deepseek": bool(os.getenv("DEEPSEEK_API_KEY")),
         "volc_apikey": bool(os.getenv("VOLC_TTS_API_KEY")),
     }
@@ -1196,6 +1270,7 @@ async def list_keys():
 KEY_ENV_MAP = {
     "siliconflow": "SILICONFLOW_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
+    "openai": "OPENAI_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
     "volc_apikey": "VOLC_TTS_API_KEY",
 }
@@ -1228,6 +1303,7 @@ async def update_key(req: UpdateKeyReq):
         f.writelines(lines)
     # 立即生效
     os.environ[env_name] = req.key
+    _models_cache.update({"ts": 0, "data": None})
     queue_command({"action": "reload_config"})
     return {"ok": True, "note": "已写入 .env，agent 也已重载"}
 
@@ -1250,6 +1326,7 @@ async def delete_key(provider: str):
     with open(ENV_FILE, "w", encoding="utf-8") as f:
         f.writelines(kept)
     os.environ.pop(env_name, None)
+    _models_cache.update({"ts": 0, "data": None})
     queue_command({"action": "reload_config"})
     return {"ok": True, "note": "已从 .env 删除，agent 也已重载"}
 
