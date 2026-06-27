@@ -170,7 +170,11 @@ TOOLS_PROMPT = (
     "   停止播放：{\"action\": \"stop_media\"}\n"
     "10. 识别屏幕（截屏看屏幕上有什么）：{\"action\": \"read_screen\"}\n"
     "11. 隐身（最小化自己但继续运行）：{\"action\": \"hide\"}\n"
-    "   取消隐身（恢复显示）：{\"action\": \"unhide\"}\n\n"
+    "   取消隐身（恢复显示）：{\"action\": \"unhide\"}\n"
+    "12. 进入待唤醒/退下：{\"action\": \"enter_wait_wake\"}。"
+    "当用户让你退下、不要说话了、闭嘴、安静、别说话、别理我、让我安静、"
+    "或表达不想继续对话/让你回去待命时，必须输出这个 JSON；"
+    "执行后 BMO 会先说「好的，我先退下了。」然后直接回到等待唤醒。\n\n"
     "重要：只要用户的话涉及上面这些能力（尤其是调音量，例如'声音大一点'、'调大声'、"
     "'太吵了小声点'、'音量调到50'），就必须直接输出对应工具的纯 JSON，"
     "绝对不能用文字说'我做不到'、'我没法调音量'之类的话。\n"
@@ -2411,6 +2415,9 @@ class BotGUI:
             "hide": "hide", "minimize": "hide", "隐身": "hide",
             "unhide": "unhide", "show": "unhide", "restore": "unhide",
             "取消隐身": "unhide", "现身": "unhide",
+            "wait_wake": "enter_wait_wake", "go_idle": "enter_wait_wake",
+            "standby": "enter_wait_wake", "sleep": "enter_wait_wake",
+            "退下": "enter_wait_wake", "待命": "enter_wait_wake",
         }
         action = ALIASES.get(raw, raw)
         log(f"[ACTION] {raw} -> {action}")
@@ -2484,6 +2491,9 @@ class BotGUI:
 
         if action == "unhide":
             return "UNHIDE_BMO"
+
+        if action == "enter_wait_wake":
+            return "ENTER_WAIT_WAKE"
 
         if action == "print":
             content = action_data.get("content") or action_data.get("text")
@@ -2821,6 +2831,14 @@ class BotGUI:
 
         if result == "UNHIDE_BMO":
             self._unhide_bmo()
+            return
+
+        if result == "ENTER_WAIT_WAKE":
+            self._say("好的，我先退下了。", remember=original_text)
+            self.abort_to_wake.set()
+            self.ptt_event.clear()
+            self.recording_active.clear()
+            self.set_state(BotStates.IDLE, "等待唤醒...")
             return
 
         if result == "GAME_LIST":
