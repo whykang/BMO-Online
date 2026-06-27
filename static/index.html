@@ -104,18 +104,7 @@
   .pill.err { background: #fbefee; border-color: #e7c8c5; color: var(--err); }
   .hide { display: none; }
   .help { color: var(--muted); font-size: 12px; margin-top: 4px; }
-  .two-col { display: flex; gap: 12px; flex-wrap: wrap; }
-  .two-col .col { flex: 1; min-width: 280px; position: relative;
-                  background: var(--panel-light); border: 1px solid var(--line);
-                  border-radius: 6px; padding: 12px; }
-  .two-col .col h3 { margin: 0 0 8px; font-size: 14px; display: flex;
-                     justify-content: space-between; align-items: center; }
-  .two-col .col input[type=text] { width: 100%; margin-bottom: 8px; box-sizing: border-box; }
-  .two-col .col select { width: 100%; }
-  .col.disabled { opacity: 0.5; }
-  .col.disabled select, .col.disabled input, .col.disabled .model-list { pointer-events: none; }
-  .key-missing { color: var(--err); font-size: 12px; margin-top: 8px; cursor: pointer;
-                 text-decoration: underline; }
+  select[id^="provider-"] { min-width: 240px; }
   .api-key-link { align-items: flex-start; }
   .api-key-link a { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
   .api-key-link a:hover { text-decoration: underline; }
@@ -353,36 +342,17 @@
 
   <div class="panel">
     <h2>LLM 大脑</h2>
-    <div class="two-col">
-      <div class="col" id="col-llm-siliconflow">
-        <h3>硅基流动 <span class="pill" id="key-llm-siliconflow"></span></h3>
-        <input type="text" id="filter-llm-siliconflow" placeholder="搜索 deepseek / qwen / glm…"
-               oninput="renderTwoCol('llm')">
-        <div id="model-llm-siliconflow" class="model-list"></div>
-        <div class="key-missing hide" onclick="showTab('keys')">未填写硅基流动 Key，点此去添加</div>
-      </div>
-      <div class="col" id="col-llm-openrouter">
-        <h3>OpenRouter <span class="pill" id="key-llm-openrouter"></span></h3>
-        <input type="text" id="filter-llm-openrouter" placeholder="搜索 claude / gpt / gemini…"
-               oninput="renderTwoCol('llm')">
-        <div id="model-llm-openrouter" class="model-list"></div>
-        <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenRouter Key，点此去添加</div>
-      </div>
-      <div class="col" id="col-llm-deepseek">
-        <h3>DeepSeek <span class="pill" id="key-llm-deepseek"></span></h3>
-        <input type="text" id="filter-llm-deepseek" placeholder="搜索 deepseek…"
-               oninput="renderTwoCol('llm')">
-        <div id="model-llm-deepseek" class="model-list"></div>
-        <div class="key-missing hide" onclick="showTab('keys')">未填写 DeepSeek Key，点此去添加</div>
-      </div>
-      <div class="col" id="col-llm-openai">
-        <h3>OpenAI <span class="pill" id="key-llm-openai"></span></h3>
-        <input type="text" id="filter-llm-openai" placeholder="搜索 gpt-5 / gpt-4.1 / o3…"
-               oninput="renderTwoCol('llm')">
-        <div id="model-llm-openai" class="model-list"></div>
-        <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenAI Key，点此去添加</div>
-      </div>
+    <div class="row">
+      <label>服务商：</label>
+      <select id="provider-llm" onchange="changeModelProvider('llm')"></select>
+      <span class="help" id="provider-hint-llm"></span>
     </div>
+    <div class="row">
+      <label>搜索：</label>
+      <input type="text" id="filter-llm" placeholder="输入模型名称"
+             style="flex:1; min-width:300px;" oninput="renderProviderModels('llm')">
+    </div>
+    <div id="model-llm" class="model-list"></div>
     <div class="cur-model">当前模型：<b id="cur-llm">-</b></div>
     <div class="row" style="margin-top: 10px;">
       <label>温度：</label>
@@ -397,29 +367,17 @@
 
   <div class="panel">
     <h2>视觉模型</h2>
-    <div class="two-col">
-      <div class="col" id="col-vision-siliconflow">
-        <h3>硅基流动 <span class="pill" id="key-vision-siliconflow"></span></h3>
-        <input type="text" id="filter-vision-siliconflow" placeholder="搜索 qwen-vl / internvl…"
-               oninput="renderTwoCol('vision')">
-        <div id="model-vision-siliconflow" class="model-list"></div>
-        <div class="key-missing hide" onclick="showTab('keys')">未填写硅基流动 Key，点此去添加</div>
-      </div>
-      <div class="col" id="col-vision-openrouter">
-        <h3>OpenRouter <span class="pill" id="key-vision-openrouter"></span></h3>
-        <input type="text" id="filter-vision-openrouter" placeholder="搜索 gpt-4o / claude / gemini…"
-               oninput="renderTwoCol('vision')">
-        <div id="model-vision-openrouter" class="model-list"></div>
-        <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenRouter Key，点此去添加</div>
-      </div>
-      <div class="col" id="col-vision-openai">
-        <h3>OpenAI <span class="pill" id="key-vision-openai"></span></h3>
-        <input type="text" id="filter-vision-openai" placeholder="搜索 gpt-5 / gpt-4o…"
-               oninput="renderTwoCol('vision')">
-        <div id="model-vision-openai" class="model-list"></div>
-        <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenAI Key，点此去添加</div>
-      </div>
+    <div class="row">
+      <label>服务商：</label>
+      <select id="provider-vision" onchange="changeModelProvider('vision')"></select>
+      <span class="help" id="provider-hint-vision"></span>
     </div>
+    <div class="row">
+      <label>搜索：</label>
+      <input type="text" id="filter-vision" placeholder="输入模型名称"
+             style="flex:1; min-width:300px;" oninput="renderProviderModels('vision')">
+    </div>
+    <div id="model-vision" class="model-list"></div>
     <div class="cur-model">当前模型：<b id="cur-vision">-</b></div>
     <div class="row" style="margin-top: 10px;">
       <button class="btn" onclick="saveVision()">保存</button>
@@ -428,6 +386,11 @@
 
   <div class="panel">
     <h2>STT 语音转文字</h2>
+    <div class="row">
+      <label>服务商：</label>
+      <select id="provider-stt" onchange="changeModelProvider('stt')"></select>
+      <span class="help" id="provider-hint-stt"></span>
+    </div>
     <div class="row">
       <label>搜索：</label>
       <input type="text" id="filter-stt" placeholder="如 sensevoice / whisper"
@@ -444,29 +407,17 @@
 
   <div class="panel">
     <h2>文生图</h2>
-    <div class="two-col">
-      <div class="col" id="col-image_gen-siliconflow">
-        <h3>硅基流动 <span class="pill" id="key-image_gen-siliconflow"></span></h3>
-        <input type="text" id="filter-image_gen-siliconflow" placeholder="搜索 kolors / flux / stable-diffusion…"
-               oninput="renderTwoCol('image_gen')">
-        <div id="model-image_gen-siliconflow" class="model-list"></div>
-        <div class="key-missing hide" onclick="showTab('keys')">未填写硅基流动 Key，点此去添加</div>
-      </div>
-      <div class="col" id="col-image_gen-openrouter">
-        <h3>OpenRouter <span class="pill" id="key-image_gen-openrouter"></span></h3>
-        <input type="text" id="filter-image_gen-openrouter" placeholder="搜索 gemini image / recraft / flux…"
-               oninput="renderTwoCol('image_gen')">
-        <div id="model-image_gen-openrouter" class="model-list"></div>
-        <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenRouter Key，点此去添加</div>
-      </div>
-      <div class="col" id="col-image_gen-openai">
-        <h3>OpenAI <span class="pill" id="key-image_gen-openai"></span></h3>
-        <input type="text" id="filter-image_gen-openai" placeholder="搜索 gpt-image…"
-               oninput="renderTwoCol('image_gen')">
-        <div id="model-image_gen-openai" class="model-list"></div>
-        <div class="key-missing hide" onclick="showTab('keys')">未填写 OpenAI Key，点此去添加</div>
-      </div>
+    <div class="row">
+      <label>服务商：</label>
+      <select id="provider-image_gen" onchange="changeModelProvider('image_gen')"></select>
+      <span class="help" id="provider-hint-image_gen"></span>
     </div>
+    <div class="row">
+      <label>搜索：</label>
+      <input type="text" id="filter-image_gen" placeholder="输入模型名称"
+             style="flex:1; min-width:300px;" oninput="renderProviderModels('image_gen')">
+    </div>
+    <div id="model-image_gen" class="model-list"></div>
     <div class="cur-model">当前模型：<b id="cur-image_gen">-</b></div>
     <div class="row">
       <label>尺寸：</label>
@@ -838,6 +789,11 @@ const I18N_EN = {
   // models
   "LLM 大脑": "LLM Brain", "视觉模型": "Vision Model", "STT 语音转文字": "STT (speech-to-text)",
   "文生图": "Image Generation", "硅基流动": "SiliconFlow", "刷新模型列表": "Refresh model list",
+  "服务商：": "Provider:", "输入模型名称": "Enter model name", "请选择服务商": "Select a provider",
+  "（未配置 Key）": " (key not set)", "本地 Sherpa-ONNX": "Local Sherpa-ONNX",
+  "没有可用服务商，请先填写 API Key": "No provider available. Add an API key first.",
+  "API Key 已配置": "API key configured", "无需 API Key": "No API key required",
+  "请先选择服务商": "Select a provider first", "请先选择一个模型": "Select a model first",
   "当前模型：": "Current model:", "保存所有设置": "Save all settings", "尺寸：": "Size:",
   "搜索：": "Search:", "模型：": "Model:", "最大 tokens：": "Max tokens:",
   "未填写硅基流动 Key，点此去添加": "SiliconFlow key missing. Click to add.",
@@ -1627,17 +1583,24 @@ async function saveVoice() {
 // ============ 模型 ============
 const MODELS_BY_KIND = { llm: [], vision: [], stt: [], image_gen: [] };
 const KIND_SELECT = { stt: 'model-stt' };
-const TWO_COL_KINDS = ['llm', 'vision', 'image_gen'];
-const PROVIDERS_2COL = ['siliconflow', 'openrouter', 'openai'];
-// 各类型显示哪些 provider 列：LLM 额外支持 DeepSeek 直连
+const MODEL_BROWSER_KINDS = ['llm', 'vision', 'image_gen'];
 const PROVIDERS_BY_KIND = {
   llm: ['siliconflow', 'openrouter', 'deepseek', 'openai'],
   vision: ['siliconflow', 'openrouter', 'openai'],
+  stt: ['local_sherpa', 'siliconflow', 'openai'],
   image_gen: ['siliconflow', 'openrouter', 'openai'],
 };
 const KIND_CONFIG = { llm: 'llm', vision: 'vision', stt: 'stt', image_gen: 'image_gen' };
 const KIND_MAX_SHOWN = 1000;
 let KEYS = { siliconflow: false, openrouter: false, openai: false, deepseek: false, volc_apikey: false };
+const ACTIVE_PROVIDER = { llm: '', vision: '', stt: '', image_gen: '' };
+const PROVIDER_LABELS = {
+  siliconflow: '硅基流动',
+  openrouter: 'OpenRouter',
+  deepseek: 'DeepSeek',
+  openai: 'OpenAI',
+  local_sherpa: '本地 Sherpa-ONNX',
+};
 
 const API_KEY_URLS = {
   siliconflow: {
@@ -1747,49 +1710,97 @@ function appendModelRow(listEl, kind, prov, p, selected) {
   listEl.appendChild(row);
 }
 
-// ---- 两列渲染（LLM / 视觉 / 文生图）----
-function renderTwoCol(kind) {
+function providerNeedsKey(provider) {
+  return Object.hasOwn(KEYS, provider);
+}
+
+function providerEnabled(provider) {
+  return !providerNeedsKey(provider) || !!KEYS[provider];
+}
+
+function fillProviderSelect(kind) {
+  const sel = document.getElementById('provider-' + kind);
+  if (!sel) return;
+  const previous = ACTIVE_PROVIDER[kind] || SELECTED[kind]?.provider || CONFIG[KIND_CONFIG[kind]]?.provider || '';
+  sel.innerHTML = '';
+
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = tr('请选择服务商');
+  sel.appendChild(placeholder);
+
+  let firstEnabled = '';
+  for (const provider of PROVIDERS_BY_KIND[kind] || []) {
+    const opt = document.createElement('option');
+    opt.value = provider;
+    opt.disabled = !providerEnabled(provider);
+    opt.textContent = tr(PROVIDER_LABELS[provider] || provider);
+    if (opt.disabled) opt.textContent += tr('（未配置 Key）');
+    if (!opt.disabled && !firstEnabled) firstEnabled = provider;
+    sel.appendChild(opt);
+  }
+
+  const active = providerEnabled(previous) && (PROVIDERS_BY_KIND[kind] || []).includes(previous)
+    ? previous : firstEnabled;
+  ACTIVE_PROVIDER[kind] = active || '';
+  sel.value = ACTIVE_PROVIDER[kind];
+  updateProviderHint(kind);
+}
+
+function updateProviderHint(kind) {
+  const hint = document.getElementById('provider-hint-' + kind);
+  const provider = ACTIVE_PROVIDER[kind];
+  if (!hint) return;
+  if (!provider) {
+    hint.textContent = tr('没有可用服务商，请先填写 API Key');
+  } else if (providerNeedsKey(provider)) {
+    hint.textContent = tr('API Key 已配置');
+  } else {
+    hint.textContent = tr('无需 API Key');
+  }
+}
+
+function changeModelProvider(kind) {
+  ACTIVE_PROVIDER[kind] = document.getElementById('provider-' + kind)?.value || '';
+  const filter = document.getElementById('filter-' + kind);
+  if (filter) filter.value = '';
+  updateProviderHint(kind);
+  if (MODEL_BROWSER_KINDS.includes(kind)) renderProviderModels(kind);
+  else renderModelSelect(kind);
+}
+
+function renderProviderModels(kind) {
   const cur = SELECTED[kind] || {};
-  for (const prov of (PROVIDERS_BY_KIND[kind] || PROVIDERS_2COL)) {
-    const col = document.getElementById(`col-${kind}-${prov}`);
-    const listEl = document.getElementById(`model-${kind}-${prov}`);
-    if (!col || !listEl) continue;
-    const filterEl = document.getElementById(`filter-${kind}-${prov}`);
-    const pill = document.getElementById(`key-${kind}-${prov}`);
-    const missing = col.querySelector('.key-missing');
-    const hasKey = !!KEYS[prov];
+  const provider = ACTIVE_PROVIDER[kind];
+  const listEl = document.getElementById('model-' + kind);
+  const filterEl = document.getElementById('filter-' + kind);
+  if (!listEl) return;
+  const q = (filterEl?.value || '').toLowerCase().trim();
+  let list = provider
+    ? (MODELS_BY_KIND[kind] || []).filter(p => p.provider === provider)
+    : [];
+  if (q) list = list.filter(p => modelMatches(p, q));
+  const hasCurrent = list.some(p => p.model === cur.model && p.provider === cur.provider);
+  if (!hasCurrent && cur.model && cur.provider === provider) {
+    list = [{ provider: cur.provider, model: cur.model, desc: cur.model }, ...list];
+  }
+  const shown = list.slice(0, KIND_MAX_SHOWN);
 
-    // key 状态
-    pill.textContent = tr(hasKey ? '已配置' : '未配置');
-    pill.className = 'pill ' + (hasKey ? 'ok' : 'err');
-    col.classList.toggle('disabled', !hasKey);
-    missing.classList.toggle('hide', hasKey);
-
-    const q = (filterEl?.value || '').toLowerCase().trim();
-    let list = (MODELS_BY_KIND[kind] || []).filter(p => p.provider === prov);
-    if (q) list = list.filter(p => modelMatches(p, q));
-    const hasCurrent = list.some(p => p.model === cur.model && p.provider === cur.provider);
-    if (!hasCurrent && cur.model && cur.provider === prov) {
-      list = [{ provider: cur.provider, model: cur.model, desc: cur.model }, ...list];
-    }
-    const shown = list.slice(0, KIND_MAX_SHOWN);
-
-    listEl.innerHTML = '';
-    for (const p of shown) {
-      appendModelRow(listEl, kind, prov, p, cur.provider === prov && cur.model === p.model);
-    }
-    if (!shown.length) {
-      const empty = document.createElement('div');
-      empty.className = 'model-empty';
-      empty.textContent = tr(q ? '没有匹配的模型' : '暂无模型');
-      listEl.appendChild(empty);
-    }
-    if (list.length > KIND_MAX_SHOWN) {
-      const more = document.createElement('div');
-      more.className = 'model-empty';
-      more.textContent = tr(`还有 ${list.length - KIND_MAX_SHOWN} 个，输入关键词缩小范围`);
-      listEl.appendChild(more);
-    }
+  listEl.innerHTML = '';
+  for (const p of shown) {
+    appendModelRow(listEl, kind, provider, p, cur.provider === provider && cur.model === p.model);
+  }
+  if (!shown.length) {
+    const empty = document.createElement('div');
+    empty.className = 'model-empty';
+    empty.textContent = tr(!provider ? '请先选择服务商' : (q ? '没有匹配的模型' : '暂无模型'));
+    listEl.appendChild(empty);
+  }
+  if (list.length > KIND_MAX_SHOWN) {
+    const more = document.createElement('div');
+    more.className = 'model-empty';
+    more.textContent = tr(`还有 ${list.length - KIND_MAX_SHOWN} 个，输入关键词缩小范围`);
+    listEl.appendChild(more);
   }
   document.getElementById('cur-' + kind).textContent =
     cur.model ? `[${cur.provider}] ${cur.model}` : tr('（未选择）');
@@ -1799,7 +1810,7 @@ function pickModel(kind, prov, model) {
   if (!model) return;
   SELECTED[kind] = { provider: prov, model };
   document.getElementById('cur-' + kind).textContent = `[${prov}] ${model}`;
-  renderTwoCol(kind);
+  renderProviderModels(kind);
 }
 
 // ---- 单列渲染（STT）----
@@ -1810,10 +1821,13 @@ function renderModelSelect(kind) {
   const filterEl = document.getElementById('filter-' + kind);
   const q = (filterEl?.value || '').toLowerCase().trim();
   const cfg = CONFIG[KIND_CONFIG[kind]] || {};
-  let list = MODELS_BY_KIND[kind] || [];
+  const provider = ACTIVE_PROVIDER[kind];
+  let list = (MODELS_BY_KIND[kind] || []).filter(p => p.provider === provider);
   if (q) list = list.filter(p => p.model.toLowerCase().includes(q));
   const hasCurrent = list.some(p => p.model === cfg.model && p.provider === cfg.provider);
-  if (!hasCurrent && cfg.model) list = [{ provider: cfg.provider, model: cfg.model }, ...list];
+  if (!hasCurrent && cfg.model && cfg.provider === provider) {
+    list = [{ provider: cfg.provider, model: cfg.model }, ...list];
+  }
   const shown = list.slice(0, KIND_MAX_SHOWN);
   sel.innerHTML = '';
   for (const p of shown) {
@@ -1827,6 +1841,7 @@ function renderModelSelect(kind) {
     if (p.model === cfg.model && p.provider === cfg.provider) opt.selected = true;
     sel.appendChild(opt);
   }
+  sel.disabled = !provider || shown.length === 0;
 }
 
 function fillModels() {
@@ -1837,7 +1852,8 @@ function fillModels() {
   for (const k of Object.keys(MODELS_BY_KIND)) {
     if (MODELS_BY_KIND[k].length === 0) MODELS_BY_KIND[k] = dedupe(PRESETS[k] || []);
   }
-  for (const k of TWO_COL_KINDS) renderTwoCol(k);
+  for (const k of Object.keys(PROVIDERS_BY_KIND)) fillProviderSelect(k);
+  for (const k of MODEL_BROWSER_KINDS) renderProviderModels(k);
   for (const k of Object.keys(KIND_SELECT)) renderModelSelect(k);
   document.getElementById('model-llm-temp').value = CONFIG.llm?.temperature || 0.7;
   document.getElementById('model-llm-maxtok').value = CONFIG.llm?.max_tokens || 512;
@@ -1852,7 +1868,7 @@ async function loadLiveModels(refresh = false) {
     for (const k of Object.keys(MODELS_BY_KIND)) {
       MODELS_BY_KIND[k] = mergePresetAndLive(k, live[k]);
     }
-    for (const k of TWO_COL_KINDS) renderTwoCol(k);
+    for (const k of MODEL_BROWSER_KINDS) renderProviderModels(k);
     for (const k of Object.keys(KIND_SELECT)) renderModelSelect(k);
     const c = live.counts || {};
     status.textContent = tr(`已加载：LLM ${c.llm||0} · 视觉 ${c.vision||0} · 文生图 ${c.image_gen||0} · STT ${c.stt||0}（10分钟缓存）`);
@@ -1862,7 +1878,7 @@ async function loadLiveModels(refresh = false) {
 }
 async function saveLLM() {
   const p = SELECTED.llm;
-  if (!p.model) return alert('请先在左/右栏选一个模型');
+  if (!p.model) return alert('请先选择一个模型');
   if (!KEYS[p.provider]) return alert(`请先在「API Key」标签填写 ${p.provider} 的 key`);
   CONFIG.llm = {
     ...CONFIG.llm,
@@ -1875,14 +1891,16 @@ async function saveLLM() {
 }
 async function saveVision() {
   const p = SELECTED.vision;
-  if (!p.model) return alert('请先在左/右栏选一个模型');
+  if (!p.model) return alert('请先选择一个模型');
   if (!KEYS[p.provider]) return alert(`请先在「API Key」标签填写 ${p.provider} 的 key`);
   CONFIG.vision = { ...CONFIG.vision, provider: p.provider, model: p.model };
   await putJSON('/api/config', CONFIG);
   alert('已保存：' + p.provider + ' / ' + p.model);
 }
 async function saveSTT() {
-  const p = JSON.parse(document.getElementById('model-stt').value);
+  const value = document.getElementById('model-stt').value;
+  if (!value) return alert('请先选择一个模型');
+  const p = JSON.parse(value);
   if (Object.hasOwn(KEYS, p.provider) && !KEYS[p.provider]) {
     return alert(`请先在「API Key」标签填写 ${p.provider} 的 key`);
   }
@@ -1892,7 +1910,7 @@ async function saveSTT() {
 }
 async function saveImgGen() {
   const p = SELECTED.image_gen;
-  if (!p.model) return alert('请先在左/右栏选一个模型');
+  if (!p.model) return alert('请先选择一个模型');
   if (!KEYS[p.provider]) return alert(`请先在「API Key」标签填写 ${p.provider} 的 key`);
   CONFIG.image_gen = {
     ...CONFIG.image_gen, provider: p.provider, model: p.model,
@@ -2282,7 +2300,7 @@ startLogStream();
 // ============ API key ============
 async function loadKeys() {
   const data = await fetchJSON('/api/keys');
-  KEYS = data;   // 给模型两列灰显用
+  KEYS = data;   // 控制模型服务商下拉的可用状态
   const box = document.getElementById('key-status');
   box.innerHTML = '';
   const labels = {
@@ -2309,8 +2327,9 @@ async function loadKeys() {
     }
     box.appendChild(div);
   }
-  // key 状态变了，重渲染双列模型（灰显/恢复）
-  for (const k of TWO_COL_KINDS) renderTwoCol(k);
+  // Key 状态变更后刷新服务商下拉，未配置项保持灰显。
+  for (const k of Object.keys(PROVIDERS_BY_KIND)) fillProviderSelect(k);
+  for (const k of MODEL_BROWSER_KINDS) renderProviderModels(k);
   renderModelSelect('stt');
   updateTTSProviderUI();
   updateApiKeyUrl();
