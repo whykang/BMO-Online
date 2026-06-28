@@ -35,6 +35,11 @@
     "model": "Kwai-Kolors/Kolors",
     "size": "1024x1024"
   },
+  "search": {
+    "provider": "bocha",
+    "count": 8,
+    "freshness": "noLimit"
+  },
   "wake_word": {
     "enabled": true,
     "backend": "sherpa_onnx",

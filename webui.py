@@ -1370,6 +1370,7 @@ async def list_keys():
         "openai": bool(os.getenv("OPENAI_API_KEY")),
         "deepseek": bool(os.getenv("DEEPSEEK_API_KEY")),
         "volc_apikey": bool(os.getenv("VOLC_TTS_API_KEY")),
+        "bocha": bool(os.getenv("BOCHA_API_KEY")),
     }
 
 
@@ -1379,6 +1380,7 @@ KEY_ENV_MAP = {
     "openai": "OPENAI_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
     "volc_apikey": "VOLC_TTS_API_KEY",
+    "bocha": "BOCHA_API_KEY",
 }
 
 

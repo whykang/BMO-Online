@@ -45,6 +45,7 @@ from providers.llm import LLMProvider
 from providers.stt import STTProvider, create_stt
 from providers.vision import VisionProvider
 from providers.image_gen import ImageGenProvider
+from providers.search_bocha import BochaSearchProvider
 from providers.tts_edge import EdgeTTSProvider
 from providers.tts_siliconflow import SiliconFlowTTSProvider
 from providers.wakeword_sherpa import SherpaWakeWord
@@ -193,7 +194,10 @@ TOOLS_PROMPT = (
     "12. 进入待唤醒/退下：{\"action\": \"enter_wait_wake\"}。"
     "当用户让你退下、不要说话了、闭嘴、安静、别说话、别理我、让我安静、"
     "或表达不想继续对话/让你回去待命时，必须输出这个 JSON；"
-    "执行后 BMO 会先说「好的，我先退下了。」然后直接回到等待唤醒。\n\n"
+    "执行后 BMO 会先说「好的，我先退下了。」然后直接回到等待唤醒。\n"
+    "13. 联网搜索：{\"action\": \"search_web\", \"query\": \"搜索关键词\"}。"
+    "当用户问的是实时/最新信息、或你知识里没有/可能过时的内容时使用，"
+    "例如新闻、天气、价格、赛事比分、今天发生的事、某人/某产品的最新动态等。\n\n"
     "重要：只要用户的话涉及上面这些能力（尤其是调音量，例如'声音大一点'、'调大声'、"
     "'太吵了小声点'、'音量调到50'），就必须直接输出对应工具的纯 JSON，"
     "绝对不能用文字说'我做不到'、'我没法调音量'之类的话。\n"
@@ -396,6 +400,7 @@ class BotGUI:
             self.config["image_gen"], endpoints,
             output_dir=self.config.get("generated_dir", "generated"),
         )
+        self.search = BochaSearchProvider(self.config.get("search", {}))
         self.tts_edge = EdgeTTSProvider(self.config["tts"])
         self.tts_sf = SiliconFlowTTSProvider(
             self.config["tts"], endpoints,
@@ -2738,10 +2743,10 @@ class BotGUI:
             return "PRINT_EMPTY"
 
         if action == "search_web":
-            return f"SEARCH_DISABLED::{value or ''}"
+            return f"SEARCH_WEB::{value or ''}"
 
-        if action in ("google", "browser", "news"):
-            return f"SEARCH_DISABLED::{value or ''}"
+        if action in ("google", "browser", "news", "search"):
+            return f"SEARCH_WEB::{value or ''}"
 
         if action == "capture_image":
             return "IMAGE_CAPTURE_TRIGGERED"
@@ -3028,6 +3033,52 @@ class BotGUI:
             self.trim_memory()
             self.save_chat_history()
 
+    def _handle_search(self, query, original_text):
+        """联网搜索：配了博查 key 就真搜并让 LLM 转述；否则用已有知识回答。"""
+        if not BochaSearchProvider.is_configured():
+            self._answer_from_knowledge(query, original_text)
+            return
+        self.set_state(BotStates.THINKING, "联网搜索中...")
+        try:
+            digest = self.search.search_digest(query)
+        except Exception as e:
+            log(f"[SEARCH ERROR] {e}")
+            self._answer_from_knowledge(query, original_text)
+            return
+        if not digest:
+            self._say("我搜了一下，没找到什么有用的信息呢。", remember=original_text)
+            return
+        log(f"[SEARCH] {query} -> {len(digest)} 字摘要")
+        msgs = [
+            {"role": "system", "content":
+                "你是 BMO，可爱的小机器人。根据下面的联网搜索结果，用一两句话简短、口语化地"
+                "回答用户的问题。绝对不要输出 JSON、不要调用工具、不要念出网址。"
+                "如果搜索结果不足以回答，就如实说没查到。"},
+            {"role": "user", "content": f"用户问：{original_text}"},
+            {"role": "user", "content": f"搜索结果：\n{digest}"},
+        ]
+        try:
+            final = self.llm.chat_once(msgs)
+        except Exception as e:
+            log(f"[LLM ERROR] {e}")
+            final = digest.split("\n", 1)[0]
+        self._say(final, remember=original_text)
+
+    def _answer_from_knowledge(self, query, original_text):
+        """没配搜索 key / 搜索失败时的回落：用模型已有知识回答。"""
+        fallback_messages = self.permanent_memory + self.session_memory + [
+            {"role": "user", "content": original_text},
+            {"role": "user", "content": f"用户想查询：{query}。不要调用任何工具，不要输出 JSON。"
+                                        "请直接用你已有的知识回答；如果涉及最新内容，就说明可能不是最新信息。"
+                                        "一两句话即可。"}
+        ]
+        try:
+            final_text = self.llm.chat_once(fallback_messages)
+        except Exception as e:
+            log(f"[LLM ERROR] {e}")
+            final_text = "这个我可以按已有知识回答，但可能不是最新信息。"
+        self._say(final_text, remember=original_text)
+
     def handle_action_result(self, result, original_text, img_path):
         """工具执行结果处理。"""
         if isinstance(result, str) and result.startswith("VOLUME_SET::"):
@@ -3239,21 +3290,12 @@ class BotGUI:
             self._say("我不太确定怎么做这件事。")
             return
 
-        # 兼容旧配置/旧上下文：如果模型仍输出 search_web JSON，不联网搜索，改让模型直接回答。
-        if isinstance(result, str) and result.startswith("SEARCH_DISABLED::"):
+        # 联网搜索：配了博查 key 就真搜，否则回落到用模型已有知识回答。
+        # SEARCH_DISABLED 是旧哨兵，一并兼容。
+        if isinstance(result, str) and (
+                result.startswith("SEARCH_WEB::") or result.startswith("SEARCH_DISABLED::")):
             query = result.split("::", 1)[1].strip() or original_text
-            fallback_messages = self.permanent_memory + self.session_memory + [
-                {"role": "user", "content": original_text},
-                {"role": "user", "content": f"用户想查询：{query}。不要调用任何工具，不要输出 JSON。"
-                                            "请直接用你已有的知识回答；如果涉及最新内容，就说明可能不是最新信息。"
-                                            "一两句话即可。"}
-            ]
-            try:
-                final_text = self.llm.chat_once(fallback_messages)
-            except Exception as e:
-                log(f"[LLM ERROR] {e}")
-                final_text = "这个我可以按已有知识回答，但可能不是最新信息。"
-            self._say(final_text, remember=original_text)
+            self._handle_search(query, original_text)
             return
 
         # get_time / get_system_status 返回了字符串：
@@ -3803,6 +3845,7 @@ class BotGUI:
                     self.config["image_gen"], endpoints,
                     output_dir=self.config.get("generated_dir", "generated"),
                 )
+                self.search = BochaSearchProvider(self.config.get("search", {}))
                 # 唤醒词不能在这个线程里重建（监听循环在另一个线程跑，会撞车）。
                 # 设个标志；监听线程会立刻退出当前音频流并按新配置重载。
                 self.wake_reload_pending = True
