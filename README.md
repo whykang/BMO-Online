@@ -43,6 +43,14 @@ git clone https://github.com/whykang/BMO-Online.git
 cd BMO-Online
 ```
 
+> **🇨🇳 大陆网络慢/连不上 GitHub？** 用 GitHub 代理加速 clone（任选一个，挂了就换下一个）：
+> ```bash
+> git clone https://ghfast.top/https://github.com/whykang/BMO-Online.git
+> # 或： git clone https://gh-proxy.com/https://github.com/whykang/BMO-Online.git
+> cd BMO-Online
+> ```
+> 注：清华等公共镜像只镜像 PyPI/apt，不收录个人 GitHub 仓库，所以这里用 GitHub 代理而非清华源。
+
 ### 3. 一键安装
 
 ```bash
