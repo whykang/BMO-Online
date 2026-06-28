@@ -1846,15 +1846,21 @@ class BotGUI:
 
                 # 一轮唤醒（语音 or 按钮）后，统一走自适应录音 + 连续对话
                 first = True
+                # 监听截止时间：噪音不重置它，只有有效交互(真说话/再唤醒)才续期；
+                # 这样无意义识别只消耗剩余时间，到点就回待唤醒，不会被噪音无限拖住。
+                deadline = time.time() + awake_secs
                 while not self.exiting and not self.abort_to_wake.is_set():
                     self.set_state(BotStates.LISTENING, "在听..." if first else "请说...")
 
-                    # 第一句用"维持唤醒时间"，后续追问用"连续对话时间"
-                    onset = awake_secs if first else followup_secs
-                    audio_file = self.record_voice_adaptive(onset_timeout=onset)
+                    remaining = deadline - time.time()
+                    if remaining <= 0:
+                        self.set_state(BotStates.IDLE, "没听到")
+                        break
+                    audio_file = self.record_voice_adaptive(onset_timeout=remaining)
 
                     if self._acknowledge_rewake():
                         first = True
+                        deadline = time.time() + awake_secs   # 再唤醒：重置窗口
                         continue
                     if self.abort_to_wake.is_set():
                         break
@@ -1865,8 +1871,8 @@ class BotGUI:
                     user_text = self.transcribe_audio(audio_file)
                     if user_text and self._is_noise_text(user_text):
                         # 环境噪音常被误识成 '.' / '。' / 孤立韩文假名等无意义内容，
-                        # 别喂给 LLM（否则会一直'嗯我在'地回应噪音）。不结束本轮，继续听，
-                        # 直到某个等待窗口内没人开口（record 返回空）才自然超时回到待唤醒。
+                        # 别喂给 LLM。不重置 deadline：继续听但剩余时间持续递减，
+                        # 到点(remaining<=0)自然回待唤醒，避免被周期性噪音无限拖住。
                         log(f"[REC] 忽略无意义识别: {user_text!r}，继续听")
                         continue
                     if not user_text:
@@ -1880,10 +1886,12 @@ class BotGUI:
 
                     if self._acknowledge_rewake():
                         first = True
+                        deadline = time.time() + awake_secs   # 再唤醒：重置窗口
                         continue
                     first = False
                     if not follow_up:
                         break
+                    deadline = time.time() + followup_secs   # 有效一轮后：续期连续对话窗口
                     # 等回声散掉再录，避免把喇叭余音当成噪音地板（导致听不清）
                     time.sleep(post_delay)
 
