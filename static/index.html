@@ -1425,16 +1425,18 @@ async function loadVoices() {
 }
 async function loadAudioOutputs() {
   const sel = document.getElementById('audio-output');
-  const cur = CONFIG.audio_output_device || 'auto';
+  // 推荐项统一为 'default'（走 PipeWire，自动路由到 USB、和游戏混音）。
+  // 旧配置里的 auto/空/pipewire 等都归到推荐项，保存时会写成 'default'。
+  let cur = CONFIG.audio_output_device || 'default';
+  if (['auto', '', 'pipewire', 'pulse', 'system'].includes(cur)) cur = 'default';
   let devs = [];
   try { devs = (await fetchJSON('/api/audio/outputs')).devices || []; } catch (e) {}
   sel.innerHTML = '';
   const add = (val, txt) => { const o = document.createElement('option'); o.value = val; o.textContent = tr(txt); if (val === cur) o.selected = true; sel.appendChild(o); };
-  add('auto', '自动检测 USB 音响（推荐）');
-  add('', '系统默认输出');
+  add('default', '自动检测 USB 音响（推荐）');
   for (const d of devs) add(d.device, `${d.label}  (${d.device})`);
-  // 当前值不在列表里也保留显示
-  if (cur && cur !== 'auto' && cur !== '' && !devs.some(d => d.device === cur)) add(cur, cur + '（当前）');
+  // 当前是某个具体设备但不在列表里时，保留显示
+  if (cur !== 'default' && !devs.some(d => d.device === cur)) add(cur, cur + '（当前）');
 }
 async function loadAudioInputs() {
   const sel = document.getElementById('audio-input');
