@@ -57,8 +57,12 @@ chmod +x setup_pi.sh
 这一步会：
 - apt 装系统依赖（python3-tk / portaudio / mpg123 / ffmpeg）
 - 建 venv + 装 Python 包
-- 下载 Sherpa-ONNX 中文 KWS 模型（默认）+ 几个英文 OpenWakeWord 模型
+- 检查唤醒词模型（仓库自带 `hey_bmo.onnx` + Sherpa-ONNX 中文 KWS）
 - 创建 `.env`（如果不存在）
+
+> **🇨🇳 中国大陆环境**：脚本已内置兜底——pip 默认源失败会自动切清华镜像，
+> GitHub 模型下载失败会自动套国内代理（ghfast.top 等）重试，无需手动配置。
+> 想指定自己的 GitHub 代理：`GH_PROXY="https://你的代理" ./setup_pi.sh`。
 
 ### 4. 填 API key
 

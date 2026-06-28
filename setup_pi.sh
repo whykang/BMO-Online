@@ -7,6 +7,38 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+# ===== 国内环境兜底：默认源下载失败时，自动切换国内镜像重试 =====
+# pip 镜像（清华），GitHub 代理可用 GH_PROXY 环境变量覆盖（空格分隔多个）。
+PIP_CN_MIRROR="https://pypi.tuna.tsinghua.edu.cn/simple"
+GH_PROXIES=(${GH_PROXY:-"https://ghfast.top" "https://gh-proxy.com" "https://ghproxy.net"})
+
+pip_install() {
+    # 先用默认 PyPI；失败再切清华镜像重试
+    if pip install "$@"; then
+        return 0
+    fi
+    echo -e "${YELLOW}  PyPI 安装失败，切换清华镜像重试...${NC}"
+    pip install -i "$PIP_CN_MIRROR" "$@"
+}
+
+gh_download() {
+    # gh_download <github-url> <output-path>：先直连，失败依次套国内 GitHub 代理
+    local url="$1" out="$2" proxy
+    if curl -fL --retry 2 -o "$out" "$url"; then
+        return 0
+    fi
+    echo -e "${YELLOW}  直连 GitHub 失败，尝试国内代理...${NC}"
+    for proxy in "${GH_PROXIES[@]}"; do
+        echo -e "${YELLOW}    试 $proxy ...${NC}"
+        if curl -fL --retry 2 -o "$out" "$proxy/$url"; then
+            echo -e "${GREEN}    ✓ 经 $proxy 下载成功${NC}"
+            return 0
+        fi
+    done
+    rm -f "$out"
+    return 1
+}
+
 echo -e "${GREEN}🤖 BMO 在线版 - 树莓派安装${NC}"
 
 # 1. 系统依赖
@@ -27,12 +59,12 @@ if [ ! -d venv ]; then
     python3 -m venv venv
 fi
 source venv/bin/activate
-pip install --upgrade pip
+pip_install --upgrade pip
 
 # 3. Python 包
 echo -e "${YELLOW}[3/4] 装 Python 包...${NC}"
-pip install --force-reinstall --no-cache-dir sounddevice
-pip install -r requirements.txt
+pip_install --force-reinstall --no-cache-dir sounddevice
+pip_install -r requirements.txt
 
 # 4. 唤醒词模型（已随仓库自带，无需下载；缺失时才从外部下载兜底）
 echo -e "${YELLOW}[4/4] 检查唤醒词模型...${NC}"
@@ -50,12 +82,11 @@ if [ ! -f "$SHERPA_DIR/tokens.txt" ]; then
     SHERPA_TARBALL="sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01.tar.bz2"
     SHERPA_INNER="sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
     SHERPA_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/$SHERPA_TARBALL"
-    if curl -fL --retry 2 -o "wakewords/$SHERPA_TARBALL" "$SHERPA_URL"; then
+    if gh_download "$SHERPA_URL" "wakewords/$SHERPA_TARBALL"; then
         ( cd wakewords && tar xjf "$SHERPA_TARBALL" && mv "$SHERPA_INNER" sherpa-kws-zh && rm "$SHERPA_TARBALL" )
         echo -e "${GREEN}  ✓ Sherpa KWS 模型已就绪${NC}"
     else
         echo -e "${RED}  ✗ Sherpa KWS 模型下载失败，中文唤醒词将不可用${NC}"
-        rm -f "wakewords/$SHERPA_TARBALL"
     fi
 else
     echo -e "${GREEN}  ✓ 唤醒词模型已就绪（仓库自带）${NC}"
@@ -73,7 +104,7 @@ if [ ! -f "$SV_DIR/tokens.txt" ]; then
     SV_TARBALL="sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2"
     SV_INNER="sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
     SV_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/$SV_TARBALL"
-    if curl -fL --retry 2 -o "models/$SV_TARBALL" "$SV_URL"; then
+    if gh_download "$SV_URL" "models/$SV_TARBALL"; then
         ( cd models \
             && rm -rf "$SV_INNER" sense-voice \
             && tar xjf "$SV_TARBALL" \
@@ -87,7 +118,6 @@ if [ ! -f "$SV_DIR/tokens.txt" ]; then
         fi
     else
         echo -e "${RED}  ✗ 本地 STT 模型下载失败（不影响云端 STT）${NC}"
-        rm -f "models/$SV_TARBALL"
     fi
 else
     echo -e "${GREEN}  ✓ 本地 STT 模型已就绪${NC}"
@@ -101,13 +131,12 @@ if [ ! -f "$PIPER_DIR/tokens.txt" ]; then
     PIPER_TARBALL="vits-piper-zh_CN-huayan-medium.tar.bz2"
     PIPER_INNER="vits-piper-zh_CN-huayan-medium"
     PIPER_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/$PIPER_TARBALL"
-    if curl -fL --retry 2 -o "models/$PIPER_TARBALL" "$PIPER_URL"; then
+    if gh_download "$PIPER_URL" "models/$PIPER_TARBALL"; then
         ( cd models && rm -rf "$PIPER_INNER" piper-zh \
             && tar xjf "$PIPER_TARBALL" && mv "$PIPER_INNER" piper-zh && rm "$PIPER_TARBALL" )
         echo -e "${GREEN}  ✓ 本地 TTS 模型已就绪：$PIPER_DIR${NC}"
     else
         echo -e "${RED}  ✗ 本地 TTS 模型下载失败（不影响 Edge/云端 TTS）${NC}"
-        rm -f "models/$PIPER_TARBALL"
     fi
 else
     echo -e "${GREEN}  ✓ 本地 TTS 模型已就绪${NC}"
