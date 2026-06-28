@@ -2,15 +2,17 @@
 
 把 `.onnx` 唤醒词模型扔进这个文件夹，在 Web 控制台的「唤醒词」标签里就能下拉切换。
 
-## 默认会下载的几个
+## 自带的模型
 
-`setup_pi.sh` 会自动下载这几个 OpenWakeWord 官方模型：
+仓库只自带一个 OpenWakeWord 模型：
 
 | 文件 | 唤醒词 |
 |------|--------|
-| `hey_jarvis.onnx` | "Hey Jarvis" |
-| `alexa.onnx` | "Alexa" |
-| `hey_mycroft.onnx` | "Hey Mycroft" |
+| `hey_bmo.onnx` | "Hey BMO" |
+
+想要更多英文唤醒词（如 Alexa / Hey Mycroft 等），到 OpenWakeWord 官方
+[releases](https://github.com/dscripka/openWakeWord/releases) 下载 `.onnx` 丢进本目录，
+或在 Web 控制台「唤醒词」标签里上传即可。默认中文唤醒走 Sherpa-ONNX（见 `sherpa-kws-zh/`）。
 
 ## 训练自己的唤醒词
 

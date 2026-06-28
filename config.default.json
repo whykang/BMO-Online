@@ -53,7 +53,7 @@
     "stream_refresh_seconds": 1800,
     "audio_callback_timeout_seconds": 10,
     "_legacy_note": "下面是 OpenWakeWord 后端（英文）的配置，只有当 backend=openwakeword 时才生效",
-    "model": "wakewords/hey_jarvis.onnx",
+    "model": "wakewords/hey_bmo.onnx",
     "legacy_threshold": 0.3,
     "legacy_debug": true
   },

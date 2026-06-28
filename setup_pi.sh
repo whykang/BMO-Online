@@ -37,25 +37,11 @@ pip install -r requirements.txt
 # 4. 唤醒词模型（已随仓库自带，无需下载；缺失时才从外部下载兜底）
 echo -e "${YELLOW}[4/4] 检查唤醒词模型...${NC}"
 mkdir -p wakewords
-OWW_BASE="https://github.com/dscripka/openWakeWord/releases/download/v0.5.1"
 
-download_if_missing() {
-    local out="$1"
-    local url="$2"
-    if [ ! -f "$out" ]; then
-        echo -e "${YELLOW}  仓库缺 $out，尝试下载兜底...${NC}"
-        if ! curl -fL --retry 2 -o "$out" "$url"; then
-            echo -e "${RED}  下载失败: $url${NC}"
-            rm -f "$out"
-        fi
-    fi
-}
-
-# OpenWakeWord（英文）模型 —— 正常情况下仓库已自带
-download_if_missing wakewords/hey_jarvis.onnx   "$OWW_BASE/hey_jarvis_v0.1.onnx"
-download_if_missing wakewords/alexa.onnx        "$OWW_BASE/alexa_v0.1.onnx"
-download_if_missing wakewords/hey_mycroft.onnx  "$OWW_BASE/hey_mycroft_v0.1.onnx"
-download_if_missing wakewords/hey_rhasspy.onnx  "$OWW_BASE/hey_rhasspy_v0.1.onnx"
+# OpenWakeWord 模型 hey_bmo.onnx 仓库自带，无需下载；只检查在不在
+if [ ! -f wakewords/hey_bmo.onnx ]; then
+    echo -e "${RED}  ⚠️ 缺少 wakewords/hey_bmo.onnx（OpenWakeWord 英文唤醒词）${NC}"
+fi
 
 # Sherpa-ONNX 中文 KWS 模型 —— 正常情况下仓库已自带（int8 精简版）
 SHERPA_DIR="wakewords/sherpa-kws-zh"
