@@ -489,6 +489,11 @@
       <span class="help">秒。长句和多项控制需要更长一点</span>
     </div>
     <div class="row">
+      <label>录音灵敏度下限：</label>
+      <input type="number" id="rec-floor-min" value="0.01" min="0" max="0.5" step="0.005" style="width: 100px;">
+      <span class="help">触发录音的最低音量阈值。环境吵/总被噪音触发就调高(如 0.05~0.15)，唤不起录音就调低</span>
+    </div>
+    <div class="row">
       <button class="btn" onclick="saveConversation()">保存</button>
     </div>
   </div>
@@ -848,6 +853,9 @@ const I18N_EN = {
   "勾上后，答完直接接着说，不用重新唤醒": "When on, keep talking after a reply without re-waking.",
   "维持唤醒时间：": "Awake timeout:", "连续对话时间：": "Follow-up timeout:",
   "说完停顿：": "End silence:", "最长录音：": "Max recording:",
+  "录音灵敏度下限：": "Recording floor:",
+  "触发录音的最低音量阈值。环境吵/总被噪音触发就调高(如 0.05~0.15)，唤不起录音就调低":
+    "Minimum volume threshold to start recording. Raise it (e.g. 0.05–0.15) if noise keeps triggering it; lower it if it won't start.",
   "记忆上限：": "Memory limit:", "记忆轮数：": "Memory turns:",
   "秒。唤醒后等你开口多久没说话就休眠": "sec. After waking, sleep if you don't speak within this time.",
   "秒。答完后等你接话多久没说话就结束": "sec. After replying, end if you don't speak within this time.",
@@ -1932,6 +1940,7 @@ function fillPrompt() {
   document.getElementById('conv-followup-secs').value = c.follow_up_seconds ?? 15;
   document.getElementById('rec-silence').value = r.silence_duration ?? 1.8;
   document.getElementById('rec-max').value = r.max_record_seconds ?? 25;
+  document.getElementById('rec-floor-min').value = r.silence_floor_min ?? 0.01;
 }
 async function saveConversation() {
   CONFIG.conversation = {
@@ -1942,6 +1951,8 @@ async function saveConversation() {
   CONFIG.recording = CONFIG.recording || {};
   CONFIG.recording.silence_duration = parseFloat(document.getElementById('rec-silence').value) || 1.8;
   CONFIG.recording.max_record_seconds = parseFloat(document.getElementById('rec-max').value) || 25;
+  const floorMin = parseFloat(document.getElementById('rec-floor-min').value);
+  CONFIG.recording.silence_floor_min = isNaN(floorMin) ? 0.01 : floorMin;
   await putJSON('/api/config', CONFIG);
   alert('已保存');
 }
