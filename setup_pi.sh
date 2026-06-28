@@ -160,6 +160,5 @@ chmod +x start_agent.sh start_webui.sh install_desktop_launcher.sh
 ./install_desktop_launcher.sh || true
 
 echo -e "${GREEN}✨ 安装完成！下一步：${NC}"
-echo -e "${GREEN}    1. nano .env 填入 API key${NC}"
-echo -e "${GREEN}    2. ./start_agent.sh   （会自动同时启动 Web 控制台）${NC}"
-echo -e "${GREEN}    3. 浏览器打开 http://<树莓派IP>:8087${NC}"
+echo -e "${GREEN}    1. ./start_agent.sh   （会自动同时启动 Web 控制台）${NC}"
+echo -e "${GREEN}    2. 浏览器打开 http://<树莓派IP>:8087${NC}"
