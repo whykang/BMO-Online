@@ -1863,11 +1863,13 @@ class BotGUI:
                         break
 
                     user_text = self.transcribe_audio(audio_file)
-                    if not user_text or self._is_noise_text(user_text):
+                    if user_text and self._is_noise_text(user_text):
                         # 环境噪音常被误识成 '.' / '。' / 孤立韩文假名等无意义内容，
-                        # 别喂给 LLM（否则会一直'嗯我在'地回应噪音），当没听清结束本轮。
-                        if user_text:
-                            log(f"[REC] 忽略无意义识别: {user_text!r}")
+                        # 别喂给 LLM（否则会一直'嗯我在'地回应噪音）。不结束本轮，继续听，
+                        # 直到某个等待窗口内没人开口（record 返回空）才自然超时回到待唤醒。
+                        log(f"[REC] 忽略无意义识别: {user_text!r}，继续听")
+                        continue
+                    if not user_text:
                         self.set_state(BotStates.IDLE, "没听清")
                         break
 
