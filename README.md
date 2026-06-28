@@ -1,6 +1,6 @@
-# Be More Agent (Online Edition) 🤖
+# BMO (Online AI Agent) 🤖
 
-> 一个跑在树莓派 5 上的在线 AI 语音助手，使用硅基流动 API + Edge-TTS，带网页控制台。
+> 一个跑在树莓派 5 上的在线 AI 语音助手，接入多种模型，可随意切换，带网页控制台。
 > 基于 [brenpoly/be-more-agent](https://github.com/brenpoly/be-more-agent)（本地版）改写。
 
 ## ✨ 特性
@@ -8,7 +8,7 @@
 - **语音对话**：硅基流动 SenseVoice 听话，DeepSeek-V3 思考，Edge-TTS 说话（**中文音色一流，免费**）
 - **看图能力**：摄像头拍照 → Qwen2-VL 描述
 - **画图能力**：说"画一只戴帽子的猫" → 硅基流动 / OpenRouter / OpenAI 文生图模型生成 → 屏幕展示
-- **直接问答**：搜索/新闻类问题由大模型直接回答，不再调用外部搜索工具
+- **搜索问答**：调用博查搜索接口，回答需要网络搜索/新闻类问题
 - **中文唤醒词**（Sherpa-ONNX KWS，零训练）+ **物理按钮 PTT** 两种触发，并存
 - **网页控制台**（http://树莓派IP:8087）：在线切换音色 / 模型 / 性格 / 唤醒词，看日志、看历史、看画廊、当遥控器
 - **保留 BMO 标志性脸部动画**
@@ -17,13 +17,13 @@
 
 | 硬件 | 推荐型号 |
 |------|---------|
-| 主机 | Raspberry Pi 5（4GB 起步） |
+| 主机 | Raspberry Pi 5（4GB ） |
 | 系统 | Raspberry Pi OS 64-bit Desktop（Bookworm） |
 | 麦克风 | USB 麦 |
 | 喇叭 | USB 喇叭 / 3.5mm 小喇叭 |
-| 屏幕 | DSI 或 HDMI（推荐 800×480） |
-| 摄像头 | Raspberry Pi Camera Module |
-| PTT 按钮 | Arduino Pro Micro (32u4) / Adafruit Feather 32u4 + 任意按钮开关 |
+| 屏幕 | 5 英寸 DSI 或 HDMI（推荐 800×480） |
+| 摄像头 | Raspberry Pi Camera Module v2 |
+| PTT 按钮 | Arduino Pro Micro (32u4) + 7个 6x6x5 mm 微动开关 |
 
 ## 🚀 安装
 
@@ -34,11 +34,7 @@
 
 ### 2. 拉代码
 
-SSH 登录到你的树莓派（用户名、hostname / IP 按你自己的实际情况）。例如：
-
-```bash
-ssh <用户名>@<hostname-or-ip>
-```
+SSH 登录到你的树莓派。
 
 进去之后拉代码：
 
@@ -66,7 +62,6 @@ chmod +x setup_pi.sh
 
 ### 4. 启动
 
-仓库已经包含了原版的 `faces/`（脸部动画）和 `sounds/`（音效），不用自己准备。
 
 ```bash
 ./start_agent.sh
@@ -82,13 +77,13 @@ chmod +x setup_pi.sh
 http://<树莓派 IP>:8087
 ```
 
-不知道树莓派 IP？在树莓派里跑：
+不知道树莓派 IP？在ssh 终端跑：
 
 ```bash
 hostname -I
 ```
 
-> 如果你给树莓派设了 hostname（比如烧系统时填了 `bmo`），也可以用 `http://bmo.local:8087`。
+> 如果你给树莓派设了 主机名（hostname）比如烧系统时填了 `bmo`，也可以用 `http://bmo.local:8087`。
 
 ## 🎮 使用
 
@@ -96,7 +91,7 @@ hostname -I
 
 | 方式 | 操作 |
 |------|------|
-| 唤醒词 | 默认中文"你好小明 / 嗨小明"，在网页里改成你想要的中文短语即可 |
+| 唤醒词 | 默认英文"hey bmo"(中文发音：“嘿，比目”），支持在网页里改成你想要的中文短语 |
 | 物理按钮 | 短按 PTT 按钮（toggle 录音）|
 | 网页遥控器 | 控制台 → 仪表板 → "开始录音" |
 
@@ -115,10 +110,19 @@ hostname -I
 | 想做的事 | 怎么说 |
 |---------|--------|
 | 查时间 | "现在几点啦？" |
+| 聊天 | "讲个笑话" |
 | 拍照看 | "看看这是什么？" / "你能看见什么？" |
 | 画图 | "画一只戴耳机的橙色小猫" |
 | 查系统状态 | "看看系统状态" / "CPU 和温度怎么样？" |
+| 隐身 | "隐身" / "退出隐身" |
+| 玩游戏 | "打开坦克大战"|
+| 播放音乐 | "播放音乐花海" |
+| 搜索 | “今天北京天气怎么样” / "今天有哪些新闻" |
+| 打印 | "打印近10条的对话内容" / "画一只猫并打印出来"|
 | 清记忆 | "忘记一切" / "清空记忆" |
+| 以及等等等等。。。。。。。。。。|
+
+
 
 ## 🛠 网页控制台能做什么
 
@@ -136,58 +140,10 @@ hostname -I
 | API Key | 看哪几个 provider 已配置、改 key |
 | 安全 | 设置/取消访问密码 |
 
-## ⚙️ 配置说明
 
-所有可调参数在 `config.json`，关键字段：
-
-```jsonc
-{
-  "llm":    { "provider": "siliconflow", "model": "deepseek-ai/DeepSeek-V3" },
-  "vision": { "provider": "siliconflow", "model": "Qwen/Qwen2-VL-7B-Instruct" },
-  "stt":    { "provider": "siliconflow", "model": "FunAudioLLM/SenseVoiceSmall" },
-  "tts": {
-    "provider": "edge",
-    "voice": "zh-CN-XiaoyiNeural",       // 默认晓伊
-    "fallback_provider": "siliconflow",  // Edge 失败时兜底
-    "fallback_model": "FunAudioLLM/CosyVoice2-0.5B"
-  },
-  "image_gen": { "provider": "siliconflow", "model": "Kwai-Kolors/Kolors" },
-  "wake_word": {
-    "enabled": true,
-    "backend": "sherpa_onnx",
-    "keywords": ["你好小明", "嗨小明"],
-    "threshold": 0.25,
-    "stream_refresh_seconds": 180,
-    "audio_callback_timeout_seconds": 10
-  },
-  "memory_max_turns": 30
-}
-```
-
-`.env`：API key 和 Web 控制台端口。
 
 ## 🎙 自定义中文唤醒词
 
-默认有两个：**"你好小明"** 和 **"嗨小明"**。想换：
-
-**方式 1（推荐）：网页控制台**
-- 打开「唤醒词」标签
-- 在「关键词」文本框里每行写一个，比如：
-  ```
-  嘿哔莫
-  小明小明
-  哔哔哔
-  ```
-- 保存 → 重启 agent 生效
-
-**方式 2：改 config.json**
-```json
-"wake_word": {
-  "backend": "sherpa_onnx",
-  "keywords": ["嘿哔莫", "你好小明"],
-  "threshold": 0.25
-}
-```
 
 ### 几个调参建议
 
@@ -202,45 +158,9 @@ hostname -I
 
 | 引擎 | 适用 | 配置 |
 |------|------|------|
-| **Sherpa-ONNX**（默认） | 中文为主，任意短语零训练 | 在网页里直接打字 |
+| **Sherpa-ONNX**） | 中文为主，任意短语零训练 | 在网页里直接打字 |
 | **OpenWakeWord** | 英文，需训练 `.onnx` 模型 | 上传 .onnx，老办法 |
 
-## 🔧 物理按钮（可选）
-
-Arduino Pro Micro / Feather 32u4 + 一个按钮开关，就能加物理 PTT。
-见 [firmware/README.md](firmware/README.md)。
-
-## 🌐 远程同步开发
-
-在你电脑上改完代码、想推到树莓派调试时：
-
-```bash
-# 用环境变量指定你的树莓派 SSH 目标和远程路径
-REMOTE=<用户名>@<hostname-or-ip> REMOTE_DIR=~/BMO-Online/ ./sync.sh
-```
-
-例如：
-
-```bash
-REMOTE=pi@192.168.1.50 ./sync.sh
-```
-
-需要先配好对应 SSH 免密登录（`ssh-copy-id`）。`sync.sh` 内部用 rsync 做增量同步，自动排除 `.env`、`venv`、`logs/` 等本地文件。
-
-## 💰 费用估算
-
-按一天 100 次对话估算（中度使用）：
-
-| 模块 | 月费 |
-|------|------|
-| STT (SenseVoice) | ¥1 |
-| LLM (DeepSeek-V3) | ¥10~20 |
-| Vision (Qwen2-VL) | ¥3 |
-| TTS (Edge-TTS) | **¥0**（免费） |
-| 文生图 (Kolors) | 看使用量 |
-| **合计** | **¥15~30/月** |
-
-实时余额到 [硅基流动控制台](https://cloud.siliconflow.cn/account/billing) 查看。
 
 ## 🐛 排错
 
