@@ -3501,11 +3501,51 @@ class BotGUI:
         return non_hdmi
 
     def _ensure_pipewire_usb_sink(self):
-        """走 PipeWire(default) 输出时，把 PipeWire 默认 sink 设成 USB 音箱，
-        免得默认跑到 HDMI 没声。best-effort，没 pactl 就跳过。"""
-        raw = (self.config.get("audio_output_device") or "default").strip().lower()
-        if raw not in ("", "default", "pipewire", "pulse", "system"):
-            return   # 用户指定了具体设备，不动
+        """把 PipeWire 默认输出 sink 设成 USB 音箱，让游戏/媒体等'走系统默认'的外部
+        程序也从 USB 出声。trixie 上一般没 pactl，优先用 wpctl(新版 PipeWire 自带)，
+        pactl 兜底。best-effort，失败静默。"""
+        if self._set_default_sink_wpctl():
+            return
+        self._set_default_sink_pactl()
+
+    @staticmethod
+    def _parse_wpctl_usb_sink_id(status_out: str):
+        """从 `wpctl status` 输出里找名字含 USB 的 sink id（只在 Sinks 段内找，
+        遇到 Sources 段即停，避免误选 USB 麦克风）。找不到返回 None。"""
+        in_sinks = False
+        for line in status_out.splitlines():
+            if re.search(r"\bSinks:", line):
+                in_sinks = True
+                continue
+            if in_sinks:
+                if re.search(r"\b(Sources|Filters|Streams|Devices)\b\s*:", line):
+                    break
+                m = re.search(r"(\d+)\.\s+(.+)", line)
+                if m and "usb" in m.group(2).lower():
+                    return m.group(1)
+        return None
+
+    def _set_default_sink_wpctl(self) -> bool:
+        wpctl = shutil.which("wpctl")
+        if not wpctl:
+            return False
+        try:
+            out = subprocess.check_output([wpctl, "status"], text=True,
+                                          timeout=5, stderr=subprocess.DEVNULL)
+        except Exception:
+            return False
+        usb_id = self._parse_wpctl_usb_sink_id(out)
+        if not usb_id:
+            return False
+        try:
+            subprocess.run([wpctl, "set-default", usb_id],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+            log(f"[AUDIO] wpctl 已把默认输出设为 USB sink (id={usb_id})")
+            return True
+        except Exception:
+            return False
+
+    def _set_default_sink_pactl(self):
         pactl = shutil.which("pactl")
         if not pactl:
             return
@@ -3514,19 +3554,16 @@ class BotGUI:
                                           text=True, timeout=5, stderr=subprocess.DEVNULL)
         except Exception:
             return
-        usb = None
         for line in out.splitlines():
             parts = line.split("\t")
             if len(parts) >= 2 and "usb" in parts[1].lower():
-                usb = parts[1]
-                break
-        if usb:
-            try:
-                subprocess.run([pactl, "set-default-sink", usb],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
-                log(f"[AUDIO] PipeWire 默认输出已设为 USB 音箱: {usb}")
-            except Exception:
-                pass
+                try:
+                    subprocess.run([pactl, "set-default-sink", parts[1]],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+                    log(f"[AUDIO] pactl 已把默认输出设为 USB 音箱: {parts[1]}")
+                except Exception:
+                    pass
+                return
 
     def _resolve_output_device(self):
         """default/空/pipewire → 走系统默认(PipeWire)，不加 -D，能和游戏共用音箱；
@@ -3598,8 +3635,35 @@ class BotGUI:
         except Exception:
             pass
 
+    @staticmethod
+    def _wav_header(sr: int, data_size: int, channels: int = 1, bits: int = 16) -> bytes:
+        """生成 WAV 头。流式(长度未知)时 data_size 传一个很大的占位值，播到 stdin 关闭为止。"""
+        import struct
+        byte_rate = sr * channels * bits // 8
+        block_align = channels * bits // 8
+        riff_size = 0xFFFFFFFF if data_size >= 0xFFFFFFFF - 44 else data_size + 36
+        return (b"RIFF" + struct.pack("<I", riff_size) + b"WAVE"
+                + b"fmt " + struct.pack("<IHHIIHH", 16, 1, channels, sr, byte_rate, block_align, bits)
+                + b"data" + struct.pack("<I", data_size))
+
+    def _spawn_pcm_proc(self, sr: int):
+        """开一个吃 16bit 单声道音频(stdin)的播放进程，所有 TTS 引擎统一用它。
+        默认/PipeWire 模式 → pw-play 播 WAV（走 PipeWire，和游戏/媒体混音、共用 USB）；
+        指定了具体 ALSA 设备(plughw) → aplay -D 吃裸 PCM。
+        返回 (proc, wav_mode)；wav_mode=True 时调用方需先写一段 WAV 头。"""
+        dev = self._resolve_output_device()
+        if not dev and shutil.which("pw-play"):
+            proc = subprocess.Popen(["pw-play", "-"], stdin=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL)
+            return proc, True
+        cmd = ["aplay", "-q", "-f", "S16_LE", "-c", "1", "-r", str(sr)]
+        if dev:
+            cmd += ["-D", dev]
+        cmd += ["-"]
+        return subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL), False
+
     def _play_pcm_aplay(self, pcm: bytes, sr: int):
-        """用 aplay 播 16-bit 单声道 PCM，自动/指定到音响。应用软件音量。"""
+        """播 16-bit 单声道 PCM（默认走 PipeWire/pw-play，指定设备走 aplay）。应用软件音量。"""
         if not pcm:
             return
         self._pin_hw_volume()
@@ -3607,15 +3671,11 @@ class BotGUI:
         if gain != 1.0:
             arr = np.frombuffer(pcm, dtype='<i2').astype(np.float32) * gain
             pcm = np.clip(arr, -32768, 32767).astype('<i2').tobytes()
-        dev = self._resolve_output_device()
-        cmd = ["aplay", "-q", "-f", "S16_LE", "-c", "1", "-r", str(sr)]
-        if dev:
-            cmd += ["-D", dev]
-        cmd += ["-"]
-        proc = None
+        proc, wav_mode = self._spawn_pcm_proc(sr)
         try:
-            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
             self.current_tts_proc = proc
+            if wav_mode:
+                proc.stdin.write(self._wav_header(sr, len(pcm)))
             proc.stdin.write(pcm)
             proc.stdin.close()
             while proc.poll() is None:
@@ -3644,19 +3704,16 @@ class BotGUI:
         )
 
     def _play_pcm_stream_aplay(self, chunks, sr: int):
-        """把一串 PCM 帧边收边写进 aplay（流式播放）。应用软件音量、路由到音箱。"""
+        """把一串 PCM 帧边收边写进播放器（流式）。应用软件音量、路由到音箱。"""
         self._pin_hw_volume()
         gain = self._gain()
-        dev = self._resolve_output_device()
-        cmd = ["aplay", "-q", "-f", "S16_LE", "-c", "1", "-r", str(sr)]
-        if dev:
-            cmd += ["-D", dev]
-        cmd += ["-"]
-        proc = None
+        proc, wav_mode = self._spawn_pcm_proc(sr)
         carry = b""   # 应用增益时需要偶数字节对齐，落单的半个采样留到下一帧
         try:
-            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
             self.current_tts_proc = proc
+            if wav_mode:
+                # 流式长度未知，用占位大小的 WAV 头，播到 stdin 关闭为止
+                proc.stdin.write(self._wav_header(sr, 0xFFFFFFFF - 44))
             for chunk in chunks:
                 if self.interrupted.is_set() or self.exiting:
                     break
@@ -3701,9 +3758,12 @@ class BotGUI:
         dev = self._resolve_output_device()
         cmd = ["mpg123", "-q", "-f", str(int(32768 * self._gain()))]  # -f 软件音量
         if dev:
-            # 指定了具体 ALSA 设备(plughw:N,0)时，必须强制用 alsa 输出模块，
-            # 否则 mpg123 默认走 pulse/pipewire 模块、忽略 -a，声音跑回系统默认(HDMI)。
+            # 指定了具体 ALSA 设备(plughw:N,0)时，强制用 alsa 输出模块，否则 mpg123
+            # 默认模块可能忽略 -a，声音跑回系统默认。
             cmd += ["-o", "alsa", "-a", dev]
+        else:
+            # 默认模式：走 PipeWire 的 pulse 接口，和游戏/媒体混音、共用 USB 音箱。
+            cmd += ["-o", "pulse"]
         cmd += ["-"]
         proc = None
         try:
@@ -3721,17 +3781,10 @@ class BotGUI:
                 self.current_tts_proc = None
 
     def _speak_siliconflow(self, text):
+        # 走统一的流式播放（默认 pw-play→PipeWire；指定设备→aplay），和 Edge/豆包一致，
+        # 避免 PortAudio 在默认模式下绕过 PipeWire 没声。
         sr = self.config.get("tts_sample_rate", 24000)
-        self._pin_hw_volume()
-        gain = self._gain()
-        with sd.RawOutputStream(samplerate=sr, channels=1, dtype='int16', latency='low') as stream:
-            for chunk in self.tts_sf.synthesize_pcm_stream(text):
-                if self.interrupted.is_set() or self.exiting:
-                    break
-                if gain != 1.0 and chunk:
-                    arr = np.frombuffer(chunk, dtype='<i2').astype(np.float32) * gain
-                    chunk = np.clip(arr, -32768, 32767).astype('<i2').tobytes()
-                stream.write(chunk)
+        self._play_pcm_stream_aplay(self.tts_sf.synthesize_pcm_stream(text), sr)
 
     # -------------------------------------------------------------------
     # 记忆
