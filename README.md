@@ -53,14 +53,22 @@ cd BMO-Online
 
 ### 3. 一键安装
 
-三选一，按你的网络挑：
+先加执行权限：
 
 ```bash
-chmod +x setup_pi*.sh
+chmod +x setup_pi_cn.sh setup_pi_direct.sh
+```
 
-./setup_pi.sh          # 自动：直连优先，失败自动切国内源（通用，推荐先试这个）
-./setup_pi_cn.sh       # 大陆加速：pip 全程清华镜像，GitHub 全程走代理
-./setup_pi_direct.sh   # 纯直连：不走任何代理（海外，或你自己已挂全局代理）
+**中国大陆**（pip 走清华镜像、GitHub 走代理）：
+
+```bash
+./setup_pi_cn.sh
+```
+
+**海外 / 自带全局代理**（纯直连，不走任何代理）：
+
+```bash
+./setup_pi_direct.sh
 ```
 
 这一步会：
@@ -69,7 +77,6 @@ chmod +x setup_pi*.sh
 - 检查唤醒词模型（仓库自带 `hey_bmo.onnx` + Sherpa-ONNX 中文 KWS）
 - 创建 `.env`（如果不存在）
 
-> **🇨🇳 中国大陆**：直接用 `./setup_pi_cn.sh` 全程走国内源最省心；
 > 想指定自己的 GitHub 代理：`GH_PROXY="https://你的代理" ./setup_pi_cn.sh`。
 
 ### 4. 启动

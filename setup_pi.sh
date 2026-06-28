@@ -8,35 +8,33 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 # ===== 下载源策略 =====
-# BMO_MIRROR 控制模式（由 setup_pi_cn.sh / setup_pi_direct.sh 设置，默认 auto）：
-#   auto   —— 先默认源/直连，失败再切国内镜像/代理（通用，海外无开销）
-#   cn     —— 全程走国内镜像/代理（大陆加速）
-#   direct —— 纯直连，从不走代理（海外，或你自己已挂全局代理）
-BMO_MIRROR="${BMO_MIRROR:-auto}"
+# 本脚本是共用引擎，不直接运行；请用下面两个之一：
+#   ./setup_pi_cn.sh      —— 纯代理：pip 走清华，GitHub 走代理（中国大陆）
+#   ./setup_pi_direct.sh  —— 纯直连：不走任何代理（海外，或自带全局代理）
+BMO_MIRROR="${BMO_MIRROR:-}"
+if [ "$BMO_MIRROR" != "cn" ] && [ "$BMO_MIRROR" != "direct" ]; then
+    echo -e "${RED}请不要直接运行 setup_pi.sh。${NC}"
+    echo -e "${YELLOW}  中国大陆： ./setup_pi_cn.sh${NC}"
+    echo -e "${YELLOW}  海外直连： ./setup_pi_direct.sh${NC}"
+    exit 1
+fi
 PIP_CN_MIRROR="https://pypi.tuna.tsinghua.edu.cn/simple"
 # GitHub 代理可用 GH_PROXY 环境变量覆盖（空格分隔多个）。
 GH_PROXIES=(${GH_PROXY:-"https://ghfast.top" "https://gh-proxy.com" "https://ghproxy.net"})
 
 pip_install() {
     if [ "$BMO_MIRROR" = "cn" ]; then
-        pip install -i "$PIP_CN_MIRROR" "$@"      # 全程清华
-        return
+        pip install -i "$PIP_CN_MIRROR" "$@"      # 纯代理：清华镜像
+    else
+        pip install "$@"                           # 纯直连：默认 PyPI
     fi
-    if pip install "$@"; then                      # 先默认 PyPI
-        return 0
-    fi
-    if [ "$BMO_MIRROR" = "direct" ]; then
-        return 1                                    # 纯直连，不切镜像
-    fi
-    echo -e "${YELLOW}  PyPI 安装失败，切换清华镜像重试...${NC}"
-    pip install -i "$PIP_CN_MIRROR" "$@"           # auto：失败兜底
 }
 
 gh_download() {
     # gh_download <github-url> <output-path>
     local url="$1" out="$2" proxy
     if [ "$BMO_MIRROR" = "cn" ]; then
-        for proxy in "${GH_PROXIES[@]}"; do        # 全程走代理
+        for proxy in "${GH_PROXIES[@]}"; do        # 纯代理：依次试代理
             echo -e "${YELLOW}    经 $proxy 下载...${NC}"
             if curl -fL --retry 2 --connect-timeout 15 -o "$out" "$proxy/$url"; then
                 return 0
@@ -45,30 +43,18 @@ gh_download() {
         rm -f "$out"
         return 1
     fi
-    if curl -fL --retry 2 --connect-timeout 15 -o "$out" "$url"; then   # 先直连
+    # 纯直连
+    if curl -fL --retry 2 --connect-timeout 15 -o "$out" "$url"; then
         return 0
     fi
-    if [ "$BMO_MIRROR" = "direct" ]; then
-        rm -f "$out"
-        return 1                                    # 纯直连，不走代理
-    fi
-    echo -e "${YELLOW}  直连 GitHub 失败，尝试国内代理...${NC}"
-    for proxy in "${GH_PROXIES[@]}"; do            # auto：失败兜底
-        echo -e "${YELLOW}    试 $proxy ...${NC}"
-        if curl -fL --retry 2 --connect-timeout 15 -o "$out" "$proxy/$url"; then
-            echo -e "${GREEN}    ✓ 经 $proxy 下载成功${NC}"
-            return 0
-        fi
-    done
     rm -f "$out"
     return 1
 }
 
 echo -e "${GREEN}🤖 BMO 在线版 - 树莓派安装${NC}"
 case "$BMO_MIRROR" in
-    cn)     echo -e "${YELLOW}下载模式：全程国内镜像/代理（大陆加速）${NC}" ;;
+    cn)     echo -e "${YELLOW}下载模式：纯代理（pip 清华 + GitHub 代理，大陆加速）${NC}" ;;
     direct) echo -e "${YELLOW}下载模式：纯直连（不走任何代理）${NC}" ;;
-    *)      echo -e "${YELLOW}下载模式：自动（直连优先，失败自动切国内源）${NC}" ;;
 esac
 
 # 1. 系统依赖
