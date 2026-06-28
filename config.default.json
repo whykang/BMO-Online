@@ -42,7 +42,7 @@
   },
   "wake_word": {
     "enabled": true,
-    "backend": "sherpa_onnx",
+    "backend": "openwakeword",
     "model_dir": "wakewords/sherpa-kws-zh",
     "keywords": [
       "你好小明",
