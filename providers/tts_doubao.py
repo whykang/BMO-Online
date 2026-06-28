@@ -42,7 +42,7 @@ class DoubaoTTSProvider:
                 "缺少豆包 TTS 凭证：在网页「API Key」或 .env 填 VOLC_TTS_API_KEY"
             )
         self.resource_id = config.get("doubao_resource_id", "seed-tts-2.0")
-        self.voice_type = config.get("doubao_voice_type", "zh_female_gaolengyujie_uranus_bigtts")
+        self.voice_type = config.get("doubao_voice_type", "zh_female_vv_uranus_bigtts")
         self.rate = int(config.get("doubao_rate", 24000))
 
     def _headers(self) -> dict:
