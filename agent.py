@@ -95,6 +95,26 @@ def log(msg: str):
         pass
 
 
+def _atomic_write_json(path: str, data, indent=None):
+    """原子写 JSON：先写同目录临时文件 + fsync，再 os.replace 覆盖。
+    避免树莓派掉电 / 两个进程并发时读到半截或损坏的文件。"""
+    import tempfile
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix=".tmp_", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=indent)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def load_config() -> dict:
     # config.json 不在 git 里；首次运行从 config.default.json 复制
     if not os.path.exists(CONFIG_FILE) and os.path.exists("config.default.json"):
@@ -113,8 +133,7 @@ def load_config() -> dict:
 
 
 def save_config(cfg: dict):
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    _atomic_write_json(CONFIG_FILE, cfg, indent=2)
 
 
 # =========================================================================
@@ -3686,8 +3705,7 @@ class BotGUI:
         if len(rest) > max_turns * 2:
             rest = rest[-max_turns * 2:]
         try:
-            with open(MEMORY_FILE, "w", encoding="utf-8") as f:
-                json.dump([sysp] + rest, f, ensure_ascii=False, indent=2)
+            _atomic_write_json(MEMORY_FILE, [sysp] + rest, indent=2)
         except Exception as e:
             log(f"[MEM] 保存失败: {e}")
 
@@ -3846,16 +3864,15 @@ class BotGUI:
     def update_state_file(self):
         """每 1s 写一次状态到 state.json，让 webui 读取。"""
         try:
-            with open(STATE_FILE, "w", encoding="utf-8") as f:
-                json.dump({
-                    "state": self.current_state,
-                    "status": self.current_status,
-                    "tts_queue_len": len(self.tts_queue),
-                    "memory_turns": len(self.session_memory) // 2,
-                    "game": self._game_state(),
-                    "media": self._media_state(),
-                    "timestamp": time.time(),
-                }, f, ensure_ascii=False)
+            _atomic_write_json(STATE_FILE, {
+                "state": self.current_state,
+                "status": self.current_status,
+                "tts_queue_len": len(self.tts_queue),
+                "memory_turns": len(self.session_memory) // 2,
+                "game": self._game_state(),
+                "media": self._media_state(),
+                "timestamp": time.time(),
+            })
         except Exception:
             pass
         self.master.after(1000, self.update_state_file)

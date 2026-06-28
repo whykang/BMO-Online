@@ -10,13 +10,14 @@ import shutil
 import hashlib
 import datetime
 import asyncio
+import threading
 import subprocess
 import shlex
 import re
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request, Response, Cookie
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -57,6 +58,26 @@ app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 # 工具
 # =========================================================================
 
+def _atomic_write_json(path: str, data, indent=None):
+    """原子写 JSON：先写同目录临时文件 + fsync，再 os.replace 覆盖。
+    避免树莓派掉电 / agent 同时读时拿到半截或损坏的文件。"""
+    import tempfile
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix=".tmp_", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=indent)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def load_config() -> dict:
     if not os.path.exists(CONFIG_FILE) and os.path.exists("config.default.json"):
         shutil.copy("config.default.json", CONFIG_FILE)
@@ -71,24 +92,27 @@ def load_config() -> dict:
 
 
 def save_config(cfg: dict):
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    _atomic_write_json(CONFIG_FILE, cfg, indent=2)
     # 通知 agent 重载
     queue_command({"action": "reload_config"})
 
 
+_command_lock = threading.Lock()
+
+
 def queue_command(cmd: dict):
-    """往 commands.json 追加一条命令；agent 主线程会 poll 它。"""
-    cmds = []
-    if os.path.exists(COMMANDS_FILE):
-        try:
-            with open(COMMANDS_FILE, "r", encoding="utf-8") as f:
-                cmds = json.load(f)
-        except Exception:
-            cmds = []
-    cmds.append(cmd)
-    with open(COMMANDS_FILE, "w", encoding="utf-8") as f:
-        json.dump(cmds, f, ensure_ascii=False)
+    """往 commands.json 追加一条命令；agent 主线程会 poll 它。
+    加进程内锁 + 原子写，避免多个请求并发追加时互相覆盖丢命令。"""
+    with _command_lock:
+        cmds = []
+        if os.path.exists(COMMANDS_FILE):
+            try:
+                with open(COMMANDS_FILE, "r", encoding="utf-8") as f:
+                    cmds = json.load(f)
+            except Exception:
+                cmds = []
+        cmds.append(cmd)
+        _atomic_write_json(COMMANDS_FILE, cmds)
 
 
 def load_state() -> dict:
@@ -123,8 +147,7 @@ def load_auth() -> dict | None:
 
 
 def save_auth(data: dict):
-    with open(AUTH_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    _atomic_write_json(AUTH_FILE, data, indent=2)
 
 
 SESSION_TOKENS: set[str] = set()
@@ -132,6 +155,33 @@ SESSION_TOKENS: set[str] = set()
 
 def make_token() -> str:
     return hashlib.sha256(os.urandom(32)).hexdigest()
+
+
+# 无需登录即可访问的路径：登录页本身、登录/登出/鉴权状态接口、静态资源。
+# 其余所有 /api/* 和受保护的静态挂载（生成图/抓拍/唤醒词/媒体）都需要有效 token。
+_PUBLIC_PATHS = {"/", "/api/auth/status", "/api/login", "/api/logout"}
+_PUBLIC_PREFIXES = ("/static/",)
+
+
+@app.middleware("http")
+async def auth_guard(request: Request, call_next):
+    """统一鉴权：之前只有 HTML 首页校验密码，所有 /api/* 都是裸奔的。
+    这里在入口处集中拦截，没设密码时保持原有'留空=无密码'的放行语义。"""
+    auth = load_auth()
+    if not (auth and auth.get("password_hash")):
+        return await call_next(request)
+
+    path = request.url.path
+    if path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PREFIXES):
+        return await call_next(request)
+
+    token = request.cookies.get("token")
+    if token and token in SESSION_TOKENS:
+        return await call_next(request)
+
+    if path.startswith("/api/"):
+        return JSONResponse({"detail": "未授权，请先登录"}, status_code=401)
+    return RedirectResponse("/")
 
 
 # =========================================================================
@@ -589,6 +639,8 @@ async def list_wakewords():
 async def upload_wakeword(file: UploadFile = File(...)):
     if not file.filename.endswith(".onnx"):
         raise HTTPException(400, "只接受 .onnx 文件")
+    if "/" in file.filename or "\\" in file.filename or ".." in file.filename:
+        raise HTTPException(400, "非法文件名")
     dest = os.path.join(WAKEWORDS_DIR, file.filename)
     with open(dest, "wb") as f:
         shutil.copyfileobj(file.file, f)
