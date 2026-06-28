@@ -64,21 +64,7 @@ chmod +x setup_pi.sh
 > GitHub 模型下载失败会自动套国内代理（ghfast.top 等）重试，无需手动配置。
 > 想指定自己的 GitHub 代理：`GH_PROXY="https://你的代理" ./setup_pi.sh`。
 
-### 4. 填 API key
-
-```bash
-nano .env
-```
-
-至少填一个，也可以启动后在网页的「API Key」中填写：
-```
-SILICONFLOW_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-# 或 OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-注册地址：[硅基流动](https://cloud.siliconflow.cn) / [OpenAI](https://platform.openai.com/api-keys)
-
-### 5. 启动
+### 4. 启动
 
 仓库已经包含了原版的 `faces/`（脸部动画）和 `sounds/`（音效），不用自己准备。
 
@@ -87,6 +73,8 @@ SILICONFLOW_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 启动主程序时**会自动同时拉起 Web 控制台**（这个行为可在网页里关掉）。
+
+> API key 直接在网页控制台的「API Key」里填即可（至少填一个，默认用[硅基流动](https://cloud.siliconflow.cn)）。
 
 **浏览器打开** Web 控制台：
 
