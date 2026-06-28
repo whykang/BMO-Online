@@ -3885,6 +3885,47 @@ class BotGUI:
             log(f"[WEBUI MEDIA] stop -> {'成功' if ok else '失败'}: {msg}")
         elif action == "restart_webui":
             self._restart_webui()
+        elif action == "restart_agent":
+            self._restart_agent()
+        elif action == "exit_agent":
+            log("[CMD] 网页请求退出 BMO")
+            self.safe_exit()
+
+    def _restart_agent(self):
+        """重启 BMO：清理子进程后用同一解释器原地 exec agent.py（同 PID）。"""
+        global WEBUI_PROC
+        log("[CMD] 网页请求重启 BMO...")
+        # 先杀掉 webui 子进程，否则重启后新 agent 再 spawn 一个会撞端口
+        try:
+            if WEBUI_PROC and WEBUI_PROC.poll() is None:
+                WEBUI_PROC.terminate()
+                try:
+                    WEBUI_PROC.wait(timeout=3)
+                except Exception:
+                    WEBUI_PROC.kill()
+        except Exception as e:
+            log(f"[CMD] 终止 webui 失败: {e}")
+        # 清理：停游戏/媒体/TTS/光标进程，存历史，停音频
+        self.exiting = True
+        for cleanup in (
+            lambda: self.stop_game(restore_bmo=False),
+            lambda: self.stop_media(restore_bmo=False),
+            lambda: self.current_tts_proc and self.current_tts_proc.terminate(),
+            lambda: (self._cursor_hider_proc and self._cursor_hider_proc.poll() is None
+                     and self._cursor_hider_proc.terminate()),
+            self.save_chat_history,
+            sd.stop,
+        ):
+            try:
+                cleanup()
+            except Exception:
+                pass
+        time.sleep(1.0)  # 等端口/音频设备释放，再原地重启
+        try:
+            os.execv(sys.executable, [sys.executable, os.path.abspath(__file__)])
+        except Exception as e:
+            log(f"[CMD] 重启失败，转为退出: {e}")
+            self.safe_exit()
 
     def _webui_print(self, cmd: dict):
         """网页打印控制：type ∈ {text, history, photo, generated}。"""

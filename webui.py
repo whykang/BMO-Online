@@ -1466,6 +1466,20 @@ async def restart_webui():
     return {"ok": True, "note": "已通知 agent 重启 webui，几秒后到新端口刷新页面"}
 
 
+@app.post("/api/agent/restart")
+async def restart_agent():
+    """重启 BMO（agent 进程原地自重启，会一并重启 Web 控制台）。"""
+    queue_command({"action": "restart_agent"})
+    return {"ok": True, "note": "已通知 BMO 重启，约 10 秒后刷新页面"}
+
+
+@app.post("/api/agent/exit")
+async def exit_agent():
+    """退出 BMO（agent 关闭，Web 控制台也会一起停止）。"""
+    queue_command({"action": "exit_agent"})
+    return {"ok": True, "note": "已通知 BMO 退出"}
+
+
 # =========================================================================
 # 路由：开机自启（Pi 桌面 XDG autostart）
 # 说明：Pi OS labwc 的系统默认 autostart 会调用 lxsession-xdg-autostart，

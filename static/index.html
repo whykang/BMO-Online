@@ -195,6 +195,14 @@
     </div>
   </div>
   <div class="panel">
+    <h2>电源</h2>
+    <div class="row">
+      <button class="btn secondary" onclick="restartBmo()">重启 BMO</button>
+      <button class="btn danger" onclick="exitBmo()">退出 BMO</button>
+    </div>
+    <span class="help">重启会自动拉起 Web 控制台，约 10 秒后刷新本页面即可；退出后 Web 控制台也会一起停止，需在树莓派上重新启动。</span>
+  </div>
+  <div class="panel">
     <h2>打印控制（热敏打印机）</h2>
     <div class="row">
       <button class="btn" onclick="doPrint('photo')">拍照打印</button>
@@ -761,6 +769,9 @@ const I18N_EN = {
   "记忆轮数：": "Memory turns:", "系统信息": "System Info", "设备：": "Device:",
   "CPU 使用率：": "CPU usage:", "温度：": "Temperature:", "内存：": "Memory:", "存储：": "Storage:",
   "负载：": "Load:", "已运行：": "Uptime:", "快捷操作": "Quick Actions",
+  "电源": "Power", "重启 BMO": "Restart BMO", "退出 BMO": "Exit BMO",
+  "重启会自动拉起 Web 控制台，约 10 秒后刷新本页面即可；退出后 Web 控制台也会一起停止，需在树莓派上重新启动。":
+    "Restart will bring the Web console back up; refresh this page after ~10s. Exit also stops the Web console — restart it on the Raspberry Pi.",
   "唤醒 BMO": "Wake BMO", "开始录音": "Start recording", "停止录音": "Stop recording", "打断说话": "Interrupt",
   "拍照": "Take photo", "打印控制（热敏打印机）": "Print (thermal printer)",
   "拍照打印": "Photo + print", "打印刚画的图": "Print last image", "打印对话：": "Print chat:",
@@ -1376,6 +1387,24 @@ async function restartWebui() {
     // 不主动跳转，让用户自己刷新（防止端口还没起来）
   } catch (e) {
     alert('重启失败：' + e.message);
+  }
+}
+async function restartBmo() {
+  if (!confirm('确认重启 BMO？语音助手会断开约 10 秒，期间无法对话。')) return;
+  try {
+    await postJSON('/api/agent/restart');
+    alert('已通知 BMO 重启，约 10 秒后请刷新本页面。');
+  } catch (e) {
+    alert('重启失败：' + e.message);
+  }
+}
+async function exitBmo() {
+  if (!confirm('确认退出 BMO？退出后语音助手和 Web 控制台都会停止，需要在树莓派上重新启动才能恢复。')) return;
+  try {
+    await postJSON('/api/agent/exit');
+    alert('已通知 BMO 退出。Web 控制台也会随之停止。');
+  } catch (e) {
+    alert('退出失败：' + e.message);
   }
 }
 initAll();
