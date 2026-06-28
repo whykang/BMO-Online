@@ -3701,7 +3701,9 @@ class BotGUI:
         dev = self._resolve_output_device()
         cmd = ["mpg123", "-q", "-f", str(int(32768 * self._gain()))]  # -f 软件音量
         if dev:
-            cmd += ["-a", dev]
+            # 指定了具体 ALSA 设备(plughw:N,0)时，必须强制用 alsa 输出模块，
+            # 否则 mpg123 默认走 pulse/pipewire 模块、忽略 -a，声音跑回系统默认(HDMI)。
+            cmd += ["-o", "alsa", "-a", dev]
         cmd += ["-"]
         proc = None
         try:
