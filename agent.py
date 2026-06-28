@@ -1863,7 +1863,11 @@ class BotGUI:
                         break
 
                     user_text = self.transcribe_audio(audio_file)
-                    if not user_text:
+                    if not user_text or self._is_noise_text(user_text):
+                        # 环境噪音常被误识成 '.' / '。' / 孤立韩文假名等无意义内容，
+                        # 别喂给 LLM（否则会一直'嗯我在'地回应噪音），当没听清结束本轮。
+                        if user_text:
+                            log(f"[REC] 忽略无意义识别: {user_text!r}")
                         self.set_state(BotStates.IDLE, "没听清")
                         break
 
@@ -2400,6 +2404,17 @@ class BotGUI:
         except Exception as e:
             log(f"[STT ERROR] {e}")
             return ""
+
+    @staticmethod
+    def _is_noise_text(text: str) -> bool:
+        """判断识别结果是不是噪音误识（无实际语义）。
+        噪音常被 SenseVoice 转成 '.'、'。'、'…' 或孤立的韩文/假名等。
+        只保留中文/英文字母/数字作为'有意义字符'，一个都没有就当噪音。
+        单个中文字（如'好'/'是'/'要'）仍保留，因为可能是有效的简短回答。"""
+        if not text or not text.strip():
+            return True
+        meaningful = re.findall(r"[一-鿿A-Za-z0-9]", text)
+        return len(meaningful) == 0
 
     # -------------------------------------------------------------------
     # 摄像头
