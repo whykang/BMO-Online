@@ -233,18 +233,24 @@ class BotStates:
 # =========================================================================
 
 def _auto_pick_input(devices):
-    """自动挑一个像样的麦输入设备，避开坏掉的 ALSA 默认（capture slave 未定义那种）。"""
-    prefer = ("dji", "mic mini", "microphone", "mic", "usb", "pnp", "webcam", "camera")
+    """自动挑一个像样的麦输入设备：先按麦克风相关关键词打分，分相同再比输入通道数；
+    避开坏掉的 ALSA 默认（capture slave 未定义那种）。
+    多个 USB 设备时（如 USB 扬声器 + USB 麦），偏向'更像麦克风/带录音'的那个：
+    'usb audio'/'audio device'/'usb pnp' 等麦克风常见名权重高于裸 'usb'。"""
+    prefer = ("dji", "mic mini", "microphone", "usb audio", "audio device",
+              "usb pnp", "pnp", "mic", "usb", "webcam", "camera")
     ranked = []
     for idx, dev in enumerate(devices):
-        if dev.get("max_input_channels", 0) <= 0:
+        ch = int(dev.get("max_input_channels", 0) or 0)
+        if ch <= 0:
             continue
         name = dev.get("name", "").lower()
         score = sum((len(prefer) - pos) for pos, token in enumerate(prefer) if token in name)
         if score:
-            ranked.append((score, idx))
+            ranked.append((score, ch, idx))
     if ranked:
-        return max(ranked, key=lambda item: item[0])[1]
+        # 关键词分优先；分相同时输入通道多的赢（真麦克风通常 >= 扬声器附带的采集端）
+        return max(ranked, key=lambda item: (item[0], item[1]))[2]
     # 兜底：第一个有输入通道、且不是 default/sysdefault 的设备
     for idx, dev in enumerate(devices):
         name = dev.get("name", "").lower()
