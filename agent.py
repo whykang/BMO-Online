@@ -358,6 +358,7 @@ class BotGUI:
         self.recording_active = threading.Event()
         self.interrupted = threading.Event()
         self.abort_to_wake = threading.Event()   # 长按回车：中止当前对话，回到待唤醒
+        self.rewake_event = threading.Event()    # 说话/等待开口时再次听到唤醒词
 
         # TTS 队列
         self.tts_queue = []
@@ -1833,6 +1834,9 @@ class BotGUI:
                     onset = awake_secs if first else followup_secs
                     audio_file = self.record_voice_adaptive(onset_timeout=onset)
 
+                    if self._acknowledge_rewake():
+                        first = True
+                        continue
                     if self.abort_to_wake.is_set():
                         break
                     if not audio_file:
@@ -1849,6 +1853,9 @@ class BotGUI:
                     self.interrupted.clear()
                     self.chat_and_respond(user_text, img_path=None)
 
+                    if self._acknowledge_rewake():
+                        first = True
+                        continue
                     first = False
                     if not follow_up:
                         break
@@ -1867,6 +1874,7 @@ class BotGUI:
         self.pending_print = None   # 回到等唤醒就清掉"要不要打印"，避免下次唤醒被误当成回答
         self.abort_to_wake.clear()  # 已经回到待唤醒，清掉长按中止标志
         self.interrupted.clear()
+        self.rewake_event.clear()
         self.ptt_event.clear()
 
         # 回到待唤醒：之前为了跟你说话把游戏暂停了的话，现在自动继续游戏（别一直暂停）
@@ -1906,24 +1914,22 @@ class BotGUI:
             input_rate, input_channels = choose_input_settings(
                 self.input_device, self.config.get("input_sample_rate"),
             )
-            should_resample = (input_rate != TARGET_SR)
-            chunk = int(target_chunk * (input_rate / TARGET_SR)) if should_resample else target_chunk
+            chunk = int(target_chunk * (input_rate / TARGET_SR)) if input_rate != TARGET_SR else target_chunk
             args = dict(
                 samplerate=input_rate, channels=input_channels, dtype='int16',
                 blocksize=chunk, device=self.input_device,
                 latency=self.config.get("audio_latency", "high"),
             )
-            return args, chunk, should_resample
+            return args, chunk
 
-        stream_args, in_chunk, use_resample = build_stream_args()
+        stream_args, in_chunk = build_stream_args()
         refresh_secs = float(self.config.get("wake_word", {}).get("stream_refresh_seconds", 180))
 
         # 自动重开：定期刷新音频流 + 读取出错时重开，避免长时间空闲后唤不醒
         fail_count = 0
         while not self.exiting:
             try:
-                result = self._listen_loop(stream_args, in_chunk, target_chunk,
-                                           use_resample, refresh_secs)
+                result = self._listen_loop(stream_args, in_chunk, target_chunk, refresh_secs)
             except StopIteration as si:
                 return str(si)
             except Exception as e:
@@ -1935,7 +1941,7 @@ class BotGUI:
                 # 连续失败 → 彻底重置 PortAudio，强制重新枚举设备（清掉卡死的 ALSA 句柄）
                 if fail_count in (2, 4, 6):
                     self._reset_portaudio()
-                    stream_args, in_chunk, use_resample = build_stream_args()
+                    stream_args, in_chunk = build_stream_args()
                 if fail_count >= 12:
                     log("[AUDIO] 连续重开失败，回落 PTT")
                     while not self.ptt_event.is_set() and not self.exiting:
@@ -1957,6 +1963,125 @@ class BotGUI:
                 return self.detect_wake_word_or_ptt()  # 配置变更，按新后端重算音频参数
             return result          # "WAKE"
         return "PTT"
+
+    def _reset_wake_detector(self):
+        if self.sherpa_kws:
+            self.sherpa_kws.reset()
+        if self.oww_model:
+            self.oww_model.reset()
+
+    def _feed_wake_frame(self, audio, debug=False):
+        """向当前唤醒后端送一帧 16kHz mono int16；命中时返回关键词。"""
+        if self.sherpa_kws:
+            return self.sherpa_kws.feed(audio) or None
+        if not self.oww_model:
+            return None
+
+        self.oww_model.predict(audio)
+        best_k, best_score = None, 0.0
+        for key in self.oww_model.prediction_buffer.keys():
+            score = list(self.oww_model.prediction_buffer[key])[-1]
+            if score > best_score:
+                best_k, best_score = key, score
+        threshold = float(self.config.get("wake_word", {}).get("legacy_threshold", 0.3))
+        if best_score >= threshold:
+            self.oww_model.reset()
+            return best_k or "openwakeword"
+        if debug:
+            near = max(0.2, threshold * 0.5)
+            if best_score >= near:
+                log(f"[WAKE?] '{best_k}' score={best_score:.2f}（阈值 {threshold:.2f}，没到）")
+        return None
+
+    @staticmethod
+    def _fit_wake_frame(data, target_samples):
+        audio = select_active_input_channel(data)
+        audio = np.asarray(audio, dtype=np.float32).flatten()
+        if len(audio) != target_samples:
+            audio = scipy.signal.resample_poly(audio, target_samples, max(1, len(audio)))
+        if len(audio) > target_samples:
+            audio = audio[:target_samples]
+        elif len(audio) < target_samples:
+            audio = np.pad(audio, (0, target_samples - len(audio)))
+        return np.clip(audio, -32768, 32767).astype(np.int16)
+
+    def _trigger_rewake(self, keyword, source):
+        if self.rewake_event.is_set():
+            return
+        log(f"[WAKE] {source}再次触发 '{keyword}'")
+        self.rewake_event.set()
+        self.interrupted.set()
+        self._cancel_thinking_cue()
+        with self.tts_queue_lock:
+            self.tts_queue.clear()
+        proc = self.current_tts_proc
+        if proc:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+        self.set_state(BotStates.LISTENING, "重新唤醒...")
+
+    def _acknowledge_rewake(self):
+        """消费再次唤醒事件；调用方随后把 first=True 以重置首次唤醒计时。"""
+        if not self.rewake_event.is_set():
+            return False
+        self.rewake_event.clear()
+        self.interrupted.clear()
+        with self.tts_queue_lock:
+            self.tts_queue.clear()
+        self.set_state(BotStates.LISTENING, "在听...")
+        self._play_status_cue("ack")
+        return True
+
+    def _start_speaking_wake_monitor(self, speaking_text=""):
+        """TTS 播放期间监听唤醒词；返回 (stop_event, thread)。"""
+        if self.wake_backend is None:
+            return None
+        normalized_text = re.sub(r"\s+", "", speaking_text or "").lower()
+        keywords = self.config.get("wake_word", {}).get("keywords", [])
+        if any(re.sub(r"\s+", "", str(word)).lower() in normalized_text
+               for word in keywords if str(word).strip()):
+            log("[WAKE] 当前朗读内容含唤醒词，本句暂停打断监听以避免自唤醒")
+            return None
+        stop_event = threading.Event()
+
+        def _monitor():
+            target_sr = 16000
+            target_chunk = 1280 if self.wake_backend == "openwakeword" else 1600
+            try:
+                self._reset_wake_detector()
+                input_rate, input_channels = choose_input_settings(
+                    self.input_device, self.config.get("input_sample_rate"),
+                )
+                in_chunk = max(1, int(target_chunk * input_rate / target_sr))
+                with sd.InputStream(
+                    samplerate=input_rate, channels=input_channels, dtype='int16',
+                    blocksize=in_chunk, device=self.input_device,
+                    latency=self.config.get("audio_latency", "high"),
+                ) as stream:
+                    while not stop_event.is_set() and not self.exiting:
+                        data, _ = stream.read(in_chunk)
+                        frame = self._fit_wake_frame(data, target_chunk)
+                        hit = self._feed_wake_frame(frame)
+                        if hit:
+                            self._trigger_rewake(hit, "说话中")
+                            return
+            except Exception as e:
+                if not stop_event.is_set():
+                    log(f"[WAKE] 说话中监听失败: {e}")
+
+        thread = threading.Thread(target=_monitor, daemon=True)
+        thread.start()
+        return stop_event, thread
+
+    @staticmethod
+    def _stop_speaking_wake_monitor(monitor):
+        if not monitor:
+            return
+        stop_event, thread = monitor
+        stop_event.set()
+        thread.join(timeout=0.5)
 
     def _log_input_device(self):
         try:
@@ -1983,12 +2108,9 @@ class BotGUI:
         except Exception as e:
             log(f"[AUDIO] 重置 PortAudio 失败: {e}")
 
-    def _listen_loop(self, args, in_chunk, target_chunk, use_resample, refresh_secs=180):
+    def _listen_loop(self, args, in_chunk, target_chunk, refresh_secs=180):
         ww_cfg = self.config.get("wake_word", {})
-        oww_threshold = ww_cfg.get("legacy_threshold", 0.3)
-        # 调试：接近阈值时把分数打到日志，方便调灵敏度（legacy_debug=false 可关）
         oww_debug = ww_cfg.get("legacy_debug", True)
-        oww_near = max(0.2, oww_threshold * 0.5)
         loop_start = time.time()
         last_audio_time = time.time()
         audio_timeout = float(ww_cfg.get("audio_callback_timeout_seconds", 10.0))
@@ -2034,42 +2156,11 @@ class BotGUI:
                         raise RuntimeError(f"audio callback timeout > {audio_timeout:.1f}s")
                     continue
 
-                audio = select_active_input_channel(data)
-                audio = np.clip(audio, -32768, 32767).astype(np.int16)
-                if use_resample:
-                    audio = scipy.signal.resample_poly(
-                        audio.astype(np.float32),
-                        target_chunk,
-                        len(audio),
-                    )
-                    if len(audio) > target_chunk:
-                        audio = audio[:target_chunk]
-                    elif len(audio) < target_chunk:
-                        audio = np.pad(audio, (0, target_chunk - len(audio)))
-                    audio = np.clip(audio, -32768, 32767).astype(np.int16)
-
-                # ---- Sherpa-ONNX KWS 后端 ----
-                if self.wake_backend == "sherpa_onnx":
-                    hit = self.sherpa_kws.feed(audio)
-                    if hit:
-                        log(f"[WAKE] 触发 '{hit}'")
-                        return "WAKE"
-                    continue
-
-                # ---- OpenWakeWord 后端 ----
-                # 必须连续喂帧：OWW 靠流式上下文打分，按音量门槛跳帧会打断上下文、严重漏检。
-                self.oww_model.predict(audio)
-                best_k, best_score = None, 0.0
-                for k in self.oww_model.prediction_buffer.keys():
-                    score = list(self.oww_model.prediction_buffer[k])[-1]
-                    if score > best_score:
-                        best_k, best_score = k, score
-                if best_score >= oww_threshold:
-                    log(f"[WAKE] 触发 '{best_k}' score={best_score:.2f}")
-                    self.oww_model.reset()
+                audio = self._fit_wake_frame(data, target_chunk)
+                hit = self._feed_wake_frame(audio, debug=oww_debug)
+                if hit:
+                    log(f"[WAKE] 触发 '{hit}'")
                     return "WAKE"
-                if oww_debug and best_score >= oww_near:
-                    log(f"[WAKE?] '{best_k}' score={best_score:.2f}（阈值 {oww_threshold:.2f}，没到）")
 
     # -------------------------------------------------------------------
     # 录音
@@ -2111,6 +2202,10 @@ class BotGUI:
         stall_timeout = float(rec_cfg.get("stall_timeout_seconds", 8.0))
         audio_q = queue.Queue(maxsize=16)
         stalled = False
+        wake_target_chunk = 1280 if self.wake_backend == "openwakeword" else 1600
+        wake_pending = np.empty(0, dtype=np.int16)
+        if self.wake_backend is not None:
+            self._reset_wake_detector()
 
         def _cb(indata, frames, time_info, status):
             try:
@@ -2155,6 +2250,23 @@ class BotGUI:
                         continue
 
                     audio = np.asarray(indata, dtype=np.float32).flatten()
+
+                    # 已经处于唤醒状态时再次说唤醒词：丢弃当前录音、重播应答，
+                    # 由主循环把等待时长恢复为 awake_seconds。
+                    if self.wake_backend is not None:
+                        wake_piece = audio
+                        if sr != 16000:
+                            wake_piece = scipy.signal.resample_poly(wake_piece, 16000, sr)
+                        wake_piece = np.clip(wake_piece, -32768, 32767).astype(np.int16)
+                        wake_pending = np.concatenate((wake_pending, wake_piece))
+                        while len(wake_pending) >= wake_target_chunk:
+                            wake_frame = wake_pending[:wake_target_chunk]
+                            wake_pending = wake_pending[wake_target_chunk:]
+                            hit = self._feed_wake_frame(wake_frame)
+                            if hit:
+                                self._trigger_rewake(hit, "等待说话时")
+                                return None
+
                     buf.append(audio.copy())
                     n += 1
                     vn = float(np.sqrt(np.mean(audio ** 2)) / 32768.0)
@@ -2770,6 +2882,11 @@ class BotGUI:
                             self.tts_queue.append(clean)
                     sentence_buf = ""
 
+            if self.rewake_event.is_set():
+                with self.tts_queue_lock:
+                    self.tts_queue.clear()
+                return
+
             # 收尾：剩余的最后一段
             if not is_action and sentence_buf.strip():
                 with self.tts_queue_lock:
@@ -2792,7 +2909,8 @@ class BotGUI:
             self.save_chat_history()
 
             self.wait_for_tts()
-            self.set_state(BotStates.IDLE, "准备好啦")
+            if not self.rewake_event.is_set():
+                self.set_state(BotStates.IDLE, "准备好啦")
 
         except Exception as e:
             log(f"[LLM ERROR] {e}")
@@ -2853,7 +2971,7 @@ class BotGUI:
         self._action_sequence_spoken = []
         try:
             for item in result:
-                if self.exiting:
+                if self.exiting or self.rewake_event.is_set():
                     return
                 self.handle_action_result(item, original_text, img_path)
         finally:
@@ -3154,7 +3272,8 @@ class BotGUI:
                 self.trim_memory()
                 self.save_chat_history()
         self.wait_for_tts()
-        self.set_state(BotStates.IDLE, "准备好啦")
+        if not self.rewake_event.is_set():
+            self.set_state(BotStates.IDLE, "准备好啦")
 
     def speak_text(self, text):
         with self.tts_queue_lock:
@@ -3181,7 +3300,11 @@ class BotGUI:
                     text = self.tts_queue.pop(0)
                     self.tts_active.set()
             if text:
-                self.speak(text)
+                monitor = self._start_speaking_wake_monitor(text)
+                try:
+                    self.speak(text)
+                finally:
+                    self._stop_speaking_wake_monitor(monitor)
                 with self.tts_queue_lock:
                     if not self.tts_queue:
                         self.tts_active.clear()
