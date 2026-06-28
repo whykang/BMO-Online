@@ -1046,6 +1046,19 @@ async def logs_tail(lines: int = 200):
     return {"lines": content[-lines:]}
 
 
+@app.get("/api/logs/download")
+async def logs_download():
+    """下载当前日志文件（面板里正在看的那份）。"""
+    log_file = _current_log_file()
+    if not os.path.exists(log_file):
+        raise HTTPException(404, "暂无日志")
+    return FileResponse(
+        log_file,
+        media_type="text/plain; charset=utf-8",
+        filename=os.path.basename(log_file),
+    )
+
+
 @app.get("/api/logs/stream")
 async def logs_stream():
     async def gen():

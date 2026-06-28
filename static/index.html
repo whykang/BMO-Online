@@ -683,6 +683,7 @@
     <h2>实时日志</h2>
     <div class="row">
       <button class="btn" onclick="reloadLogs()">刷新</button>
+      <button class="btn" onclick="downloadLogs()">下载日志</button>
       <label style="min-width: auto;"><input type="checkbox" id="log-autoscroll" checked> 自动滚动</label>
     </div>
     <div class="log-box" id="log-box"></div>
@@ -894,7 +895,7 @@ const I18N_EN = {
   "访问密码": "Access password", "当前：": "Current:", "设置 / 修改": "Set / change", "原密码：": "Old password:",
   "新密码：": "New password:", "取消密码": "Remove password",
   // logs
-  "实时日志": "Live Log", "自动滚动": "Auto-scroll",
+  "实时日志": "Live Log", "自动滚动": "Auto-scroll", "下载日志": "Download log",
   // common dynamic (alert/status)
   "已保存": "Saved", "已删除": "Deleted", "已上传": "Uploaded", "上传成功": "Uploaded",
   "上传失败：": "Upload failed: ", "保存失败：": "Save failed: ", "加载失败：": "Load failed: ",
@@ -2296,6 +2297,15 @@ async function reloadLogs() {
   const box = document.getElementById('log-box');
   box.textContent = data.lines.join('');
   if (document.getElementById('log-autoscroll').checked) box.scrollTop = box.scrollHeight;
+}
+function downloadLogs() {
+  // 同源请求会自动带上登录 cookie；服务端用 Content-Disposition 指定文件名
+  const a = document.createElement('a');
+  a.href = '/api/logs/download';
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 function startLogStream() {
   const evt = new EventSource('/api/logs/stream');
