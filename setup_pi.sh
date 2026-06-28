@@ -44,14 +44,25 @@ echo -e "${GREEN}🤖 BMO 在线版 - 树莓派安装${NC}"
 # 1. 系统依赖
 echo -e "${YELLOW}[1/4] 装系统依赖（apt）...${NC}"
 sudo apt update
+
+# 必装项：运行时真正需要的，这些在 RPi OS（含 trixie）上都能正常装。
+# 注意：sounddevice 运行时只需 libportaudio2（不需要 portaudio19-dev 头文件）；
+#       aplay/amixer 来自 alsa-utils。
 sudo apt install -y \
     python3-venv python3-tk python3-dev \
-    portaudio19-dev libasound2-dev \
     mpg123 ffmpeg \
-    unclutter xdotool \
-    pipewire-alsa pulseaudio-utils grim \
-    fceux \
-    git
+    unclutter xdotool grim \
+    fceux git \
+    libportaudio2 alsa-utils
+
+# 可选项（best-effort）：开发头 / PipeWire-ALSA / PulseAudio 工具。
+# RPi OS Desktop 一般已自带它们的 +rpt 版，而 Debian 源的版本会与 +rpt 版本号
+# 精确冲突（trixie 上的经典报错）。所以逐个尝试，装不上就跳过——不影响运行：
+#   pactl 缺失时代码会自动跳过；音频路由用系统已装的 PipeWire/ALSA。
+for pkg in portaudio19-dev libasound2-dev pipewire-alsa pulseaudio-utils; do
+    sudo apt install -y "$pkg" \
+        || echo -e "${YELLOW}  跳过 $pkg（系统已有兼容版本或与 +rpt 版冲突，不影响运行）${NC}"
+done
 
 # 2. Python venv
 echo -e "${YELLOW}[2/4] 建虚拟环境...${NC}"
