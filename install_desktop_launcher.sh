@@ -6,7 +6,11 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 ICON_SOURCE="$BASE_DIR/static/icon.png"
 [ -f "$ICON_SOURCE" ] || ICON_SOURCE="$BASE_DIR/faces/idle/idle 01.png"
 ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons"
-ICON_FILE="$ICON_DIR/bmo-online.png"
+# 图标文件名带内容指纹：图一变文件名就变 → .desktop 的 Icon 路径也变 →
+# 桌面被迫重新加载新图，绕开"换了图标还得重启才生效"的缓存问题。
+ICON_TAG="$(md5sum "$ICON_SOURCE" 2>/dev/null | cut -c1-8)"
+[ -n "$ICON_TAG" ] || ICON_TAG="$(date +%s)"
+ICON_FILE="$ICON_DIR/bmo-online-${ICON_TAG}.png"
 
 desktop_dir=""
 if command -v xdg-user-dir >/dev/null 2>&1; then
@@ -24,6 +28,8 @@ fi
 
 mkdir -p "$desktop_dir" "$ICON_DIR"
 if [ -f "$ICON_SOURCE" ]; then
+    # 清掉旧的图标副本（含无指纹的老名字），只留当前这份
+    rm -f "$ICON_DIR"/bmo-online.png "$ICON_DIR"/bmo-online-*.png 2>/dev/null || true
     cp "$ICON_SOURCE" "$ICON_FILE"
 fi
 
