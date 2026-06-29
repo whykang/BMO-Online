@@ -201,6 +201,15 @@ fi
 chmod +x start_agent.sh start_webui.sh install_desktop_launcher.sh
 ./install_desktop_launcher.sh || true
 
+# 取本机 IP 和 Web 控制台端口，直接拼出可点的网址
+LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+WEB_PORT=$(grep -oE '"webui_port"[[:space:]]*:[[:space:]]*[0-9]+' config.json 2>/dev/null | grep -oE '[0-9]+$')
+WEB_PORT=${WEB_PORT:-8087}
+
 echo -e "${GREEN}✨ 安装完成！下一步：${NC}"
 echo -e "${GREEN}    1. ./start_agent.sh   （会自动同时启动 Web 控制台）${NC}"
-echo -e "${GREEN}    2. 浏览器打开 http://<树莓派IP>:8087${NC}"
+if [ -n "$LOCAL_IP" ]; then
+    echo -e "${GREEN}    2. 浏览器打开 http://${LOCAL_IP}:${WEB_PORT}${NC}"
+else
+    echo -e "${GREEN}    2. 浏览器打开 http://<本机IP>:${WEB_PORT}（用 hostname -I 查看 IP）${NC}"
+fi
