@@ -43,13 +43,11 @@ git clone https://github.com/whykang/BMO-Online.git
 cd BMO-Online
 ```
 
-> **🇨🇳 大陆网络慢/连不上 GitHub？** 用 GitHub 代理加速 clone（任选一个，挂了就换下一个）：
+> **🇨🇳 中国大陆网络代理加速：
 > ```bash
 > git clone https://ghfast.top/https://github.com/whykang/BMO-Online.git
-> # 或： git clone https://gh-proxy.com/https://github.com/whykang/BMO-Online.git
 > cd BMO-Online
 > ```
-> 注：清华等公共镜像只镜像 PyPI/apt，不收录个人 GitHub 仓库，所以这里用 GitHub 代理而非清华源。
 
 ### 3. 一键安装
 
@@ -65,7 +63,7 @@ chmod +x setup_pi_cn.sh setup_pi_direct.sh
 ./setup_pi_cn.sh
 ```
 
-**海外 / 自带全局代理**（纯直连，不走任何代理）：
+**其他地区**（纯直连，不走任何代理）：
 
 ```bash
 ./setup_pi_direct.sh
@@ -139,7 +137,7 @@ hostname -I
 | 搜索 | “今天北京天气怎么样” / "今天有哪些新闻" |
 | 打印 | "打印近10条的对话内容" / "画一只猫并打印出来"|
 | 清记忆 | "忘记一切" / "清空记忆" |
-| 以及等等等等。。。。。。。。。。|
+| 以及更多功能可以查看工具提示词|
 
 
 
@@ -147,17 +145,19 @@ hostname -I
 
 | 标签 | 功能 |
 |------|------|
-| 仪表板 | 当前状态 + 快捷遥控 |
-| 音色 | 切换 Edge-TTS 音色（中/英/日）+ 试听 + 兜底 TTS 设置 |
+| 仪表板 | 当前状态 + 快捷遥控 + 一键打印 |
+| 音色 | 切换 Edge-TTS 音色（中/英/日）+ 试听 + 自定义 TTS 设置 |
 | 模型 | 切换 LLM / Vision / STT / 文生图模型 |
 | 性格 | 编辑 system prompt + 调记忆轮数 |
 | 唤醒词 | 中文关键词文本输入（任意短语，零训练）/ 切引擎 / 调灵敏度 |
 | 对话历史 | 查看 + 清空 |
 | 图片画廊 | 看 BMO 画过的图、删除 |
+| 游戏 | 上传游戏 + 启动/退出游戏 |
+| 媒体 | 上传音乐/视频文件让bmo操控 |
 | 遥控器 | 录音/打断/拍照按钮 + 让 BMO 说一句话 |
 | 日志 | 实时日志流（SSE） |
 | API Key | 看哪几个 provider 已配置、改 key |
-| 安全 | 设置/取消访问密码 |
+| 安全 | 设置/取消网页后台访问密码 |
 
 
 
@@ -177,8 +177,8 @@ hostname -I
 
 | 引擎 | 适用 | 配置 |
 |------|------|------|
-| **Sherpa-ONNX**） | 中文为主，任意短语零训练 | 在网页里直接打字 |
-| **OpenWakeWord** | 英文，需训练 `.onnx` 模型 | 上传 .onnx，老办法 |
+| **OpenWakeWord** |（默认）英文，需训练 `.onnx` 模型 | 上传 .onnx，自带一个模型|
+| **sherpa ** | 中文为主，可随意切换 | 无需自己训练模型|
 
 
 ## 🐛 排错
