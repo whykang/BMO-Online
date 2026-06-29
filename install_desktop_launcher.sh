@@ -2,7 +2,9 @@
 set -euo pipefail
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
-ICON_SOURCE="$BASE_DIR/faces/idle/idle 01.png"
+# 优先用自定义程序图标 static/icon.png；没有就回落到脸部动画的一帧
+ICON_SOURCE="$BASE_DIR/static/icon.png"
+[ -f "$ICON_SOURCE" ] || ICON_SOURCE="$BASE_DIR/faces/idle/idle 01.png"
 ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons"
 ICON_FILE="$ICON_DIR/bmo-online.png"
 
