@@ -519,6 +519,19 @@ async def get_default_config():
         return {}
 
 
+@app.get("/api/tools_prompt")
+async def get_tools_prompt():
+    """返回当前生效的工具提示词(自定义优先)和出厂默认值，供网页编辑/恢复默认。"""
+    from prompts import DEFAULT_TOOLS_PROMPT
+    cfg = load_config()
+    custom = (cfg.get("tools_prompt") or "").strip()
+    return {
+        "default": DEFAULT_TOOLS_PROMPT,
+        "current": custom or DEFAULT_TOOLS_PROMPT,
+        "is_custom": bool(custom),
+    }
+
+
 @app.put("/api/config")
 async def update_config(cfg: dict):
     # 唤醒词由专属接口 /api/wakewords/config 管理。整份保存（性格/模型/音色等）

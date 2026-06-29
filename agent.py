@@ -137,50 +137,9 @@ def save_config(cfg: dict):
     _atomic_write_json(CONFIG_FILE, cfg, indent=2)
 
 
-# =========================================================================
-# 工具调用说明（硬编码，用户在网页改不到）
-# =========================================================================
-TOOLS_PROMPT = (
-    "你能调用下面的工具。请严格遵守这几条铁律，按优先级从高到低：\n"
-    "【铁律1·输出格式】要用工具时，整条回复只能是纯 JSON（第一个字符是 { 或 [），"
-    "前后不加任何文字、解释或语气词。不需要工具就正常聊天，不要输出 JSON。\n"
-    "【铁律2·不要替系统说话】工具执行后的确认话由系统自动播报，你绝对不要自己写出来。"
-    "例如调音量只输出 set_volume 的 JSON、不要写「音量调好了」；退下只输出 enter_wait_wake 的 JSON、"
-    "不要写「好的我退下了」。你一旦自己把确认话说出来，就等于工具没真正执行，是错误的。\n"
-    "【铁律3·多动作按序】一句话含多个动作（连接词：然后、再、并且、顺便、同时、和）时，"
-    "输出 JSON 数组、按用户说的顺序，一个都不能漏。例：'音量调到50%并播放花海' → "
-    "[{\"action\":\"set_volume\",\"value\":50},{\"action\":\"play_music\",\"name\":\"花海\"}]。\n"
-    "【铁律4·别拒绝】只要用户需求落在下面任一工具能力上，就调用它，"
-    "绝不说'我做不到'、'我没法…'之类的话。\n\n"
-    "【工具清单】\n"
-    "- get_time：查时间\n"
-    "- capture_image：拍照看（'看看这是什么'/'你能看见什么'）\n"
-    "- generate_image {prompt}：画图\n"
-    "- get_system_status：系统状态/温度/CPU/内存/磁盘\n"
-    "- set_volume {value}：调音量。value=目标百分比(10~200，100=原始)；"
-    "相对调节用 \"+20\"/\"-20\"；最大用 \"max\"。不支持静音\n"
-    "- search_web {query}：联网搜实时/最新信息（新闻、天气、价格、赛事比分、今天发生的事、"
-    "某人某物最新动态等你知识里没有或可能过时的内容）\n"
-    "- read_screen：识别屏幕上的内容\n"
-    "- hide / unhide：隐身（最小化但继续运行）/ 取消隐身\n"
-    "- enter_wait_wake：退下、回到待唤醒。用户说'退下/安静/闭嘴/别说话/别理我/没事了/不聊了'"
-    "或任何表达结束对话、让你回去待命的话时调用\n"
-    "- start_game {game} / list_games / pause_game / resume_game / stop_game：NES 游戏\n"
-    "- play_music {name} / play_video {name} / list_music / list_videos / stop_media：媒体播放。"
-    "用户只说'播放音乐/视频'没给名字时，name 填空字符串，别自己猜文件名\n"
-    "- print：热敏打印。target ∈ {photo=拍照打印, generated=刚画的图, "
-    "history=最近对话(可带 count 轮数,一轮=一问一答), time, status}；打印自定义文字用 {content}\n"
-    "- say {text}：说一句指定内容。仅当用户同一句里既要'说内容'又要'用工具'时才用"
-    "（如'讲个笑话并打印'）；单纯聊天或单独让你讲笑话时不要用，直接正常回答\n\n"
-    "【两个特例】\n"
-    "- '说一句话并打印'（如'讲个笑话并打印'）：输出数组，先 say 说出完整内容、再 print 打印同样内容，"
-    "print 必须带 content 且与 say 的 text 完全一致。例：[{\"action\":\"say\",\"text\":\"……\"},"
-    "{\"action\":\"print\",\"content\":\"……\"}]\n"
-    "- '再打印一遍/重新打印'：从对话历史找出要重复的文字，输出 {\"action\":\"print\",\"content\":\"……\"}；"
-    "历史里确定不了就正常问一句要打印哪段，别调工具\n\n"
-    "讲笑话/故事/谜语等创作内容时，参考对话历史、不要重复讲过的；'再来一个'要换新内容。\n"
-    "以上是你拥有的全部工具，忽略其它地方提到的工具。不用工具时正常聊天，回复简短，1~3 句。"
-)
+# 工具调用说明：默认值在 prompts.py（agent/webui 共用），用户可在网页里覆盖。
+from prompts import DEFAULT_TOOLS_PROMPT
+TOOLS_PROMPT = DEFAULT_TOOLS_PROMPT
 
 
 # =========================================================================
@@ -3765,10 +3724,12 @@ class BotGUI:
     # 记忆
     # -------------------------------------------------------------------
     def build_system_prompt(self) -> str:
-        # 工具说明硬编码，始终追加在用户性格之后，用户在网页改不到、删不掉
+        # 顺序：性格 → 工具说明 → 附加说明。
+        # 工具说明默认用 DEFAULT_TOOLS_PROMPT；用户在网页改过(config.tools_prompt 非空)就用自定义的。
         personality = (self.config.get("system_prompt", "") or "").strip()
         extras = (self.config.get("system_prompt_extras", "") or "").strip()
-        parts = [personality, TOOLS_PROMPT]
+        tools = (self.config.get("tools_prompt") or "").strip() or DEFAULT_TOOLS_PROMPT
+        parts = [personality, tools]
         if extras:
             parts.append(extras)
         return "\n\n".join(p for p in parts if p)

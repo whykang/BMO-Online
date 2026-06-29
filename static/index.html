@@ -465,6 +465,17 @@
   </div>
 
   <div class="panel">
+    <h2>工具提示词（高级）</h2>
+    <div class="help" style="color:#c0392b;">⚠️ 这是控制工具调用（查时间/画图/调音量/退下等）的核心提示词。默认锁定不可改；修改可能导致工具失灵、乱念 JSON 等问题，请谨慎。出问题点「恢复默认」即可还原。</div>
+    <textarea id="prompt-tools" disabled style="opacity:0.55; min-height:240px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size:12px;"></textarea>
+    <div class="row" style="margin-top: 12px;">
+      <button class="btn secondary" id="prompt-tools-edit-btn" onclick="enableToolsEdit()">修改</button>
+      <button class="btn secondary" onclick="resetToolsDefault()">恢复默认</button>
+      <button class="btn" onclick="saveToolsPrompt()">保存</button>
+    </div>
+  </div>
+
+  <div class="panel">
     <h2>对话设置</h2>
     <div class="row">
       <label>记忆上限：</label>
@@ -834,6 +845,9 @@ const I18N_EN = {
   "只需写性格/说话风格。工具调用说明（查时间/拍照/画图/系统状态等）已内置在程序里，不用也无法在这里写，改性格不会影响工具。改完点保存，agent 自动重载，新对话立刻生效。":
     "Only write personality / speaking style. Tool instructions (time, photo, drawing, system status, etc.) are built in and can't be set here. Save and the agent reloads; new chats apply immediately.",
   "附加说明（可选）": "Extra notes (optional)", "恢复默认": "Reset to default",
+  "工具提示词（高级）": "Tool prompt (advanced)", "修改": "Edit",
+  "⚠️ 这是控制工具调用（查时间/画图/调音量/退下等）的核心提示词。默认锁定不可改；修改可能导致工具失灵、乱念 JSON 等问题，请谨慎。出问题点「恢复默认」即可还原。":
+    "⚠️ Core prompt that controls tool calls (time, drawing, volume, stand-down, etc.). Locked by default; editing may break tools (reading JSON aloud, etc.). Be careful — click \"Reset to default\" to restore.",
   "只写性格/说话风格，比如：你是可爱的小机器人 BMO，说话活泼简短...": "Only personality / speaking style, e.g. You are a cute robot BMO and speak briefly and brightly...",
   "额外的设定，比如「你的主人叫小明」": "Extra notes, e.g. \"Your owner's name is Xiaoming\"",
   // wake word
@@ -1967,10 +1981,12 @@ async function saveImgGen() {
 }
 
 // ============ 性格 / Prompt ============
+let TOOLS_PROMPT_DEFAULT = '';
 function fillPrompt() {
   document.getElementById('prompt-system').value = CONFIG.system_prompt || '';
   document.getElementById('prompt-extras').value = CONFIG.system_prompt_extras || '';
   document.getElementById('prompt-mem-max').value = CONFIG.memory_max_turns || 30;
+  loadToolsPrompt();
   const c = CONFIG.conversation || {};
   const r = CONFIG.recording || {};
   document.getElementById('conv-followup').checked = c.follow_up !== false;
@@ -2013,6 +2029,48 @@ async function saveExtras() {
   CONFIG.system_prompt_extras = document.getElementById('prompt-extras').value;
   await putJSON('/api/config', CONFIG);
   alert('已保存');
+}
+async function loadToolsPrompt() {
+  const ta = document.getElementById('prompt-tools');
+  const btn = document.getElementById('prompt-tools-edit-btn');
+  try {
+    const d = await fetchJSON('/api/tools_prompt');
+    TOOLS_PROMPT_DEFAULT = d.default || '';
+    ta.value = d.current || '';
+  } catch (e) {
+    ta.value = '（加载失败：' + e.message + '）';
+  }
+  // 默认锁定（灰色不可改），点"修改"才解锁
+  ta.disabled = true;
+  ta.style.opacity = '0.55';
+  if (btn) btn.disabled = false;
+}
+function enableToolsEdit() {
+  const ta = document.getElementById('prompt-tools');
+  ta.disabled = false;
+  ta.style.opacity = '1';
+  ta.focus();
+  const btn = document.getElementById('prompt-tools-edit-btn');
+  if (btn) btn.disabled = true;
+}
+function resetToolsDefault() {
+  if (!confirm('恢复出厂默认工具提示词？当前内容会被覆盖（点保存后才真正生效）')) return;
+  const ta = document.getElementById('prompt-tools');
+  ta.value = TOOLS_PROMPT_DEFAULT;
+  enableToolsEdit();
+}
+async function saveToolsPrompt() {
+  const val = document.getElementById('prompt-tools').value;
+  if (val.trim() === TOOLS_PROMPT_DEFAULT.trim()) {
+    // 和默认一致 → 清掉自定义，回到用默认值
+    CONFIG.tools_prompt = '';
+  } else {
+    if (!confirm('修改工具提示词可能导致系统无法正常运行，谨慎修改。\n确定保存吗？')) return;
+    CONFIG.tools_prompt = val;
+  }
+  await putJSON('/api/config', CONFIG);
+  alert('已保存，下一轮对话生效');
+  loadToolsPrompt();
 }
 async function saveMemory() {
   CONFIG.memory_max_turns = parseInt(document.getElementById('prompt-mem-max').value);
