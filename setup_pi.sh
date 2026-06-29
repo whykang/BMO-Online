@@ -201,6 +201,26 @@ fi
 chmod +x start_agent.sh start_webui.sh install_desktop_launcher.sh
 ./install_desktop_launcher.sh || true
 
+# 7. 默认开启开机自启（XDG autostart，和网页「仪表板」里那个开关同一份文件）。
+#    已存在就不覆盖，尊重用户之后在网页里的开/关选择。
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+AUTOSTART_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
+AUTOSTART_FILE="$AUTOSTART_DIR/bmo.desktop"
+if [ ! -f "$AUTOSTART_FILE" ]; then
+    mkdir -p "$AUTOSTART_DIR"
+    cat > "$AUTOSTART_FILE" <<EOF
+[Desktop Entry]
+Type=Application
+Name=BMO Agent
+Comment=Be More Agent (Online) auto-starter
+Exec=sh -c 'sleep 8; exec $PROJECT_DIR/start_agent.sh'
+Path=$PROJECT_DIR
+Terminal=false
+X-GNOME-Autostart-enabled=true
+EOF
+    echo -e "${GREEN}  ✓ 已默认开启开机自启（开机进桌面后自动启动 BMO；可在网页「仪表板」关闭）${NC}"
+fi
+
 # 取本机 IP 和 Web 控制台端口，直接拼出可点的网址
 LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 WEB_PORT=$(grep -oE '"webui_port"[[:space:]]*:[[:space:]]*[0-9]+' config.json 2>/dev/null | grep -oE '[0-9]+$')
