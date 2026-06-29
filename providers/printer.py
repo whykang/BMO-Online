@@ -4,6 +4,7 @@
 支持打印中文文字、图片（光栅位图 GS v 0）、ESC/POS 指令。
 默认 58mm 纸（384 点宽）；80mm 纸把 config.printer.width 改成 576。
 """
+import os
 import time
 
 try:
@@ -23,18 +24,42 @@ class ThermalPrinter:
     def __init__(self, config: dict):
         if not SERIAL_AVAILABLE:
             raise RuntimeError("缺少 pyserial：pip install pyserial")
-        self.device = config.get("device", "/dev/ttyAMA0")
+        # 默认用 /dev/serial0（与 Pi 型号无关、指向 GPIO 主 UART）；找不到再试常见候选
+        self.device = config.get("device", "/dev/serial0")
         self.baudrate = int(config.get("baudrate", 9600))
         self.encoding = config.get("encoding", "gb2312")
         # 点宽取 8 的整数倍（光栅按字节打包）；58mm=384，80mm=576
         self.width = (int(config.get("width", 384)) // 8) * 8
         self.ser = None
 
+    def _resolve_device(self) -> str | None:
+        """配置的设备不存在时，在常见 UART 候选里挑第一个存在的。
+        覆盖 Pi 5 / Pi 4 / USB 转串口几种情况。"""
+        candidates = [self.device, "/dev/serial0", "/dev/ttyAMA0",
+                      "/dev/ttyAMA10", "/dev/ttyS0", "/dev/ttyUSB0"]
+        seen, ordered = set(), []
+        for d in candidates:
+            if d and d not in seen:
+                seen.add(d)
+                ordered.append(d)
+        for d in ordered:
+            if os.path.exists(d):
+                return d
+        return None
+
     # ---- 连接 ----
     def _open(self):
         if self.ser is None or not self.ser.is_open:
+            dev = self._resolve_device()
+            if not dev:
+                raise RuntimeError(
+                    "找不到串口设备（/dev/serial0、/dev/ttyAMA0 等都不存在）。"
+                    "多半是 UART 没启用：在树莓派上跑 sudo raspi-config → "
+                    "Interface Options → Serial Port → 登录shell选「否」、硬件串口选「是」，"
+                    "然后 sudo reboot；或者打印机没接好。不用打印可在网页把打印功能关掉。"
+                )
             # write_timeout 给足：9600 波特下大图也要十几秒
-            self.ser = serial.Serial(self.device, self.baudrate,
+            self.ser = serial.Serial(dev, self.baudrate,
                                      timeout=5, write_timeout=120)
             self.ser.write(ESC + b"@")   # 初始化
             self.ser.flush()

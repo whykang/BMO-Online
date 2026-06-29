@@ -99,7 +99,7 @@
   "volume_percent": 100,
   "printer": {
     "enabled": true,
-    "device": "/dev/ttyAMA0",
+    "device": "/dev/serial0",
     "baudrate": 9600,
     "encoding": "gb2312",
     "width": 384,
