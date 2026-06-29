@@ -5,11 +5,11 @@
 
 ## ✨ 特性
 
-- **语音对话**：硅基流动 SenseVoice 听话，DeepSeek-V3 思考，Edge-TTS 说话（**中文音色一流，免费**）
-- **看图能力**：摄像头拍照 → Qwen2-VL 描述
-- **画图能力**：说"画一只戴帽子的猫" → 硅基流动 / OpenRouter / OpenAI 文生图模型生成 → 屏幕展示
+- **语音对话**：已支持接入 OpenAI、DeepSeek、OpenRouter、硅基流动等主流大模型服务。
+- **看图能力**：摄像头拍照 → 视觉模型 描述
+- **画图能力**：说"画一只戴帽子的猫" →  文生图模型生成 → 屏幕展示
 - **搜索问答**：调用博查搜索接口，回答需要网络搜索/新闻类问题
-- **中文唤醒词**（Sherpa-ONNX KWS，零训练）+ **物理按钮 PTT** 两种触发，并存
+- **唤醒词**：本地唤醒词模型 + **物理按钮 PTT** 两种触发，并存
 - **网页控制台**（http://树莓派IP:8087）：在线切换音色 / 模型 / 性格 / 唤醒词，看日志、看历史、看画廊、当遥控器
 - **保留 BMO 标志性脸部动画**
 
@@ -84,9 +84,9 @@ chmod +x setup_pi_cn.sh setup_pi_direct.sh
 ./start_agent.sh
 ```
 
-启动主程序时**会自动同时拉起 Web 控制台**（这个行为可在网页里关掉）。
+启动主程序时**会自动同时拉起 Web 控制台**。
 
-> API key 直接在网页控制台的「API Key」里填即可（至少填一个，默认用[硅基流动](https://cloud.siliconflow.cn)）。
+>首次启动后，请在网页控制台的「API Key」中填写 API Key，并在模型列表中选择对应模型后即可使用。>
 
 **浏览器打开** Web 控制台：
 
@@ -228,10 +228,9 @@ BMO-Online/
 ## 🙏 致谢
 
 - 原版 [Be More Agent](https://github.com/brenpoly/be-more-agent) by **brenpoly** — 整个项目的灵感和骨架来源
-- [Sherpa-ONNX](https://github.com/k2-fsa/sherpa-onnx) — 中文唤醒词 KWS（默认引擎）
-- [OpenWakeWord](https://github.com/dscripka/openWakeWord) — 英文唤醒词引擎（可选）
+- [Sherpa-ONNX](https://github.com/k2-fsa/sherpa-onnx) — 中文唤醒词 KWS
+- [OpenWakeWord](https://github.com/dscripka/openWakeWord) — 英文唤醒词引擎
 - [Edge-TTS](https://github.com/rany2/edge-tts) — 微软 TTS 的 Python 封装
-- [硅基流动](https://siliconflow.cn) — 一站式 AI 模型 API
 - BMO 角色版权归 Cartoon Network；本项目仅作非商业爱好
 
 ## 📄 许可证
