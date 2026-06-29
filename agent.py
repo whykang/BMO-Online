@@ -2362,14 +2362,20 @@ class BotGUI:
 
     @staticmethod
     def _is_noise_text(text: str) -> bool:
-        """判断识别结果是不是噪音误识（无实际语义）。
-        噪音常被 SenseVoice 转成 '.'、'。'、'…' 或孤立的韩文/假名等。
-        只保留中文/英文字母/数字作为'有意义字符'，一个都没有就当噪音。
-        单个中文字（如'好'/'是'/'要'）仍保留，因为可能是有效的简短回答。"""
+        """判断识别结果是不是噪音误识（无实际语义），是就别喂给大模型。
+        规则：
+        1. 去掉标点/空白后，没有任何中文/英文字母/数字 → 噪音（如 '.'、'。'、孤立韩文/假名）。
+        2. 纯英文字母、且全是同一个字母重复（含单个字母）→ 噪音（如 'I'、'zzzz'、'www'、'aaaa'）。
+        单个中文字（'好'/'是'/'要'）和正常英文词（'ok'/'hello'）仍保留。"""
         if not text or not text.strip():
             return True
         meaningful = re.findall(r"[一-鿿A-Za-z0-9]", text)
-        return len(meaningful) == 0
+        if not meaningful:
+            return True
+        letters = [c.lower() for c in meaningful]
+        if all(c.isascii() and c.isalpha() for c in letters) and len(set(letters)) == 1:
+            return True
+        return False
 
     # -------------------------------------------------------------------
     # 摄像头
