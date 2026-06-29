@@ -77,7 +77,43 @@ chmod +x setup_pi_cn.sh setup_pi_direct.sh
 
 > 想指定自己的 GitHub 代理：`GH_PROXY="https://你的代理" ./setup_pi_cn.sh`。
 
-### 4. 启动
+### 4. （可选）热敏打印机：启用串口 UART
+
+> 只有接了**热敏打印机**（走 GPIO 的 UART 引脚）才需要这步；**没有打印机直接跳到第 5 步**。
+
+打印机通过树莓派的串口（UART）通信，但 Pi OS 默认**没启用硬件串口**，不开的话打印会报
+`could not open port /dev/serial0 / No such file or directory`。
+
+在树莓派上运行：
+
+```bash
+sudo raspi-config
+```
+
+进入 **Interface Options → Serial Port**，按提示回答这两个问题：
+
+- **Would you like a login shell to be accessible over serial?** → 选 **No（否）**
+  （关掉串口登录控制台，否则串口被系统占用、打印机用不了）
+- **Would you like the serial port hardware to be enabled?** → 选 **Yes（是）**
+
+选 **Finish** 退出并重启：
+
+```bash
+sudo reboot
+```
+
+重启后确认串口设备已生成：
+
+```bash
+ls -l /dev/serial0
+```
+
+看到它是个软链接（指向 `ttyAMA0` 之类）就说明已启用。
+
+**接线**：打印机的 RX / TX / GND 接到树莓派 GPIO 的 TXD(GPIO14) / RXD(GPIO15) / GND，
+波特率默认 9600（可在网页或 `config.json` 的 `printer` 段里改；58mm 纸 `width=384`，80mm 改 `576`）。
+
+### 5. 启动
 
 
 ```bash
