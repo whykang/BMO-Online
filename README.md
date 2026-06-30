@@ -102,16 +102,20 @@ sudo raspi-config
 sudo reboot
 ```
 
-重启后确认串口设备已生成：
+重启后**直接给串口发一行字测试**（打印机吐纸就说明通了）：
 
 ```bash
-ls -l /dev/serial0
+printf 'BMO printer test\n\n\n' > /dev/ttyAMA0
 ```
 
-看到它是个软链接（指向 `ttyAMA0` 之类）就说明已启用。
+> **Pi 5 注意**：GPIO 排针(8/10 脚)的 UART 是 **`/dev/ttyAMA0`**，
+> 而 `/dev/serial0` 在 Pi 5 上指向的是**调试口 ttyAMA10**，不是排针！
+> 所以默认 `printer.device` 用 `/dev/ttyAMA0`。如果上面这条不吐纸，把
+> `/dev/ttyAMA0` 换成 `/dev/serial0` 再试，哪个吐纸就把它填进 `config.json` 的 `printer.device`。
 
-**接线**：打印机的 RX / TX / GND 接到树莓派 GPIO 的 TXD(GPIO14) / RXD(GPIO15) / GND，
-波特率默认 9600（可在网页或 `config.json` 的 `printer` 段里改；58mm 纸 `width=384`，80mm 改 `576`）。
+**接线**：打印机的 RX / TX / GND 接到树莓派 GPIO 的 TXD(GPIO14, 物理8脚) / RXD(GPIO15, 物理10脚) / GND
+（TX/RX 交叉，GND 必须共地）。打印机要**独立供电**（热敏打印瞬间 1.5~2A，别只靠树莓派带）。
+波特率默认 9600（不吐纸可在 `config.json` 的 `printer` 段试 19200/115200；58mm 纸 `width=384`，80mm 改 `576`）。
 
 ### 5. 启动
 

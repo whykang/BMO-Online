@@ -24,8 +24,9 @@ class ThermalPrinter:
     def __init__(self, config: dict):
         if not SERIAL_AVAILABLE:
             raise RuntimeError("缺少 pyserial：pip install pyserial")
-        # 默认用 /dev/serial0（与 Pi 型号无关、指向 GPIO 主 UART）；找不到再试常见候选
-        self.device = config.get("device", "/dev/serial0")
+        # Pi 5 的 GPIO 排针(8/10脚) UART 是 /dev/ttyAMA0（注意 serial0 在 Pi 5 上
+        # 指向调试口 ttyAMA10，不是排针）。找不到再在候选里试别的。
+        self.device = config.get("device", "/dev/ttyAMA0")
         self.baudrate = int(config.get("baudrate", 9600))
         self.encoding = config.get("encoding", "gb2312")
         # 点宽取 8 的整数倍（光栅按字节打包）；58mm=384，80mm=576
@@ -35,8 +36,9 @@ class ThermalPrinter:
     def _resolve_device(self) -> str | None:
         """配置的设备不存在时，在常见 UART 候选里挑第一个存在的。
         覆盖 Pi 5 / Pi 4 / USB 转串口几种情况。"""
-        candidates = [self.device, "/dev/serial0", "/dev/ttyAMA0",
-                      "/dev/ttyAMA10", "/dev/ttyS0", "/dev/ttyUSB0"]
+        # ttyAMA0 在前(Pi 5 GPIO 排针)，serial0/ttyS0 兜底(Pi 4 等)
+        candidates = [self.device, "/dev/ttyAMA0", "/dev/serial0",
+                      "/dev/ttyS0", "/dev/ttyUSB0", "/dev/ttyAMA10"]
         seen, ordered = set(), []
         for d in candidates:
             if d and d not in seen:
