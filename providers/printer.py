@@ -35,8 +35,8 @@ class ThermalPrinter:
         self.font_scale = max(1, min(8, int(config.get("font_scale", 2))))
         # 是否粗体（ESC ! 的 bit3），让放大后的字更清晰。默认开。
         self.bold = bool(config.get("bold", True))
-        # 每次打印完走纸行数（撕纸用），默认 3；设 0 = 不走纸
-        self.feed_lines = max(0, int(config.get("feed_lines", 3)))
+        # 每次打印完走纸行数（撕纸用），默认 5；设 0 = 不走纸
+        self.feed_lines = max(0, int(config.get("feed_lines", 5)))
         self.ser = None
 
     def _resolve_device(self) -> str | None:
