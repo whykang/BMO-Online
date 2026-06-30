@@ -498,8 +498,8 @@ class VolumeReq(BaseModel):
 
 @app.put("/api/volume")
 async def set_volume(req: VolumeReq):
-    # 允许到 200%：软件增益可放大（>100%），解决 USB 音箱本身偏小的问题
-    pct = max(0, min(200, int(req.percent)))
+    # 允许到 500%：软件增益可放大（>100%），解决 USB 音箱本身偏小的问题（越高越易失真）
+    pct = max(0, min(500, int(req.percent)))
     # 只写软件增益到 config（TTS/Piper/音效都会乘上它）。
     # 硬件 amixer 不在这里设：PipeWire 会在每段播放后把它复位（表现为"这句大、
     # 下一句又变小"）。改由 agent 在每次播放前把硬件顶到 100%，软件增益做唯一音量旋钮。

@@ -2717,7 +2717,7 @@ class BotGUI:
         def kw(s: str):
             low = s.strip().lower()
             if any(w in low for w in ("max", "最大", "最响", "最高")):
-                return 200
+                return 500
             if any(w in low for w in ("+", "up", "louder", "increase", "大", "高", "响")):
                 return cur + step
             if any(w in low for w in ("-", "down", "quieter", "decrease", "小", "低", "轻")):
@@ -2750,7 +2750,7 @@ class BotGUI:
         if target is None:
             return "VOLUME_SET::你想把音量调到多大呀？比如说“大一点”，或者“音量调到 50”。"
 
-        target = max(self.MIN_VOLUME, min(200, int(target)))
+        target = max(self.MIN_VOLUME, min(500, int(target)))
         self.config["volume_percent"] = target
         save_config(self.config)
         log(f"[VOLUME] {cur}% -> {target}%")
@@ -3525,9 +3525,9 @@ class BotGUI:
     def _gain(self):
         """软件音量增益（来自 config.volume_percent，默认100）。
         100 = 原始音量(直通)；<100 衰减；>100 放大（USB 音箱本身偏小时用来提音量）。
-        上限 3.0(=300%) 防止过度削波；超过后多半失真。"""
+        上限 5.0(=500%)；越往上越容易削波失真，按需用。"""
         try:
-            return max(0.0, min(3.0, float(self.config.get("volume_percent", 100)) / 100.0))
+            return max(0.0, min(5.0, float(self.config.get("volume_percent", 100)) / 100.0))
         except Exception:
             return 1.0
 

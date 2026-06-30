@@ -23,7 +23,7 @@ DEFAULT_TOOLS_PROMPT = (
     "- capture_image：拍照看（'看看这是什么'/'你能看见什么'）\n"
     "- generate_image {prompt}：画图\n"
     "- get_system_status：系统状态/温度/CPU/内存/磁盘\n"
-    "- set_volume {value}：调音量。value=目标百分比(10~200，100=原始)；"
+    "- set_volume {value}：调音量。value=目标百分比(10~500，100=原始，>100 放大)；"
     "相对调节用 \"+20\"/\"-20\"；最大用 \"max\"。不支持静音\n"
     "- search_web {query}：联网搜实时/最新信息（新闻、天气、价格、赛事比分、今天发生的事、"
     "某人某物最新动态等你知识里没有或可能过时的内容）\n"
