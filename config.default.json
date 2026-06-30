@@ -105,6 +105,7 @@
     "width": 384,
     "font_scale": 2,
     "bold": true,
+    "feed_lines": 3,
     "history_turns": 10
   },
   "game": {

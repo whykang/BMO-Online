@@ -35,6 +35,8 @@ class ThermalPrinter:
         self.font_scale = max(1, min(8, int(config.get("font_scale", 2))))
         # 是否粗体（ESC ! 的 bit3），让放大后的字更清晰。默认开。
         self.bold = bool(config.get("bold", True))
+        # 每次打印完走纸行数（撕纸用），默认 3；设 0 = 不走纸
+        self.feed_lines = max(0, int(config.get("feed_lines", 3)))
         self.ser = None
 
     def _resolve_device(self) -> str | None:
@@ -103,9 +105,15 @@ class ThermalPrinter:
             data = self._style_prefix() + data
         self._write_chunked(ser, data)
 
-    def feed(self, lines: int = 3):
+    def feed(self, lines: int = None):
         ser = self._open()
-        ser.write(b"\n" * lines)
+        n = self.feed_lines if lines is None else lines
+        if n <= 0:
+            return
+        # 走纸前把字号/粗体复位，让空白行是正常行高（否则放大字体下空白会翻倍）
+        ser.write(GS + b"!" + b"\x00")
+        ser.write(ESC + b"!" + b"\x00")
+        ser.write(b"\n" * n)
         ser.flush()
 
     # ---- 图片（光栅位图 GS v 0）----

@@ -2769,7 +2769,7 @@ class BotGUI:
         try:
             p = self._get_printer()
             p.text(text)
-            p.feed(3)
+            p.feed()
             log(f"[PRINT] 文字 {len(text)} 字")
             return True
         except Exception as e:
@@ -2780,7 +2780,7 @@ class BotGUI:
         try:
             p = self._get_printer()
             p.image(path)
-            p.feed(3)
+            p.feed()
             log(f"[PRINT] 图片 {path}")
             return True
         except Exception as e:
