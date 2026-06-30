@@ -357,6 +357,7 @@ class BotGUI:
         self.game_proc = None
         self.game_rom = None
         self.game_paused = False
+        self.gamepad = None   # 检测到手柄时的"手柄→键盘"转换器
         self.game_lock = threading.Lock()
         self.media_proc = None
         self.media_kind = None
@@ -1054,6 +1055,7 @@ class BotGUI:
             self.game_proc = None
             self.game_rom = None
             self.game_paused = False
+        self._stop_gamepad_mapper()
         log(f"[GAME] 已退出: {rom_name} rc={rc}")
         self._restore_bmo_display_mode()
         self.set_state(BotStates.IDLE, "游戏已退出")
@@ -1097,8 +1099,32 @@ class BotGUI:
         self._enter_game_display_mode()
         self._activate_game_window_later()
         threading.Thread(target=self._monitor_game_proc, args=(proc, rom_name), daemon=True).start()
+        self._start_gamepad_mapper()
         self.abort_to_wake.set()
         return True, f"开始游戏：{rom_name}"
+
+    def _start_gamepad_mapper(self):
+        """检测到手柄就启用手柄控制（映射成 FCEUX 键盘键）；没检测到就不动，键盘照旧。"""
+        self._stop_gamepad_mapper()
+        try:
+            from providers.gamepad import GamepadKeyboard
+            if not GamepadKeyboard.available():
+                return
+            gp = GamepadKeyboard(self._game_cfg().get("keymap") or {})
+            if gp.start():
+                self.gamepad = gp
+                log("[GAME] 检测到手柄，已启用手柄控制")
+        except Exception as e:
+            log(f"[GAME] 手柄初始化失败(忽略，用键盘): {e}")
+
+    def _stop_gamepad_mapper(self):
+        gp = self.gamepad
+        self.gamepad = None
+        if gp:
+            try:
+                gp.stop()
+            except Exception:
+                pass
 
     def pause_game(self, for_bmo=False, show_bmo=False):
         if not self._game_is_running():
@@ -1171,6 +1197,7 @@ class BotGUI:
             log(f"[GAME] 退出失败: {e}")
             return False, "退出游戏失败。"
         finally:
+            self._stop_gamepad_mapper()
             with self.game_lock:
                 if self.game_proc is proc:
                     self.game_proc = None

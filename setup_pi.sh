@@ -221,6 +221,18 @@ EOF
     echo -e "${GREEN}  ✓ 已默认开启开机自启（开机进桌面后自动启动 BMO；可在网页「仪表板」关闭）${NC}"
 fi
 
+# 8. 手柄支持：BMO 用 uinput 把手柄按键注入成键盘键，需要 /dev/uinput 可写。
+#    加载内核模块 + udev 规则(给 input 组可写) + 把当前用户加进 input 组。
+echo -e "${YELLOW}[手柄] 配置 uinput 权限（玩游戏用，可选）...${NC}"
+echo uinput | sudo tee /etc/modules-load.d/uinput.conf >/dev/null 2>&1 || true
+sudo modprobe uinput 2>/dev/null || true
+echo 'KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"' \
+    | sudo tee /etc/udev/rules.d/99-uinput.rules >/dev/null 2>&1 || true
+sudo udevadm control --reload-rules 2>/dev/null || true
+sudo udevadm trigger 2>/dev/null || true
+sudo usermod -aG input "$USER" 2>/dev/null || true
+echo -e "${GREEN}  ✓ uinput 已配置（手柄需要：插上 USB 手柄、开游戏自动接管。改组后建议重启一次）${NC}"
+
 # 取本机 IP 和 Web 控制台端口，直接拼出可点的网址
 LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 WEB_PORT=$(grep -oE '"webui_port"[[:space:]]*:[[:space:]]*[0-9]+' config.json 2>/dev/null | grep -oE '[0-9]+$')

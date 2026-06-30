@@ -26,6 +26,9 @@ websockets
 # 热敏打印机（GPIO UART / ESC-POS，可选）
 pyserial
 
+# 游戏手柄支持（检测到手柄自动接管，映射成 FCEUX 键盘键，可选）
+evdev
+
 # Web control panel
 fastapi
 uvicorn[standard]
