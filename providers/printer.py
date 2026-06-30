@@ -31,10 +31,10 @@ class ThermalPrinter:
         self.encoding = config.get("encoding", "gb2312")
         # 点宽取 8 的整数倍（光栅按字节打包）；58mm=384，80mm=576
         self.width = (int(config.get("width", 384)) // 8) * 8
-        # 文字放大倍数 1~8（GS ! n：宽高同时放大）。1=正常，2=两倍大，依此类推。
-        self.font_scale = max(1, min(8, int(config.get("font_scale", 1))))
-        # 是否粗体（ESC ! 的 bit3），让放大后的字更清晰
-        self.bold = bool(config.get("bold", False))
+        # 文字放大倍数 1~8（GS ! n：宽高同时放大）。1=正常，2=两倍大(默认)，依此类推。
+        self.font_scale = max(1, min(8, int(config.get("font_scale", 2))))
+        # 是否粗体（ESC ! 的 bit3），让放大后的字更清晰。默认开。
+        self.bold = bool(config.get("bold", True))
         self.ser = None
 
     def _resolve_device(self) -> str | None:
