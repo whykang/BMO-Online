@@ -103,6 +103,8 @@
     "baudrate": 9600,
     "encoding": "gb2312",
     "width": 384,
+    "font_scale": 2,
+    "bold": true,
     "history_turns": 10
   },
   "game": {

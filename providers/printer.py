@@ -31,6 +31,10 @@ class ThermalPrinter:
         self.encoding = config.get("encoding", "gb2312")
         # 点宽取 8 的整数倍（光栅按字节打包）；58mm=384，80mm=576
         self.width = (int(config.get("width", 384)) // 8) * 8
+        # 文字放大倍数 1~8（GS ! n：宽高同时放大）。1=正常，2=两倍大，依此类推。
+        self.font_scale = max(1, min(8, int(config.get("font_scale", 1))))
+        # 是否粗体（ESC ! 的 bit3），让放大后的字更清晰
+        self.bold = bool(config.get("bold", False))
         self.ser = None
 
     def _resolve_device(self) -> str | None:
@@ -81,10 +85,22 @@ class ThermalPrinter:
             ser.write(data[i:i + chunk])
             ser.flush()
 
+    def _style_prefix(self) -> bytes:
+        """根据 font_scale / bold 拼出排版控制字节，打印文字前发送。"""
+        out = b""
+        # GS ! n：高4位=倍宽-1，低4位=倍高-1，每位 0~7 对应 1~8 倍
+        s = self.font_scale - 1
+        out += GS + b"!" + bytes([(s << 4) | s])
+        # ESC ! n：bit3=粗体
+        out += ESC + b"!" + bytes([0x08 if self.bold else 0x00])
+        return out
+
     # ---- 文字 ----
     def text(self, s: str):
         ser = self._open()
         data = (s.rstrip("\n") + "\n").encode(self.encoding, errors="replace")
+        if self.font_scale > 1 or self.bold:
+            data = self._style_prefix() + data
         self._write_chunked(ser, data)
 
     def feed(self, lines: int = 3):
