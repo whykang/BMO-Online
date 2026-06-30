@@ -116,9 +116,12 @@ class SherpaWakeWord:
                     toks.append(i)
                 if f:
                     toks.append(f)
-            else:
-                # 非中文（英文/数字）：这个拼音模型基本不支持，按大写字母拆
+            elif ch.isalnum():
+                # 英文/数字：这个拼音模型基本不支持，按大写字母拆
                 toks.append(ch.upper())
+            else:
+                # 标点/符号（逗号、感叹号、空格等）直接跳过，别当 token
+                continue
         # 校验所有 token 都在模型词表里
         for t in toks:
             if t not in self._valid_tokens:
@@ -190,9 +193,11 @@ class SherpaWakeWord:
                         toks.append(t)
                         if t not in valid:
                             bad.append(t)
-            else:
+            elif ch.isalnum():
                 t = ch.upper()
                 toks.append(t)
                 if t not in valid:
                     bad.append(t)
+            else:
+                continue  # 标点/符号跳过
         return {"ok": len(bad) == 0, "tokens": toks, "unknown": bad}
