@@ -23,15 +23,31 @@
 
 ## 📦 硬件
 
-| 硬件 | 推荐型号 |
-|------|---------|
-| 主机 | Raspberry Pi 5（4GB ） |
-| 系统 | Raspberry Pi OS 64-bit Desktop（Bookworm） |
-| 麦克风 | USB 麦 |
-| 喇叭 | USB 喇叭 / 3.5mm 小喇叭 |
-| 屏幕 | 5 英寸 DSI 或 HDMI（推荐 800×480） |
-| 摄像头 | Raspberry Pi Camera Module v2 |
-| PTT 按钮 | Arduino Pro Micro (32u4) + 7个 6x6x5 mm 微动开关 |
+### 所需硬件与购买参考
+
+| 硬件 | 建议规格与用途 | 购买链接 |
+|------|---------------|---------|
+| 主机与存储 | Raspberry Pi 5（4GB）+ 32GB microSD 卡 | [淘宝](https://e.tb.cn/h.RuwD22edR018hL0?tk=86bUgkbUtMQ) |
+| 树莓派 UPS | 为树莓派提供备用电源，避免意外断电；可选 | [淘宝](https://e.tb.cn/h.RFFLdcO73sdw4FF?tk=UjQ5gkbStMR) |
+| 摄像头与转接线 | Raspberry Pi Camera Module v2；Pi 5 需要匹配的摄像头转接线 | [淘宝](https://e.tb.cn/h.RuZBVYKbpW7xVra?tk=M5iXgkbTtdC) |
+| 显示屏 | 5 英寸 DSI 或 HDMI 显示屏，推荐 800×480 | [淘宝](https://e.tb.cn/h.Ru0ZikLlgCBdfeX?tk=zlQIgkbRKk4) |
+| Pro Micro 开发板 | Type-C 接口、ATmega32U4；用于将物理按钮模拟成 USB 键盘输入 | [淘宝](https://e.tb.cn/h.Ru02Q9GnNil8q0D?tk=L2kpgkbOSuz) |
+| 热敏打印机 | 58mm DP-628 热敏打印机 | [淘宝](https://e.tb.cn/h.REVjaCxwfApGJPR?tk=TuP6gkbN2dc) |
+| 热敏打印纸 | 57mm 热敏打印纸，购买前确认与打印机兼容 | [淘宝](https://e.tb.cn/h.REVlbNcdRMRQ7VL?tk=Sy18gkbpbNR) |
+| 扬声器 | USB 扬声器 | [淘宝](https://e.tb.cn/h.RFFCogWL3iJtNYL?tk=TL99gkbKLDw) |
+| 麦克风 | USB 麦克风 | [京东](https://3.cn/-2U6HaT6?jkl=@GEuBQByEaVx5@) |
+| Type-C 数据线 | 0.25 米，用于内部短距离连接 | [京东](https://3.cn/2U6Hnf-O?jkl=@A7B2GCKSv291@) |
+| Type-C 公对母延长线 | 0.2 米，用于将接口延伸到机身外壳 | [京东](https://3.cn/2U6HD4-o?jkl=@EAwFV8UjHQZq@) |
+| USB 一分为二转接线 | 用于扩展内部 USB 连接 | [淘宝](https://e.tb.cn/h.REVQoIRPfd4xsd3?tk=032IgkbM5Wg) |
+| 带线微动开关 | 6×6×5mm，建议准备 7 个；带线款可简化安装 | [淘宝](https://e.tb.cn/h.RuDYggek1vOliYv?tk=Pyr9gkbQzmd) |
+| 红黑杜邦线 | 若干，用于电源及信号连接 | [淘宝](https://e.tb.cn/h.Ru0Yxq7qP15ajhf?tk=eoJogkb8AhK) |
+| M3 螺丝与螺母 | 若干，用于固定内部组件和外壳 | [淘宝](https://e.tb.cn/h.Ru0PUwo9d0YQHmy?tk=EIZZgkbvIEz) |
+
+系统推荐使用 **Raspberry Pi OS 64-bit Desktop（Bookworm）**。
+
+> **购买说明：**以上淘宝、京东链接来自项目硬件清单，仅作为型号和规格参考。商品库存、价格、套餐及链接有效期可能变化，请在下单前核对接口、尺寸、供电要求及配件数量。UPS 为可选组件；热敏打印机应使用独立供电，不要仅依赖树莓派供电。
+
+> **免焊接按钮方案：**选择 Type-C 接口的 ATmega32U4 Pro Micro 和带线微动开关，即可通过 USB 模拟键盘输入，无需制作自定义 PCB。连接方式仍应根据实际端子和线材做好绝缘与固定。
 
 ## 🚀 安装
 

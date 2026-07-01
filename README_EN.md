@@ -23,15 +23,31 @@
 
 ## 📦 Hardware
 
-| Component | Recommended option |
-|---|---|
-| Computer | Raspberry Pi 5 (4 GB) |
-| Operating system | Raspberry Pi OS 64-bit Desktop (Bookworm) |
-| Microphone | USB microphone |
-| Speaker | USB speaker or 3.5 mm speaker |
-| Display | 5-inch DSI or HDMI display (800×480 recommended) |
-| Camera | Raspberry Pi Camera Module v2 |
-| PTT buttons | Arduino Pro Micro (ATmega32U4) + seven 6×6×5 mm tactile switches |
+### Required Hardware and Purchase References
+
+| Component | Recommended specification and purpose | Purchase link |
+|---|---|---|
+| Computer and storage | Raspberry Pi 5 (4 GB) with a 32 GB microSD card | [Taobao](https://e.tb.cn/h.RuwD22edR018hL0?tk=86bUgkbUtMQ) |
+| Raspberry Pi UPS | Provides backup power and helps prevent unexpected shutdowns; optional | [Taobao](https://e.tb.cn/h.RFFLdcO73sdw4FF?tk=UjQ5gkbStMR) |
+| Camera and adapter cable | Raspberry Pi Camera Module v2; Raspberry Pi 5 requires a compatible camera adapter cable | [Taobao](https://e.tb.cn/h.RuZBVYKbpW7xVra?tk=M5iXgkbTtdC) |
+| Display | 5-inch DSI or HDMI display; 800×480 recommended | [Taobao](https://e.tb.cn/h.Ru0ZikLlgCBdfeX?tk=zlQIgkbRKk4) |
+| Pro Micro development board | USB Type-C ATmega32U4 board used to emulate keyboard input from the physical buttons | [Taobao](https://e.tb.cn/h.Ru02Q9GnNil8q0D?tk=L2kpgkbOSuz) |
+| Thermal printer | 58 mm DP-628 thermal printer | [Taobao](https://e.tb.cn/h.REVjaCxwfApGJPR?tk=TuP6gkbN2dc) |
+| Thermal paper | 57 mm thermal paper; confirm compatibility with your printer before ordering | [Taobao](https://e.tb.cn/h.REVlbNcdRMRQ7VL?tk=Sy18gkbpbNR) |
+| Speaker | USB speaker | [Taobao](https://e.tb.cn/h.RFFCogWL3iJtNYL?tk=TL99gkbKLDw) |
+| Microphone | USB microphone | [JD.com](https://3.cn/-2U6HaT6?jkl=@GEuBQByEaVx5@) |
+| USB Type-C cable | 0.25 m cable for short internal connections | [JD.com](https://3.cn/2U6Hnf-O?jkl=@A7B2GCKSv291@) |
+| USB Type-C male-to-female extension cable | 0.2 m cable for extending a port to the enclosure | [JD.com](https://3.cn/2U6HD4-o?jkl=@EAwFV8UjHQZq@) |
+| USB splitter cable | Expands the internal USB connections | [Taobao](https://e.tb.cn/h.REVQoIRPfd4xsd3?tk=032IgkbM5Wg) |
+| Pre-wired tactile switches | Seven 6×6×5 mm switches recommended; pre-wired versions simplify assembly | [Taobao](https://e.tb.cn/h.RuDYggek1vOliYv?tk=Pyr9gkbQzmd) |
+| Red and black Dupont wires | Several wires for power and signal connections | [Taobao](https://e.tb.cn/h.Ru0Yxq7qP15ajhf?tk=eoJogkb8AhK) |
+| M3 screws and nuts | Several fasteners for securing the enclosure and internal components | [Taobao](https://e.tb.cn/h.Ru0PUwo9d0YQHmy?tk=EIZZgkbvIEz) |
+
+The recommended operating system is **Raspberry Pi OS 64-bit Desktop (Bookworm)**.
+
+> **Purchasing note:** The Taobao and JD.com links above come from the project hardware list and are provided only as product and specification references. Stock, prices, bundles, and link availability may change. Before ordering, verify the connector type, dimensions, power requirements, and quantity. The UPS is optional. Use a separate power supply for the thermal printer instead of powering it solely from the Raspberry Pi.
+
+> **Solder-free button option:** A USB Type-C ATmega32U4 Pro Micro and pre-wired tactile switches can emulate USB keyboard input without a custom PCB. Insulate and secure all connections appropriately for the terminals and wiring used in your build.
 
 ## 🚀 Installation
 
