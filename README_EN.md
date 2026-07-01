@@ -43,7 +43,7 @@
 | Red and black Dupont wires | Several wires for power and signal connections | [Taobao](https://e.tb.cn/h.Ru0Yxq7qP15ajhf?tk=eoJogkb8AhK) |
 | M3 screws and nuts | Several fasteners for securing the enclosure and internal components | [Taobao](https://e.tb.cn/h.Ru0PUwo9d0YQHmy?tk=EIZZgkbvIEz) |
 
-The recommended operating system is **Raspberry Pi OS 64-bit Desktop (Bookworm)**.
+The recommended operating system is **Raspberry Pi OS 64-bit Desktop (based on Debian 13 “Trixie”)**.
 
 > **Purchasing note:** The Taobao and JD.com links above come from the project hardware list and are provided only as product and specification references. Stock, prices, bundles, and link availability may change. Before ordering, verify the connector type, dimensions, power requirements, and quantity. The UPS is optional. Use a separate power supply for the thermal printer instead of powering it solely from the Raspberry Pi.
 

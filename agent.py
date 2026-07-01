@@ -138,7 +138,7 @@ def save_config(cfg: dict):
 
 
 # 工具调用说明：默认值在 prompts.py（agent/webui 共用），用户可在网页里覆盖。
-from prompts import DEFAULT_TOOLS_PROMPT
+from prompts import DEFAULT_TOOLS_PROMPT, get_default_tools_prompt
 TOOLS_PROMPT = DEFAULT_TOOLS_PROMPT
 
 
@@ -3757,12 +3757,20 @@ class BotGUI:
     # 记忆
     # -------------------------------------------------------------------
     def build_system_prompt(self) -> str:
-        # 顺序：性格 → 工具说明 → 附加说明。
+        # 顺序：性格 → 回答语言 → 工具说明 → 附加说明。
         # 工具说明默认用 DEFAULT_TOOLS_PROMPT；用户在网页改过(config.tools_prompt 非空)就用自定义的。
         personality = (self.config.get("system_prompt", "") or "").strip()
+        language = (self.config.get("language", "zh") or "zh").lower()
+        language_instruction = (self.config.get("language_instruction", "") or "").strip()
+        if not language_instruction:
+            language_instruction = (
+                "Please answer all conversations in English."
+                if language == "en" else "请用中文回答所有对话。"
+            )
         extras = (self.config.get("system_prompt_extras", "") or "").strip()
-        tools = (self.config.get("tools_prompt") or "").strip() or DEFAULT_TOOLS_PROMPT
-        parts = [personality, tools]
+        tools = ((self.config.get("tools_prompt") or "").strip()
+                 or get_default_tools_prompt(language))
+        parts = [personality, language_instruction, tools]
         if extras:
             parts.append(extras)
         return "\n\n".join(p for p in parts if p)
@@ -3915,6 +3923,17 @@ class BotGUI:
             log(f"[WEBUI MEDIA] stop -> {'成功' if ok else '失败'}: {msg}")
         elif action == "restart_webui":
             self._restart_webui()
+        elif action == "switch_language":
+            # webui 已原子写入新配置；这里用新提示词清空全部对话记忆，再原地重启。
+            self.config = load_config()
+            self.session_memory = []
+            self.permanent_memory = [{
+                "role": "system",
+                "content": self.build_system_prompt(),
+            }]
+            self.save_chat_history()
+            log(f"[CMD] 对话语言已切换为 {self.config.get('language', 'zh')}，记忆已清空，准备重启")
+            self._restart_agent()
         elif action == "restart_agent":
             self._restart_agent()
         elif action == "exit_agent":

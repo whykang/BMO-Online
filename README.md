@@ -43,7 +43,7 @@
 | 红黑杜邦线 | 若干，用于电源及信号连接 | [淘宝](https://e.tb.cn/h.Ru0Yxq7qP15ajhf?tk=eoJogkb8AhK) |
 | M3 螺丝与螺母 | 若干，用于固定内部组件和外壳 | [淘宝](https://e.tb.cn/h.Ru0PUwo9d0YQHmy?tk=EIZZgkbvIEz) |
 
-系统推荐使用 **Raspberry Pi OS 64-bit Desktop（Bookworm）**。
+系统推荐使用 **Raspberry Pi OS 64-bit Desktop（基于 Debian 13 “Trixie”）**。
 
 > **购买说明：**以上淘宝、京东链接来自项目硬件清单，仅作为型号和规格参考。商品库存、价格、套餐及链接有效期可能变化，请在下单前核对接口、尺寸、供电要求及配件数量。UPS 为可选组件；热敏打印机应使用独立供电，不要仅依赖树莓派供电。
 

@@ -147,7 +147,6 @@
     <span id="agent-status">连接中...</span>
     <span class="badge" id="agent-mem">0 轮</span>
   </div>
-  <button class="btn secondary" id="lang-toggle" onclick="toggleLang()">EN</button>
   <button class="btn secondary" onclick="logout()">退出登录</button>
 </header>
 
@@ -176,6 +175,15 @@
     <div class="row"><label>提示：</label><span id="db-status">-</span></div>
     <div class="row"><label>TTS 队列：</label><span id="db-queue">0</span></div>
     <div class="row"><label>记忆轮数：</label><span id="db-mem">0</span></div>
+    <div class="row">
+      <label>语言：</label>
+      <select id="agent-language" style="width:150px;">
+        <option value="zh">中文</option>
+        <option value="en">English</option>
+      </select>
+      <button class="btn secondary" id="language-switch-btn" onclick="switchAgentLanguage()">切换语言</button>
+      <span class="help" id="language-switch-hint">切换语言会清空记忆并重启 BMO。</span>
+    </div>
   </div>
   <div class="panel">
     <h2>系统信息</h2>
@@ -779,7 +787,9 @@ const I18N_EN = {
   "日志": "Logs", "安全": "Security",
   // dashboard
   "当前状态": "Current Status", "状态：": "State:", "提示：": "Status:", "TTS 队列：": "TTS queue:",
-  "记忆轮数：": "Memory turns:", "系统信息": "System Info", "设备：": "Device:",
+  "记忆轮数：": "Memory turns:", "语言：": "Language:", "切换语言": "Switch language",
+  "切换语言会清空记忆并重启 BMO。": "Switching language clears memory and restarts BMO.",
+  "系统信息": "System Info", "设备：": "Device:",
   "CPU 使用率：": "CPU usage:", "温度：": "Temperature:", "内存：": "Memory:", "存储：": "Storage:",
   "负载：": "Load:", "已运行：": "Uptime:", "快捷操作": "Quick Actions",
   "电源": "Power", "重启 BMO": "Restart BMO", "退出 BMO": "Exit BMO",
@@ -984,12 +994,7 @@ const I18N_EN = {
   "（10分钟缓存）": " (10 min cache)",
   "软件音量：100%=原始，>100% 放大（音箱偏小时调高）": "Software volume: 100%=original, >100% amplify (raise if speaker is quiet)",
 };
-const LANG = localStorage.getItem('bmo_lang')
-  || ((navigator.language || 'zh').toLowerCase().startsWith('zh') ? 'zh' : 'en');
-function toggleLang() {
-  localStorage.setItem('bmo_lang', LANG === 'en' ? 'zh' : 'en');
-  location.reload();
-}
+let LANG = localStorage.getItem('bmo_lang') || 'zh';
 function tr(s) {                       // 单串精确翻译（动态文本/alert 用，按子串替换）
   if (LANG !== 'en' || s == null) return s;
   let out = String(s);
@@ -1014,7 +1019,6 @@ function applyLangTo(root) {
   });
 }
 (function initI18n() {
-  document.getElementById('lang-toggle').textContent = LANG === 'en' ? '中' : 'EN';
   if (LANG !== 'en') return;
   document.documentElement.lang = 'en';
   document.title = 'BMO Console';
@@ -1346,6 +1350,12 @@ async function loadPresets() {
 
 async function initAll() {
   await loadConfig();
+  const configuredLanguage = CONFIG.language === 'en' ? 'en' : 'zh';
+  if (LANG !== configuredLanguage) {
+    localStorage.setItem('bmo_lang', configuredLanguage);
+    location.reload();
+    return;
+  }
   await loadPresets();
   await loadKeys();
   fillVoiceTab();
@@ -1355,7 +1365,48 @@ async function initAll() {
   loadPwState();
   loadAutostart();
   fillWebuiAutostart();
+  fillAgentLanguage();
   loadLiveModels();   // 打开网页自动拉取 OpenRouter/硅基流动 全量模型
+}
+
+function fillAgentLanguage() {
+  const select = document.getElementById('agent-language');
+  if (select) select.value = CONFIG.language === 'en' ? 'en' : 'zh';
+}
+
+async function switchAgentLanguage() {
+  const select = document.getElementById('agent-language');
+  const button = document.getElementById('language-switch-btn');
+  const hint = document.getElementById('language-switch-hint');
+  const target = select.value === 'en' ? 'en' : 'zh';
+  const current = CONFIG.language === 'en' ? 'en' : 'zh';
+  if (target === current) return;
+
+  const message = target === 'en'
+    ? '切换后，BMO 将用英文回答所有问题，并将清空记忆和重启 BMO 程序。\nAfter switching, BMO will answer all questions in English, clear its memory, and restart.\n\n是否继续？ / Continue?'
+    : '切换后，BMO 将用中文回答所有问题，并将清空记忆和重启 BMO 程序。\nAfter switching, BMO will answer all questions in Chinese, clear its memory, and restart.\n\n是否继续？ / Continue?';
+  if (!confirm(message)) {
+    select.value = current;
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    await postJSON('/api/language', {language: target});
+    CONFIG.language = target;
+    localStorage.setItem('bmo_lang', target);
+    hint.textContent = target === 'en'
+      ? '正在切换为英文并重启 BMO… / Switching to English and restarting BMO…'
+      : '正在切换为中文并重启 BMO… / Switching to Chinese and restarting BMO…';
+    alert(target === 'en'
+      ? '切换完成后，BMO 将用英文回答所有问题。程序正在重启。\nBMO will answer all questions in English after the switch. The program is restarting.'
+      : '切换完成后，BMO 将用中文回答所有问题。程序正在重启。\nBMO will answer all questions in Chinese after the switch. The program is restarting.');
+    setTimeout(() => location.reload(), 10000);
+  } catch (e) {
+    button.disabled = false;
+    select.value = current;
+    alert('语言切换失败 / Language switch failed: ' + e.message);
+  }
 }
 
 // ============ 自启 ============

@@ -97,6 +97,58 @@ def save_config(cfg: dict):
     queue_command({"action": "reload_config"})
 
 
+LANGUAGE_PRESETS = {
+    "zh": {
+        "system_prompt": (
+            "你是一个叫 BMO 的可爱小机器人助手，跑在树莓派上。"
+            "说话简短、活泼、带点孩子气，会用'嗯嗯'、'好的呀'、'哎呀'之类的语气词。"
+        ),
+        "language_instruction": "请用中文回答所有对话。",
+        "status_speech": {
+            "greeting": "你好，我叫 BMO",
+            "ack": "我在",
+            "thinking": "让我想想",
+            "error": "哎呀，我出错了",
+        },
+    },
+    "en": {
+        "system_prompt": (
+            "You are a cute little robot assistant named BMO running on a Raspberry Pi. "
+            "Keep your replies brief, lively, friendly, and slightly childlike."
+        ),
+        "language_instruction": "Please answer all conversations in English.",
+        "status_speech": {
+            "greeting": "Hello, I'm BMO",
+            "ack": "I'm here",
+            "thinking": "Let me think",
+            "error": "Oops, something went wrong",
+        },
+    },
+}
+
+
+def apply_language_config(cfg: dict, target: str) -> dict:
+    """Apply a language preset while preserving per-language user customizations."""
+    if target not in LANGUAGE_PRESETS:
+        raise ValueError("language must be zh or en")
+    current = (cfg.get("language") or "zh").lower()
+    if current not in LANGUAGE_PRESETS:
+        current = "zh"
+
+    for key in ("system_prompt", "system_prompt_extras", "tools_prompt", "status_speech"):
+        if key in cfg:
+            cfg[f"{key}_{current}"] = cfg[key]
+
+    preset = LANGUAGE_PRESETS[target]
+    cfg["language"] = target
+    cfg["language_instruction"] = preset["language_instruction"]
+    cfg["system_prompt"] = cfg.get(f"system_prompt_{target}", preset["system_prompt"])
+    cfg["system_prompt_extras"] = cfg.get(f"system_prompt_extras_{target}", "")
+    cfg["tools_prompt"] = cfg.get(f"tools_prompt_{target}", "")
+    cfg["status_speech"] = cfg.get(f"status_speech_{target}", preset["status_speech"])
+    return cfg
+
+
 _command_lock = threading.Lock()
 
 
@@ -522,12 +574,13 @@ async def get_default_config():
 @app.get("/api/tools_prompt")
 async def get_tools_prompt():
     """返回当前生效的工具提示词(自定义优先)和出厂默认值，供网页编辑/恢复默认。"""
-    from prompts import DEFAULT_TOOLS_PROMPT
+    from prompts import get_default_tools_prompt
     cfg = load_config()
+    default_prompt = get_default_tools_prompt(cfg.get("language", "zh"))
     custom = (cfg.get("tools_prompt") or "").strip()
     return {
-        "default": DEFAULT_TOOLS_PROMPT,
-        "current": custom or DEFAULT_TOOLS_PROMPT,
+        "default": default_prompt,
+        "current": custom or default_prompt,
         "is_custom": bool(custom),
     }
 
@@ -544,6 +597,30 @@ async def update_config(cfg: dict):
         pass
     save_config(cfg)
     return {"ok": True}
+
+
+class LanguageReq(BaseModel):
+    language: str
+
+
+@app.post("/api/language")
+async def switch_language(req: LanguageReq):
+    """切换 BMO 对话语言、清空记忆并由 agent 原地重启。"""
+    target = (req.language or "").strip().lower()
+    if target not in LANGUAGE_PRESETS:
+        raise HTTPException(status_code=400, detail="language must be zh or en")
+
+    cfg = load_config()
+    # 分语言保存用户自定义内容；目标语言没有工具提示词时，留空以启用对应语言的默认版本。
+    cfg = apply_language_config(cfg, target)
+
+    _atomic_write_json(CONFIG_FILE, cfg, indent=2)
+    queue_command({"action": "switch_language", "language": target})
+    return {
+        "ok": True,
+        "language": target,
+        "note": "Language updated. BMO is clearing memory and restarting.",
+    }
 
 
 # =========================================================================
