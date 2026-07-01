@@ -5,7 +5,10 @@
 </p>
 
 <p align="center">
-  <img src="assets/bmo-thermal-printer.jpg" alt="BMO Online AI Agent with thermal printer" width="100%">
+  <img src="assets/bmo-thermal-printer.jpg" alt="BMO front view with thermal printer" width="49%">
+  <img src="assets/bmo-gaming.jpg" alt="BMO running an NES game" width="49%"><br>
+  <img src="assets/bmo-internal-layout.jpg" alt="BMO internal hardware layout" width="49%">
+  <img src="assets/bmo-printer-detail.jpg" alt="BMO thermal printer detail" width="49%">
 </p>
 
 > An online AI voice assistant running on Raspberry Pi 5, with support for multiple switchable models and a web control panel.

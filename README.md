@@ -5,7 +5,10 @@
 </p>
 
 <p align="center">
-  <img src="assets/bmo-thermal-printer.jpg" alt="BMO Online AI Agent with thermal printer" width="100%">
+  <img src="assets/bmo-thermal-printer.jpg" alt="BMO 正面与热敏打印机" width="49%">
+  <img src="assets/bmo-gaming.jpg" alt="BMO 运行 NES 游戏" width="49%"><br>
+  <img src="assets/bmo-internal-layout.jpg" alt="BMO 内部硬件结构" width="49%">
+  <img src="assets/bmo-printer-detail.jpg" alt="BMO 热敏打印机细节" width="49%">
 </p>
 
 > 一个跑在树莓派 5 上的在线 AI 语音助手，接入多种模型，可随意切换，带网页控制台。
