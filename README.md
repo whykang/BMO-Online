@@ -4,6 +4,10 @@
   <strong>简体中文</strong> | <a href="README_EN.md">English</a>
 </p>
 
+<p align="center">
+  <img src="assets/bmo-thermal-printer.jpg" alt="BMO Online AI Agent with thermal printer" width="100%">
+</p>
+
 > 一个跑在树莓派 5 上的在线 AI 语音助手，接入多种模型，可随意切换，带网页控制台。
 > 基于 [brenpoly/be-more-agent](https://github.com/brenpoly/be-more-agent)（本地版）改写。
 

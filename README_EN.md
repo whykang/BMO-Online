@@ -4,6 +4,10 @@
   <a href="README.md">简体中文</a> | <strong>English</strong>
 </p>
 
+<p align="center">
+  <img src="assets/bmo-thermal-printer.jpg" alt="BMO Online AI Agent with thermal printer" width="100%">
+</p>
+
 > An online AI voice assistant running on Raspberry Pi 5, with support for multiple switchable models and a web control panel.
 > Adapted from [brenpoly/be-more-agent](https://github.com/brenpoly/be-more-agent), the original local version.
 
