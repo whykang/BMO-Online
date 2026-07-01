@@ -136,6 +136,19 @@
   }
   .model-empty { color: var(--muted); font-size: 13px; padding: 12px; text-align: center; }
   .rom-name { flex: 1; min-width: 220px; overflow-wrap: anywhere; }
+  .confirm-overlay {
+    position: fixed; inset: 0; z-index: 1000; padding: 20px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(20, 24, 22, 0.48);
+  }
+  .confirm-overlay.hide { display: none; }
+  .confirm-dialog {
+    width: min(520px, 100%); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 22px; box-shadow: 0 18px 50px rgba(0,0,0,0.22);
+  }
+  .confirm-message { margin: 0; white-space: pre-line; line-height: 1.65; font-size: 15px; }
+  .confirm-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 22px; }
+  .confirm-actions .btn { min-width: 128px; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -176,13 +189,13 @@
     <div class="row"><label>TTS 队列：</label><span id="db-queue">0</span></div>
     <div class="row"><label>记忆轮数：</label><span id="db-mem">0</span></div>
     <div class="row">
-      <label>语言：</label>
+      <label>语言 / Language：</label>
       <select id="agent-language" style="width:150px;">
         <option value="zh">中文</option>
         <option value="en">English</option>
       </select>
-      <button class="btn secondary" id="language-switch-btn" onclick="switchAgentLanguage()">切换语言</button>
-      <span class="help" id="language-switch-hint">切换语言会清空记忆并重启 BMO。</span>
+      <button class="btn secondary" id="language-switch-btn" onclick="switchAgentLanguage()">切换语言 / Switch Language</button>
+      <span class="help" id="language-switch-hint">切换语言会清空记忆并重启 BMO。 / Switching language clears memory and restarts BMO.</span>
     </div>
   </div>
   <div class="panel">
@@ -776,6 +789,17 @@
 </section>
 
 </main>
+
+<div id="bilingual-confirm" class="confirm-overlay hide" role="dialog" aria-modal="true"
+     aria-labelledby="bilingual-confirm-message" aria-hidden="true">
+  <div class="confirm-dialog">
+    <p id="bilingual-confirm-message" class="confirm-message"></p>
+    <div class="confirm-actions">
+      <button class="btn secondary" type="button" onclick="closeBilingualConfirm(false)">取消 / Cancel</button>
+      <button class="btn" id="bilingual-confirm-ok" type="button" onclick="closeBilingualConfirm(true)">确定 / Confirm</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // ===================== i18n（中/英自动切换）=====================
@@ -1374,6 +1398,24 @@ function fillAgentLanguage() {
   if (select) select.value = CONFIG.language === 'en' ? 'en' : 'zh';
 }
 
+let bilingualConfirmResolve = null;
+function bilingualConfirm(message) {
+  const overlay = document.getElementById('bilingual-confirm');
+  document.getElementById('bilingual-confirm-message').textContent = message;
+  overlay.classList.remove('hide');
+  overlay.setAttribute('aria-hidden', 'false');
+  document.getElementById('bilingual-confirm-ok').focus();
+  return new Promise(resolve => { bilingualConfirmResolve = resolve; });
+}
+function closeBilingualConfirm(confirmed) {
+  const overlay = document.getElementById('bilingual-confirm');
+  overlay.classList.add('hide');
+  overlay.setAttribute('aria-hidden', 'true');
+  const resolve = bilingualConfirmResolve;
+  bilingualConfirmResolve = null;
+  if (resolve) resolve(confirmed);
+}
+
 async function switchAgentLanguage() {
   const select = document.getElementById('agent-language');
   const button = document.getElementById('language-switch-btn');
@@ -1385,7 +1427,7 @@ async function switchAgentLanguage() {
   const message = target === 'en'
     ? '切换后，BMO 将用英文回答所有问题，并将清空记忆和重启 BMO 程序。\nAfter switching, BMO will answer all questions in English, clear its memory, and restart.\n\n是否继续？ / Continue?'
     : '切换后，BMO 将用中文回答所有问题，并将清空记忆和重启 BMO 程序。\nAfter switching, BMO will answer all questions in Chinese, clear its memory, and restart.\n\n是否继续？ / Continue?';
-  if (!confirm(message)) {
+  if (!await bilingualConfirm(message)) {
     select.value = current;
     return;
   }
