@@ -14,6 +14,14 @@
 > 一个跑在树莓派 5 上的在线 AI 语音助手，接入多种模型，可随意切换，带网页控制台。
 > 基于 [brenpoly/be-more-agent](https://github.com/brenpoly/be-more-agent)（本地版）改写。
 
+## 📘 组装指南
+
+完整的 Word 版组装指南已上传至 GitHub Releases，包含硬件清单、购买参考、系统安装、按键控制板、热敏打印机接线以及整机装配步骤。
+
+**[⬇️ 直接下载 BMO 组装指南（DOCX）](https://github.com/whykang/BMO-Online/releases/download/v1.0.0/BMO-ASSEMBLY-GUIDE.docx)**
+
+也可以前往 [Release v1.0.0](https://github.com/whykang/BMO-Online/releases/tag/v1.0.0) 查看组装指南、3D 打印文件和控制器固件等全部附件。
+
 ## ✨ 特性
 
 - **语音对话**：已支持接入 OpenAI、DeepSeek、OpenRouter、硅基流动等主流大模型服务。

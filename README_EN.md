@@ -14,6 +14,14 @@
 > An online AI voice assistant running on Raspberry Pi 5, with support for multiple switchable models and a web control panel.
 > Adapted from [brenpoly/be-more-agent](https://github.com/brenpoly/be-more-agent), the original local version.
 
+## 📘 Assembly Guide
+
+The complete Word assembly guide is available from GitHub Releases. It covers the hardware list and purchase references, operating-system setup, button controller, thermal-printer wiring, and final enclosure assembly.
+
+**[⬇️ Download the English BMO Assembly Guide (DOCX)](https://github.com/whykang/BMO-Online/releases/download/v1.0.0/BMO-Assembly-Guide-English.docx)**
+
+Visit [Release v1.0.0](https://github.com/whykang/BMO-Online/releases/tag/v1.0.0) to view all assets, including the assembly guide, 3D-printing files, and controller firmware.
+
 ## ✨ Features
 
 - **Voice conversations:** Supports popular model providers including OpenAI, DeepSeek, OpenRouter, and SiliconFlow.
