@@ -795,7 +795,7 @@
   <div class="confirm-dialog">
     <p id="bilingual-confirm-message" class="confirm-message"></p>
     <div class="confirm-actions">
-      <button class="btn secondary" type="button" onclick="closeBilingualConfirm(false)">取消 / Cancel</button>
+      <button class="btn secondary" id="bilingual-confirm-cancel" type="button" onclick="closeBilingualConfirm(false)">取消 / Cancel</button>
       <button class="btn" id="bilingual-confirm-ok" type="button" onclick="closeBilingualConfirm(true)">确定 / Confirm</button>
     </div>
   </div>
@@ -994,6 +994,13 @@ const I18N_EN = {
     "Restore factory default personality? Current edits will be replaced (only saved after you click Save).",
   "确定删除这个 API Key？": "Delete this API Key?", "确定取消密码？任何人都能访问控制台": "Remove the password? Anyone will be able to access the console.",
   "确认重启 webui？连接会短暂断开，几秒后请刷新页面": "Restart webui? The connection will drop briefly; refresh after a few seconds.",
+  "确认重启 BMO？语音助手会断开约 10 秒，期间无法对话。": "Restart BMO? The voice assistant will be unavailable for about 10 seconds.",
+  "确认退出 BMO？退出后语音助手和 Web 控制台都会停止，需要在树莓派上重新启动才能恢复。":
+    "Exit BMO? The voice assistant and Web console will stop. Restart them on the Raspberry Pi to continue.",
+  "恢复出厂默认工具提示词？当前内容会被覆盖（点保存后才真正生效）":
+    "Restore the default tool prompt? The current content will be replaced and takes effect after saving.",
+  "修改工具提示词可能导致系统无法正常运行，谨慎修改。\n确定保存吗？":
+    "Changing the tool prompt may prevent the system from working correctly. Save anyway?",
   "已通知 agent 重启 webui。\n几秒后访问：\n": "Told the agent to restart webui.\nVisit after a few seconds:\n",
   "未运行": "Not running", "运行中": "Running", "已暂停": "Paused", "已就绪 ": "Ready ",
   "连接不上 agent": "Can't reach agent", "未配置": "Not set", "已配置": "Set",
@@ -1007,7 +1014,8 @@ const I18N_EN = {
   "（当前）": "(current)", "（未选择）": "(none selected)",
   "硅基流动 API Key": "SiliconFlow API Key", "豆包TTS API Key": "Doubao TTS API Key",
   "豆包 TTS / 火山引擎": "Doubao TTS / Volcengine",
-  "自动检测 USB 音响（推荐）": "Auto-detect USB speaker (recommended)", "系统默认输出": "System default output",
+  "自动检测 USB 音响（推荐）": "Auto-detect USB speaker (recommended)",
+  "自动检测（推荐）": "Auto-detect (recommended)", "系统默认输出": "System default output",
   " 未配置，相关选项不可选": " not configured; related options are disabled",
   "已保存。引擎=": "Saved. Engine=", "，输出=": ", output=", "，麦克风=": ", microphone=",
   "核": "cores", "⚠️ 供电不足（欠压）": "⚠️ Undervoltage", "⚠️ 已降频": "⚠️ Throttled",
@@ -1056,10 +1064,9 @@ function applyLangTo(root) {
       else if (nd.nodeType === 3 && I18N_EN[nd.textContent.trim()]) nd.textContent = I18N_EN[nd.textContent.trim()];
     });
   }).observe(document.body, { childList: true, subtree: true });
-  // alert/confirm 文案翻译
-  const _alert = window.alert.bind(window), _confirm = window.confirm.bind(window);
+  // 原生 alert 文案翻译；确认操作使用自定义弹窗，避免浏览器按钮语言不可控。
+  const _alert = window.alert.bind(window);
   window.alert = m => _alert(tr(m));
-  window.confirm = m => _confirm(tr(m));
 })();
 // ===================== /i18n =====================
 
@@ -1257,7 +1264,7 @@ async function uploadRom() {
   });
 }
 async function deleteRom(name) {
-  if (!confirm('删除 ' + name + ' ？')) return;
+  if (!await appConfirm('删除 ' + name + ' ？')) return;
   await deleteJSON('/api/roms/' + encodeURIComponent(name));
   await loadRoms();
 }
@@ -1399,13 +1406,20 @@ function fillAgentLanguage() {
 }
 
 let bilingualConfirmResolve = null;
-function bilingualConfirm(message) {
+function appConfirm(message, {bilingual = false} = {}) {
   const overlay = document.getElementById('bilingual-confirm');
-  document.getElementById('bilingual-confirm-message').textContent = message;
+  document.getElementById('bilingual-confirm-message').textContent = bilingual ? message : tr(message);
+  document.getElementById('bilingual-confirm-cancel').textContent = bilingual
+    ? '取消 / Cancel' : (LANG === 'en' ? 'Cancel' : '取消');
+  document.getElementById('bilingual-confirm-ok').textContent = bilingual
+    ? '确定 / Confirm' : (LANG === 'en' ? 'Confirm' : '确定');
   overlay.classList.remove('hide');
   overlay.setAttribute('aria-hidden', 'false');
   document.getElementById('bilingual-confirm-ok').focus();
   return new Promise(resolve => { bilingualConfirmResolve = resolve; });
+}
+function bilingualConfirm(message) {
+  return appConfirm(message, {bilingual: true});
 }
 function closeBilingualConfirm(confirmed) {
   const overlay = document.getElementById('bilingual-confirm');
@@ -1487,7 +1501,7 @@ async function saveWebuiPort() {
   }
 }
 async function restartWebui() {
-  if (!confirm('确认重启 webui？连接会短暂断开，几秒后请刷新页面')) return;
+  if (!await appConfirm('确认重启 webui？连接会短暂断开，几秒后请刷新页面')) return;
   try {
     const r = await postJSON('/api/webui/restart');
     const newPort = CONFIG.webui_port || 8087;
@@ -1499,7 +1513,7 @@ async function restartWebui() {
   }
 }
 async function restartBmo() {
-  if (!confirm('确认重启 BMO？语音助手会断开约 10 秒，期间无法对话。')) return;
+  if (!await appConfirm('确认重启 BMO？语音助手会断开约 10 秒，期间无法对话。')) return;
   try {
     await postJSON('/api/agent/restart');
     alert('已通知 BMO 重启，约 10 秒后请刷新本页面。');
@@ -1508,7 +1522,7 @@ async function restartBmo() {
   }
 }
 async function exitBmo() {
-  if (!confirm('确认退出 BMO？退出后语音助手和 Web 控制台都会停止，需要在树莓派上重新启动才能恢复。')) return;
+  if (!await appConfirm('确认退出 BMO？退出后语音助手和 Web 控制台都会停止，需要在树莓派上重新启动才能恢复。')) return;
   try {
     await postJSON('/api/agent/exit');
     alert('已通知 BMO 退出。Web 控制台也会随之停止。');
@@ -2111,7 +2125,7 @@ async function savePrompt() {
   alert('已保存，下一轮对话生效');
 }
 async function resetPromptDefault() {
-  if (!confirm('恢复出厂默认性格？当前编辑会被覆盖（点保存后才真正生效）')) return;
+  if (!await appConfirm('恢复出厂默认性格？当前编辑会被覆盖（点保存后才真正生效）')) return;
   try {
     const def = await fetchJSON('/api/config/default');
     document.getElementById('prompt-system').value = def.system_prompt || '';
@@ -2148,8 +2162,8 @@ function enableToolsEdit() {
   const btn = document.getElementById('prompt-tools-edit-btn');
   if (btn) btn.disabled = true;
 }
-function resetToolsDefault() {
-  if (!confirm('恢复出厂默认工具提示词？当前内容会被覆盖（点保存后才真正生效）')) return;
+async function resetToolsDefault() {
+  if (!await appConfirm('恢复出厂默认工具提示词？当前内容会被覆盖（点保存后才真正生效）')) return;
   const ta = document.getElementById('prompt-tools');
   ta.value = TOOLS_PROMPT_DEFAULT;
   enableToolsEdit();
@@ -2160,7 +2174,7 @@ async function saveToolsPrompt() {
     // 和默认一致 → 清掉自定义，回到用默认值
     CONFIG.tools_prompt = '';
   } else {
-    if (!confirm('修改工具提示词可能导致系统无法正常运行，谨慎修改。\n确定保存吗？')) return;
+    if (!await appConfirm('修改工具提示词可能导致系统无法正常运行，谨慎修改。\n确定保存吗？')) return;
     CONFIG.tools_prompt = val;
   }
   await putJSON('/api/config', CONFIG);
@@ -2248,7 +2262,7 @@ async function uploadWake() {
   await loadWakeList();
 }
 async function deleteWake(name) {
-  if (!confirm(`确定删除 ${name}？`)) return;
+  if (!await appConfirm(`确定删除 ${name}？`)) return;
   await deleteJSON(`/api/wakewords/${encodeURIComponent(name)}`);
   await loadWakeList();
 }
@@ -2292,7 +2306,7 @@ async function loadHistory() {
   if (data.length === 0) box.textContent = tr('（暂无对话）');
 }
 async function clearHistory() {
-  if (!confirm('确定清空所有对话记忆？')) return;
+  if (!await appConfirm('确定清空所有对话记忆？')) return;
   await deleteJSON('/api/history');
   alert('已清空');
   await loadHistory();
@@ -2345,7 +2359,7 @@ function renderCurrentImages() {
   if (data.length === 0) box.textContent = tr(emptyText);
 }
 async function deleteImage(kind, name) {
-  if (!confirm(`删除 ${name}？`)) return;
+  if (!await appConfirm(`删除 ${name}？`)) return;
   await deleteJSON(`/api/images/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`);
   await loadImages();
 }
@@ -2428,7 +2442,7 @@ async function stopMedia() {
   }
 }
 async function deleteMedia(kind, name) {
-  if (!confirm('删除 ' + name + '？')) return;
+  if (!await appConfirm('删除 ' + name + '？')) return;
   await deleteJSON(`/api/media/${kind}/${encodeURIComponent(name)}`);
   await loadMedia(kind);
 }
@@ -2557,7 +2571,7 @@ async function saveKey() {
   await loadKeys();
 }
 async function deleteKey(provider) {
-  if (!confirm('确定删除这个 API Key？')) return;
+  if (!await appConfirm('确定删除这个 API Key？')) return;
   await deleteJSON(`/api/keys/${encodeURIComponent(provider)}`);
   alert('已删除');
   await loadKeys();
@@ -2590,7 +2604,7 @@ async function setPassword() {
   }
 }
 async function removePassword() {
-  if (!confirm('确定取消密码？任何人都能访问控制台')) return;
+  if (!await appConfirm('确定取消密码？任何人都能访问控制台')) return;
   await deleteJSON('/api/password');
   alert('密码已取消');
   await loadPwState();
